@@ -1,0 +1,24 @@
+{
+  "name": "access-control-backend",
+  "version": "1.0.0",
+  "description": "Config-driven plugin-based Access Control system backend",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "node src/app.js",
+    "start": "NODE_ENV=production node src/app.js",
+    "migrate": "node migrations/001_initial_schema.js",
+    "seed": "node seeders/001_seed_data.js",
+    "setup": "npm run migrate && npm run seed"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "mysql2": "^3.11.0",
+    "bcrypt": "^5.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.4.0",
+    "dotenv": "^16.4.5",
+    "cookie-parser": "^1.4.6"
+  }
+}
