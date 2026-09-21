@@ -357,11 +357,6 @@ export default function AdminPage() {
                             {(role.permissions || []).map(p => (
                               <span key={p.id} className="badge badge-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', padding: '3px 8px' }}>
                                 <code>{p.permission_key}</code>
-                                {p.scope_key && (
-                                  <span style={{ opacity: 0.85, fontSize: '0.68rem', borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '4px', color: '#c4b5fd' }}>
-                                    {p.scope_key}
-                                  </span>
-                                )}
                                 <button
                                   type="button"
                                   title={`Revoke ${p.permission_key}`}
@@ -748,24 +743,20 @@ export default function AdminPage() {
                   <thead>
                     <tr>
                       <th>Permission Key</th>
-                      <th>Name</th>
-                      <th>Resource</th>
-                      <th>Action</th>
-                      <th>Scope</th>
+                      <th>Label</th>
+                      <th>Match Action</th>
+                      <th>Unmatch Action</th>
+                      <th>Description</th>
                     </tr>
                   </thead>
                   <tbody>
                     {permissions.map(p => (
                       <tr key={p.id}>
                         <td style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--color-primary-light)' }}>{p.permission_key}</td>
-                        <td>{p.name}</td>
-                        <td><span className="badge badge-info">{p.resource}</span></td>
-                        <td><span className="badge badge-muted">{p.action}</span></td>
-                        <td>
-                          <span className={`badge ${p.scope === 'page' ? 'badge-primary' : p.scope === 'section' ? 'badge-warning' : 'badge-danger'}`}>
-                            {p.scope}
-                          </span>
-                        </td>
+                        <td>{p.label || p.name}</td>
+                        <td><span className="badge badge-success">{p.actions_match || 'view'}</span></td>
+                        <td><span className="badge badge-muted">{p.actions_unmatch || 'hide'}</span></td>
+                        <td style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{p.description || '-'}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -106,7 +106,7 @@ export default function TasksPage() {
         <div>
           <span>🛡️ <strong>Active Scope:</strong> </span>
           <span className="badge badge-info" style={{ textTransform: 'uppercase' }}>
-            {scope === 'department' ? 'Departmental Scope (Programming Only)' : 'All Departments (Wildcard / Unrestricted)'}
+            All Tasks (Active Scope: All)
           </span>
         </div>
       </div>

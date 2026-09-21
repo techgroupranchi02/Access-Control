@@ -116,12 +116,7 @@ async function manageEvents(req, res) {
 
 // ── Tasks Handlers ────────────────────────────────────────────────────
 async function listTasks(req, res) {
-  let filtered = tasksData;
-  if (req.permissionScope && req.permissionScope.scopeKey === 'department') {
-    // Filter to user's assigned department (e.g. Programming department_id 1)
-    filtered = tasksData.filter(t => t.department_id === 1);
-  }
-  res.json({ data: filtered, scope: req.permissionScope ? req.permissionScope.scopeKey : 'all' });
+  res.json({ data: tasksData, scope: 'all' });
 }
 
 async function createTask(req, res) {

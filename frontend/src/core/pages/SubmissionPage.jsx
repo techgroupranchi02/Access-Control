@@ -98,7 +98,7 @@ export default function SubmissionPage() {
         <div>
           🛡️ <strong>Active Scope:</strong>&nbsp;
           <span className="badge badge-info" style={{ textTransform: 'uppercase' }}>
-            {activeScope === 'assigned' ? 'Assigned Scope (Assigned Reviewer Only)' : activeScope === 'jury_panel' ? 'Jury Panel Scope (Panel Categories)' : 'All Submissions (Unrestricted / Wildcard)'}
+            All Submissions (Active Scope: All)
           </span>
         </div>
       </div>

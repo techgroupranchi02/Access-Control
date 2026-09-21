@@ -46,13 +46,20 @@ function requirePermission(permissionKey) {
       // Query user's group permissions for this edition/event
       const placeholders = aliases.map(() => '?').join(',');
       const rows = await query(
-        `SELECT p.permission_key, gp.scope_key
+        `SELECT p.permission_key
          FROM user_event_groups ueg
-         JOIN group_permissions gp ON gp.group_id = ueg.group_id
-         JOIN permissions p ON p.id = gp.permission_id
+         JOIN module_groups mg ON mg.group_id = ueg.group_id
+         JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
+         JOIN permissions p ON p.id = mgp.permission_id
          WHERE ueg.user_id = ? AND ueg.event_id = ? AND p.permission_key IN (${placeholders})
+         UNION
+         SELECT p.permission_key
+         FROM user_event_custom_groups uecg
+         JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
+         JOIN permissions p ON p.id = ecgp.permission_id
+         WHERE uecg.user_id = ? AND uecg.event_id = ? AND p.permission_key IN (${placeholders})
          LIMIT 1`,
-        [req.user.id, editionId, ...aliases]
+        [req.user.id, editionId, ...aliases, req.user.id, editionId, ...aliases]
       );
 
       if (rows.length === 0) {
@@ -65,8 +72,8 @@ function requirePermission(permissionKey) {
       // Attach matched permission and scope to request
       req.permission = rows[0].permission_key;
       req.permissionScope = {
-        scopeKey: rows[0].scope_key || 'all',
-        isWildcard: rows[0].permission_key === '*' || rows[0].scope_key === 'all',
+        scopeKey: 'all',
+        isWildcard: rows[0].permission_key === '*',
       };
 
       next();
@@ -92,12 +99,12 @@ function requireModule(moduleKey) {
         return res.status(400).json({ error: 'Edition context required.' });
       }
 
-      // Check if module is enabled in events_modules
+      // Check if module is enabled in events_modules (row presence = enabled)
       const rows = await query(
-        `SELECT em.id, m.module_key, m.type, em.is_enabled
+        `SELECT em.id, m.module_key, m.type
          FROM events_modules em
          JOIN modules m ON m.id = em.module_id
-         WHERE em.event_id = ? AND m.module_key = ? AND em.is_enabled = TRUE
+         WHERE em.event_id = ? AND m.module_key = ?
          LIMIT 1`,
         [editionId, moduleKey]
       );

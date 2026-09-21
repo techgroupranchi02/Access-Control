@@ -15,10 +15,10 @@ const { query } = require('../../config/database');
  */
 async function getRegisteredPlugins() {
   return query(
-    `SELECT m.*
-     FROM modules m
-     WHERE m.type = 'custom'
-     ORDER BY m.display_order`
+    `SELECT id, module_key, label, label as name, description, type, icon, plugin_dir, route, display_order, created_at
+     FROM modules
+     WHERE type = 'custom'
+     ORDER BY display_order`
   );
 }
 
@@ -29,9 +29,9 @@ async function getRegisteredPlugins() {
  */
 async function getEnabledPlugins(eventId) {
   return query(
-    `SELECT m.*
+    `SELECT m.id, m.module_key, m.label, m.label as name, m.description, m.type, m.icon, m.plugin_dir, m.route, m.display_order
      FROM modules m
-     JOIN events_modules em ON em.module_id = m.id AND em.event_id = ? AND em.is_enabled = TRUE
+     JOIN events_modules em ON em.module_id = m.id AND em.event_id = ?
      WHERE m.type = 'custom'
      ORDER BY m.display_order`,
     [eventId]
@@ -48,7 +48,7 @@ async function isPluginEnabled(eventId, moduleKey) {
   const rows = await query(
     `SELECT em.id FROM events_modules em
      JOIN modules m ON m.id = em.module_id
-     WHERE em.event_id = ? AND m.module_key = ? AND em.is_enabled = TRUE
+     WHERE em.event_id = ? AND m.module_key = ?
      LIMIT 1`,
     [eventId, moduleKey]
   );
@@ -62,9 +62,11 @@ async function isPluginEnabled(eventId, moduleKey) {
  */
 async function getPluginPermissions(moduleKey) {
   return query(
-    `SELECT p.* FROM permissions p
-     WHERE p.resource = ?
-     ORDER BY p.action`,
+    `SELECT p.id, p.permission_key, p.label, p.label as name, p.description, p.module_id, p.page_id, p.actions_match, p.actions_unmatch
+     FROM permissions p
+     JOIN modules m ON m.id = p.module_id
+     WHERE m.module_key = ?
+     ORDER BY p.permission_key`,
     [moduleKey]
   );
 }
@@ -76,12 +78,12 @@ async function getPluginPermissions(moduleKey) {
  * @returns {Promise<object>}
  */
 async function registerPlugin(pluginData) {
-  const { moduleKey, name, description, route, icon, componentName, pluginDir, displayOrder } = pluginData;
+  const { moduleKey, name, label, description, route, icon, pluginDir, displayOrder } = pluginData;
 
   const result = await query(
-    `INSERT INTO modules (module_key, type, name, description, route, icon, component_name, plugin_dir, display_order)
-     VALUES (?, 'custom', ?, ?, ?, ?, ?, ?, ?)`,
-    [moduleKey, name, description, route, icon, componentName, pluginDir, displayOrder || 10]
+    `INSERT INTO modules (module_key, type, label, description, route, icon, plugin_dir, display_order)
+     VALUES (?, 'custom', ?, ?, ?, ?, ?, ?)`,
+    [moduleKey, label || name, description, route, icon, pluginDir, displayOrder || 10]
   );
 
   return { id: result.insertId, moduleKey };

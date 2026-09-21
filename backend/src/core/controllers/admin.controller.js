@@ -109,7 +109,9 @@ async function removeUserRole(req, res) {
 
 async function listAllFestivals(req, res) {
   try {
-    const festivals = await query('SELECT * FROM events ORDER BY name');
+    const festivals = await query(
+      'SELECT event_id as id, event_id, user_id, name, description, event_type, saas_enabled, is_deleted, created_at FROM events WHERE is_deleted = 0 ORDER BY name'
+    );
     res.json(festivals);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch events.' });
@@ -118,7 +120,9 @@ async function listAllFestivals(req, res) {
 
 async function listFeatures(req, res) {
   try {
-    const features = await query('SELECT * FROM modules ORDER BY display_order, name');
+    const features = await query(
+      'SELECT id, module_key, label, label as name, description, type, icon, plugin_dir, route, display_order, created_at FROM modules ORDER BY display_order, label'
+    );
     res.json(features);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch modules.' });

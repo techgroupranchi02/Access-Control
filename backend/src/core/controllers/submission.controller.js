@@ -55,30 +55,9 @@ let submissionData = [
 ];
 
 /**
- * Apply scope filtering according to declarative scope rules.
+ * Apply scope filtering (in Phase 1 without scope_key, all data is returned).
  */
 function applyScopeFilter(data, user, scope) {
-  if (!scope || scope.isWildcard || scope.scopeKey === 'all') {
-    return data;
-  }
-
-  // Scope: assigned — submission.assigned_reviewers.contains(user.id)
-  if (scope.scopeKey === 'assigned') {
-    return data.filter(s => Array.isArray(s.assigned_reviewers) && s.assigned_reviewers.includes(user.id));
-  }
-
-  // Scope: jury_panel — submission.category_id in user.jury_category_ids
-  if (scope.scopeKey === 'jury_panel') {
-    const userJuryCategories = [1, 2]; // Juror category IDs
-    return data.filter(s => userJuryCategories.includes(s.category_id));
-  }
-
-  // Scope: department — resource.department_id in user.department_ids
-  if (scope.scopeKey === 'department') {
-    const userDepartmentIds = [1]; // User's assigned departments
-    return data.filter(s => userDepartmentIds.includes(s.department_id));
-  }
-
   return data;
 }
 
@@ -90,8 +69,8 @@ async function list(req, res) {
   res.json({
     data: filtered,
     total: filtered.length,
-    activeScope: req.permissionScope ? req.permissionScope.scopeKey : 'all',
-    appliedRule: req.permissionScope ? req.permissionScope.rule : null,
+    activeScope: 'all',
+    appliedRule: null,
   });
 }
 

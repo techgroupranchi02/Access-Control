@@ -143,10 +143,10 @@ async function getProfile(userId, editionId) {
 
   // Get user's assigned events and groups
   const eventGroups = await query(
-    `SELECT e.id as event_id, e.name as event_name, e.slug as event_slug,
-            g.id as group_id, g.name as group_name, g.group_key, g.user_limit, g.is_system
+    `SELECT e.event_id, e.event_id as id, e.name as event_name, e.description,
+            g.id as group_id, g.label as group_name, g.label as name, g.group_key, g.is_system
      FROM user_event_groups ueg
-     JOIN events e ON e.id = ueg.event_id AND e.is_active = TRUE
+     JOIN events e ON e.event_id = ueg.event_id AND e.is_deleted = 0
      JOIN \`groups\` g ON g.id = ueg.group_id
      WHERE ueg.user_id = ?`,
     [userId]
@@ -160,12 +160,19 @@ async function getProfile(userId, editionId) {
 
   if (editionId) {
     const rows = await query(
-      `SELECT DISTINCT p.permission_key, p.name, p.resource, p.action
+      `SELECT DISTINCT p.id, p.permission_key, p.label, p.actions_match, p.actions_unmatch
        FROM user_event_groups ueg
-       JOIN group_permissions gp ON gp.group_id = ueg.group_id
-       JOIN permissions p ON p.id = gp.permission_id
-       WHERE ueg.user_id = ? AND ueg.event_id = ?`,
-      [userId, editionId]
+       JOIN module_groups mg ON mg.group_id = ueg.group_id
+       JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
+       JOIN permissions p ON p.id = mgp.permission_id
+       WHERE ueg.user_id = ? AND ueg.event_id = ?
+       UNION
+       SELECT DISTINCT p.id, p.permission_key, p.label, p.actions_match, p.actions_unmatch
+       FROM user_event_custom_groups uecg
+       JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
+       JOIN permissions p ON p.id = ecgp.permission_id
+       WHERE uecg.user_id = ? AND uecg.event_id = ?`,
+      [userId, editionId, userId, editionId]
     );
 
     const hasWildcard = rows.some(r => r.permission_key === '*');
@@ -176,7 +183,7 @@ async function getProfile(userId, editionId) {
     if (isAdmin) {
       // For Admin (or wildcard), expand to ALL individual permissions in the system, excluding '*'
       targetRows = await query(
-        `SELECT id, permission_key, name, resource, action
+        `SELECT id, permission_key, label, actions_match, actions_unmatch
          FROM permissions
          WHERE permission_key != '*'
          ORDER BY id ASC`
@@ -186,21 +193,32 @@ async function getProfile(userId, editionId) {
     for (const p of targetRows) {
       if (p.permission_key === '*') continue;
 
-      const resource = p.resource || 'general';
-      const action = p.action || 'view';
-      const isViewAction = ['view', 'read', 'access', 'all'].includes(action);
+      let resource = 'general';
+      let action = 'view';
+      if (p.permission_key.includes(':')) {
+        const parts = p.permission_key.split(':');
+        resource = parts[0];
+        action = parts.slice(1).join('_');
+      } else if (p.permission_key.includes('.')) {
+        const parts = p.permission_key.split('.');
+        resource = parts[0];
+        action = parts.slice(1).join('_');
+      }
 
-      const elementId = (action === 'view' || action === 'read' || action === 'all')
+      const isViewAction = (p.actions_match === 'view' || action === 'view' || action === 'read' || action === 'all');
+
+      const elementId = isViewAction
         ? `permission-${resource}`
         : `permission-${resource}-${action.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 
       permissionsMap[p.permission_key] = {
-        description: p.name || p.permission_key,
+        description: p.label || p.permission_key,
         page: resource,
         elementId,
-        action: isViewAction
-          ? { match: 'view', unmatch: 'hide' }
-          : { match: 'active', unmatch: 'inactive' },
+        action: {
+          match: p.actions_match || (isViewAction ? 'view' : 'active'),
+          unmatch: p.actions_unmatch || (isViewAction ? 'hide' : 'inactive'),
+        },
       };
     }
   }

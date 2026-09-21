@@ -107,13 +107,8 @@ export function FestivalProvider({ children }) {
   }, [userPermissions, isSuperAdmin]);
 
   const getScope = useCallback((permissionKey) => {
-    if (isSuperAdmin) return 'all';
-    if (userPermissions && typeof userPermissions === 'object' && !Array.isArray(userPermissions)) {
-      if (userPermissions['*']) return 'all';
-      return userPermissions[permissionKey]?.scope_key || 'all';
-    }
     return 'all';
-  }, [isSuperAdmin, userPermissions]);
+  }, []);
 
   const getEnabledFeatures = useCallback(() => {
     return features.filter(f => f.is_enabled === 1 || f.is_enabled === true);
