@@ -25,11 +25,8 @@ function requirePermission(permissionKey) {
         return res.status(401).json({ error: 'Authentication required.' });
       }
 
-      const editionId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || req.query.editionId || req.query.festivalId;
+      const editionId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || req.query.editionId || req.query.festivalId || 1;
 
-      if (!editionId) {
-        return res.status(400).json({ error: 'Edition context required. Provide X-Edition-Id header.' });
-      }
 
       // Check legacy and colon/dot aliases (e.g. submission:view <-> submission.view, submission:read)
       const aliases = [permissionKey, '*'];
@@ -43,24 +40,33 @@ function requirePermission(permissionKey) {
         aliases.push(`${mod}.${act === 'read' ? 'view' : (act === 'view' ? 'read' : act)}`);
       }
 
-      // Query user's group permissions for this edition/event
+      // Query user's permissions for this edition/event
       const placeholders = aliases.map(() => '?').join(',');
-      const rows = await query(
+
+      // 1. Check if user has granular custom permissions configured for this edition/event
+      const customRows = await query(
         `SELECT p.permission_key
-         FROM user_event_groups ueg
-         JOIN module_groups mg ON mg.group_id = ueg.group_id
-         JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
-         JOIN permissions p ON p.id = mgp.permission_id
-         WHERE ueg.user_id = ? AND ueg.event_id = ? AND p.permission_key IN (${placeholders})
-         UNION
-         SELECT p.permission_key
          FROM user_event_custom_groups uecg
          JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
          JOIN permissions p ON p.id = ecgp.permission_id
          WHERE uecg.user_id = ? AND uecg.event_id = ? AND p.permission_key IN (${placeholders})
          LIMIT 1`,
-        [req.user.id, editionId, ...aliases, req.user.id, editionId, ...aliases]
+        [req.user.id, editionId, ...aliases]
       );
+
+      let rows = customRows;
+      if (rows.length === 0) {
+        rows = await query(
+          `SELECT p.permission_key
+           FROM user_event_groups ueg
+           JOIN module_groups mg ON mg.group_id = ueg.group_id
+           JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
+           JOIN permissions p ON p.id = mgp.permission_id
+           WHERE ueg.user_id = ? AND ueg.event_id = ? AND p.permission_key IN (${placeholders})
+           LIMIT 1`,
+          [req.user.id, editionId, ...aliases]
+        );
+      }
 
       if (rows.length === 0) {
         return res.status(403).json({
@@ -93,11 +99,8 @@ function requirePermission(permissionKey) {
 function requireModule(moduleKey) {
   return async (req, res, next) => {
     try {
-      const editionId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || req.query.editionId || req.query.festivalId;
+      const editionId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || req.query.editionId || req.query.festivalId || 1;
 
-      if (!editionId) {
-        return res.status(400).json({ error: 'Edition context required.' });
-      }
 
       // Check if module is enabled in events_modules (row presence = enabled)
       const rows = await query(

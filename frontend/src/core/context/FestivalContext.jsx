@@ -27,7 +27,22 @@ export function FestivalProvider({ children }) {
       const res = await api.get('/events');
       setFestivals(res.data);
 
-      // Auto-select saved edition/festival or first one
+      // 1. Check URL query parameters (?festival=... or ?edition=...)
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryId = urlParams.get('festival') || urlParams.get('edition');
+        if (queryId) {
+          const match = res.data.find(f => f.id === parseInt(queryId, 10));
+          if (match) {
+            selectFestival(match);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse URL query params', e);
+      }
+
+      // 2. Auto-select saved edition/festival or first one
       const savedId = localStorage.getItem('currentEditionId') || localStorage.getItem('currentFestivalId');
       if (savedId) {
         const saved = res.data.find(f => f.id === parseInt(savedId, 10));
@@ -55,6 +70,9 @@ export function FestivalProvider({ children }) {
       const configRes = await api.get(`/events/${festival.id}/config`, {
         headers: { 'X-Festival-Id': festival.id, 'X-Edition-Id': festival.id },
       });
+      if (configRes.data.event) {
+        setCurrentFestival(configRes.data.event);
+      }
       const mods = configRes.data.modules || configRes.data.features || [];
       setFeatures(mods);
 
@@ -74,8 +92,28 @@ export function FestivalProvider({ children }) {
 
   const isFeatureEnabled = useCallback((key) => {
     if (!key) return true;
-    return features.some(f => (f.module_key === key || f.feature_key === key) && (f.is_enabled === 1 || f.is_enabled === true));
-  }, [features]);
+    if (currentFestival && (currentFestival.saas_enabled === 0 || currentFestival.saas_enabled === false)) {
+      return false;
+    }
+    const aliases = {
+      'review_dashboard': ['submissions', 'review_dashboard'],
+      'team_management': ['team', 'team_management'],
+      'edition_settings': ['settings', 'edition_settings'],
+      'calendar': ['schedule', 'calendar'],
+      'payments': ['payouts', 'payments'],
+      'team': ['team', 'team_management'],
+      'settings': ['settings', 'edition_settings'],
+      'schedule': ['schedule', 'calendar'],
+      'payouts': ['payouts', 'payments'],
+      'chat': ['chat', 'comms'],
+      'comms': ['comms', 'chat']
+    };
+    const targetKeys = aliases[key] || [key];
+    return features.some(f => 
+      (targetKeys.includes(f.module_key) || targetKeys.includes(f.feature_key)) && 
+      (f.is_enabled === 1 || f.is_enabled === true)
+    );
+  }, [features, currentFestival]);
 
   const isModuleEnabled = isFeatureEnabled;
 
@@ -126,6 +164,7 @@ export function FestivalProvider({ children }) {
     // Edition terminology
     editions: festivals,
     currentEdition: currentFestival,
+    isSaasEnabled: currentFestival ? (currentFestival.saas_enabled === 1 || currentFestival.saas_enabled === true) : true,
     modules: features,
     isModuleEnabled,
     getEnabledModules,

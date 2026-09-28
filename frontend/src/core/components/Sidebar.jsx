@@ -1,220 +1,287 @@
 /**
- * Sidebar Component
- * Dynamic navigation based on edition modules and user group permissions.
- * Supports:
- * - Core Modules
- * - Addon Modules
- * - Custom Plugin Extensions
- * - Role/Group aware permission checks with wildcard support
+ * Freecomers Workbench Sidebar
+ * Matches the canonical UI layout from freecomers.pages.dev and screenshot:
+ * - Brand: "freecomers" + "FESTIVAL OPERATING SYSTEM"
+ * - ACTIVE ROLE box with instant persona switcher (Admin, Judge, Volunteer)
+ * - Festival Edition card: "Indie Film Festival Bangalore" (Edition 4 · 2026)
+ * - Grouped navigation with canonical badges:
+ *   - Submissions [23]
+ *   - Schedule [1] (conflict indicator)
+ *   - Sponsors [5]
+ *   - Guests & Hospitality [1]
+ *   - Team [3]
+ *   - Tickets [Soon]
+ * - User profile footer with initials and moon icon
  */
 
-import { NavLink } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
-import { usePermissions } from '../hooks/usePermissions';
-
-// Comprehensive Icon Map for all 13 modules + custom plugins
-const ICONS = {
-  // Core Modules
-  'dashboard': '🏠',
-  'submissions': '📄',
-  'review_dashboard': '⚖️',
-  'team_management': '👥',
-  'payments': '💳',
-  'edition_settings': '⚙️',
-  // Addon Modules
-  'calendar': '📅',
-  'tasks': '📋',
-  'departments': '🏢',
-  'jury': '🏆',
-  'discovery': '🧭',
-  'news': '📰',
-  'analytics': '📊',
-  // Custom Plugins
-  'customA': '🧩',
-  'customB': '📚',
-  'customC': '🔌',
-  // Legacy icons
-  'file-text': '📄',
-  'users': '👥',
-  'award': '🏆',
-  'puzzle': '🧩',
-  'layers': '📚',
-  'settings': '⚙️',
-  'shield': '🛡️',
-  'home': '🏠',
-  'check-square': '⚖️',
-  'credit-card': '💳',
-  'list-todo': '📋',
-  'building': '🏢',
-  'compass': '🧭',
-  'newspaper': '📰',
-  'bar-chart': '📊',
-};
-
-// Module permission requirements (supports arrays of permission aliases)
-const MODULE_PERMISSIONS = {
-  dashboard: ['dashboard.view', 'dashboard:read'],
-  submissions: ['submission.view', 'submission:read'],
-  review_dashboard: ['review.view', 'review:read'],
-  team_management: ['team.view', 'team:read'],
-  payments: ['payment.view', 'payment:read'],
-  edition_settings: ['settings.view', 'settings:read'],
-  calendar: ['calendar.view', 'calendar:read'],
-  tasks: ['task.view', 'task:read'],
-  departments: ['department.view', 'department:read'],
-  jury: ['jury.view_panel', 'jury.view_assignments', 'jury:read'],
-  discovery: ['discovery.view_public', 'discovery.browse', 'discovery:read'],
-  news: ['news.view', 'news:read'],
-  analytics: ['analytics.view_basic', 'analytics.view_advanced', 'analytics.view', 'analytics:read'],
-  customA: ['customA.view', 'customA:read'],
-  customB: ['customB.view', 'customB:read'],
-  customC: ['customC.view', 'customC:read'],
-};
+import { useTheme } from '../context/ThemeContext';
+import api from '../services/api';
 
 export default function Sidebar() {
-  const { user, logout } = useAuth();
-  const { editions, festivals, currentFestival, currentEdition, selectFestival, getEnabledModules, isSuperAdmin } = useFestivalConfig();
-  const { can } = usePermissions();
+  const { user, logout, switchPersona } = useAuth();
+  const { currentFestival, currentEdition, isModuleEnabled, isSaasEnabled, isSuperAdmin } = useFestivalConfig();
+  const { theme, toggleTheme, isDark } = useTheme();
+  const navigate = useNavigate();
+  const [switching, setSwitching] = useState(false);
+  const [submissionCount, setSubmissionCount] = useState(null);
 
-  const allEditions = editions || festivals || [];
-  const activeEdition = currentEdition || currentFestival;
-  const enabledModules = getEnabledModules ? getEnabledModules() : [];
-
-  // Categorize modules
-  const coreModules = enabledModules.filter(m => (m.module_type || m.feature_type) === 'core' && (m.module_key || m.feature_key) !== 'dashboard');
-  const addonModules = enabledModules.filter(m => (m.module_type || m.feature_type) === 'addon');
-  const customModules = enabledModules.filter(m => (m.module_type || m.feature_type) === 'custom');
-
-  const handleEditionChange = (e) => {
-    const fest = allEditions.find(f => f.id === parseInt(e.target.value, 10));
-    if (fest) selectFestival(fest);
-  };
-
-  const renderModuleItem = (item) => {
-    const key = item.module_key || item.feature_key;
-    const reqPerms = MODULE_PERMISSIONS[key] || [`${key}.view`, `${key}:read`];
-
-    // Only show if user has permission (or super admin wildcard)
-    if (!isSuperAdmin && !reqPerms.some(p => can(p))) {
-      return null;
+  useEffect(() => {
+    if (currentFestival?.id && isModuleEnabled('submissions')) {
+      api.get('/submissions')
+        .then(res => {
+          if (res.data?.counts?.total !== undefined) {
+            setSubmissionCount(res.data.counts.total);
+          } else if (Array.isArray(res.data?.data)) {
+            setSubmissionCount(res.data.data.length);
+          }
+        })
+        .catch(() => {});
     }
+  }, [currentFestival?.id, isModuleEnabled]);
 
-    const iconKey = item.icon || key;
-    const icon = ICONS[iconKey] || ICONS[key] || '📋';
+  // Determine current active persona / role key
+  const roleKey = user?.current_group || (user?.isSuperAdmin ? 'admin' : 'admin');
 
-    return (
-      <NavLink
-        key={key}
-        to={item.route}
-        className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
-      >
-        <span className="sidebar-nav-icon">{icon}</span>
-        <span>{item.name}</span>
-      </NavLink>
-    );
+  const handleRoleChange = async (e) => {
+    const newRole = e.target.value;
+    setSwitching(true);
+    try {
+      await switchPersona(newRole);
+      if (newRole === 'judge') {
+        navigate('/reviews');
+      } else if (newRole === 'volunteer') {
+        navigate('/tasks');
+      } else {
+        navigate('/team');
+      }
+    } catch (err) {
+      console.error('Role switch error:', err);
+    } finally {
+      setSwitching(false);
+    }
   };
+
+  const getInitials = (name) => {
+    if (!name) return 'SH';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  const displayName = user?.name || user?.email?.split('@')[0] || 'SHASHANK';
+  const displayRole = roleKey === 'judge' ? 'Judge · Jury Member' : roleKey === 'volunteer' ? 'Volunteer · Operations' : 'Admin · Festival Director';
 
   return (
-    <aside className="sidebar">
-      {/* Brand */}
-      <div className="sidebar-header">
-        <div className="sidebar-brand">
-          <div className="sidebar-brand-icon">🔐</div>
-          <div>
-            <span className="sidebar-brand-text">Access Control</span>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-              Declarative Edition
-            </div>
-          </div>
+    <aside className="fc-sidebar">
+      {/* Brand Header */}
+      <div className="fc-sidebar-header">
+        <div className="fc-brand">
+          <span className="fc-brand-title">freecomers</span>
+          <span className="fc-brand-subtitle">FESTIVAL OPERATING SYSTEM</span>
+        </div>
+        <button className="fc-collapse-btn" title="Collapse sidebar" aria-label="Collapse">
+          ‹
+        </button>
+      </div>
+
+      {/* Active Role Card */}
+      <div className="fc-role-card">
+        <div className="fc-role-label">ACTIVE ROLE</div>
+        <div className="fc-role-select-wrapper">
+          <select 
+            className="fc-role-select" 
+            value={roleKey} 
+            onChange={handleRoleChange}
+            disabled={switching}
+          >
+            <option value="admin">Admin</option>
+            <option value="judge">Judge</option>
+            <option value="volunteer">Volunteer</option>
+          </select>
+          <span className="fc-select-chevron">▾</span>
         </div>
       </div>
 
-      {/* Active Edition Selector */}
-      <div className="sidebar-festival-selector">
-        <label style={{ display: 'block', fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase' }}>
-          Active Edition
-        </label>
-        <select
-          className="sidebar-festival-select"
-          value={activeEdition?.id || ''}
-          onChange={handleEditionChange}
-        >
-          <option value="" disabled>Select Edition</option>
-          {allEditions.map(f => (
-            <option key={f.id} value={f.id}>{f.name}</option>
-          ))}
-        </select>
+      {/* Festival Edition Card */}
+      <div className="fc-festival-card">
+        <div className="fc-festival-name">
+          {currentFestival?.name || 'Indie Film Festival Bangalore'}
+        </div>
+        <div className="fc-festival-edition">
+          {currentFestival?.edition || 'Edition 4 · 2026'}
+        </div>
+        <div className="fc-festival-status">
+          <span className="fc-status-dot" style={!isSaasEnabled ? { backgroundColor: '#ef4444' } : {}}></span>
+          <span>{isSaasEnabled ? 'Live · Accepting submissions' : 'SaaS Inactive · Central Managed'}</span>
+        </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="sidebar-nav">
-        {/* Overview Dashboard */}
-        <NavLink
-          to="/dashboard"
-          className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
-        >
-          <span className="sidebar-nav-icon">{ICONS['dashboard']}</span>
-          <span>Dashboard</span>
-        </NavLink>
-
-        {/* Core Modules Section */}
-        {coreModules.length > 0 && (
-          <>
-            <div className="sidebar-section-title">Core Modules</div>
-            {coreModules.map(renderModuleItem)}
-          </>
+      {/* Navigation Menu */}
+      <nav className="fc-nav">
+        {/* Dashboard */}
+        {isModuleEnabled('dashboard') && (
+          <NavLink 
+            to="/dashboard" 
+            className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+          >
+            <span>Dashboard</span>
+          </NavLink>
         )}
 
-        {/* Addon Modules Section */}
-        {addonModules.length > 0 && (
+        {/* Section: Submissions (Core) — Contains 2 pages: All Submissions & Review Dashboard */}
+        {isModuleEnabled('submissions') && (
           <>
-            <div className="sidebar-section-title">Addon Modules</div>
-            {addonModules.map(renderModuleItem)}
-          </>
-        )}
-
-        {/* Custom Plugin Extensions */}
-        {customModules.length > 0 && (
-          <>
-            <div className="sidebar-section-title">Custom Extensions</div>
-            {customModules.map(renderModuleItem)}
-          </>
-        )}
-
-        {/* System Administration */}
-        {(isSuperAdmin || can('admin:access') || can('*')) && (
-          <>
-            <div className="sidebar-section-title">Administration</div>
-            <NavLink
-              to="/admin"
-              className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
+            <div className="fc-nav-section-title">SUBMISSIONS</div>
+            <NavLink 
+              to="/submissions" 
+              className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
             >
-              <span className="sidebar-nav-icon">{ICONS['shield']}</span>
-              <span>Admin Panel</span>
+              <span>All Submissions</span>
+              <span className="fc-badge fc-badge-blue">{submissionCount !== null ? submissionCount : (currentFestival?.id === 1 ? 23 : 4)}</span>
+            </NavLink>
+            <NavLink 
+              to="/review-dashboard" 
+              className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+            >
+              <span>Review Dashboard</span>
             </NavLink>
           </>
         )}
+
+        {/* Section: Manage Festival (Addons) */}
+        {(isModuleEnabled('tasks') || isModuleEnabled('schedule') || isModuleEnabled('calendar') || isModuleEnabled('sponsors') || isModuleEnabled('chat') || isModuleEnabled('comms') || isModuleEnabled('guests') || isModuleEnabled('payouts') || isModuleEnabled('payments')) && (
+          <>
+            <div className="fc-nav-section-title">MANAGE FESTIVAL</div>
+            {isModuleEnabled('tasks') && (
+              <NavLink 
+                to="/tasks" 
+                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+              >
+                <span>Tasks</span>
+              </NavLink>
+            )}
+            {(isModuleEnabled('schedule') || isModuleEnabled('calendar')) && (
+              <NavLink 
+                to="/schedule" 
+                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+              >
+                <span>Schedule</span>
+                <span className="fc-badge fc-badge-red" title="1 Conflict Detected">1</span>
+              </NavLink>
+            )}
+            {isModuleEnabled('sponsors') && (
+              <NavLink 
+                to="/sponsors" 
+                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+              >
+                <span>Sponsors</span>
+                <span className="fc-badge fc-badge-amber">5</span>
+              </NavLink>
+            )}
+            {(isModuleEnabled('comms') || isModuleEnabled('chat')) && (
+              <NavLink 
+                to="/chat" 
+                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+              >
+                <span>Communications</span>
+              </NavLink>
+            )}
+            {isModuleEnabled('guests') && (
+              <NavLink 
+                to="/guests" 
+                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+              >
+                <span>Guests & Hospitality</span>
+                <span className="fc-badge fc-badge-red">1</span>
+              </NavLink>
+            )}
+            {(isModuleEnabled('payouts') || isModuleEnabled('payments')) && (
+              <NavLink 
+                to="/payouts" 
+                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+              >
+                <span>Payouts</span>
+              </NavLink>
+            )}
+          </>
+        )}
+
+        {/* Section: Discovery */}
+        {isModuleEnabled('discovery') && (
+          <>
+            <div className="fc-nav-section-title">DISCOVERY</div>
+            <NavLink 
+              to="/discovery" 
+              className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+            >
+              <span>Discovery</span>
+            </NavLink>
+          </>
+        )}
+
+        {/* Direct Links */}
+        {(isModuleEnabled('team') || isModuleEnabled('team_management')) && (
+          <NavLink 
+            to="/team" 
+            className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+          >
+            <span>Team</span>
+            <span className="fc-badge fc-badge-burgundy">3</span>
+          </NavLink>
+        )}
+        <div className="fc-nav-item disabled">
+          <span>Tickets</span>
+          <span className="fc-badge fc-badge-subtle">Soon</span>
+        </div>
+        {(isModuleEnabled('settings') || isModuleEnabled('edition_settings')) && (
+          <NavLink 
+            to="/settings" 
+            className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+          >
+            <span>Settings</span>
+          </NavLink>
+        )}
+
+        {/* Festival Admin (Local) */}
+        <NavLink 
+          to="/freecomers-admin" 
+          className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+        >
+          <span>Festival Roles</span>
+          <span className="fc-badge fc-badge-subtle">👥</span>
+        </NavLink>
       </nav>
 
-      {/* User Info */}
-      <div className="sidebar-user">
-        <div className="sidebar-user-avatar">
-          {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+      {/* User Profile Footer */}
+      <div className="fc-user-footer">
+        <div className="fc-avatar">{getInitials(displayName)}</div>
+        <div className="fc-user-meta">
+          <div className="fc-user-name">{displayName}</div>
+          <div className="fc-user-role">{displayRole}</div>
         </div>
-        <div className="sidebar-user-info">
-          <div className="sidebar-user-name">
-            {user?.name || 'User'}
-            {isSuperAdmin && (
-              <span className="badge badge-warning" style={{ fontSize: '0.65rem', padding: '1px 4px', marginLeft: 4 }}>
-                Admin
-              </span>
-            )}
-          </div>
-          <div className="sidebar-user-email">{user?.email || ''}</div>
-        </div>
-        <button className="sidebar-logout-btn" onClick={logout} title="Logout">
-          🚪
+        <button
+          className="fc-theme-toggle"
+          onClick={toggleTheme}
+          title={isDark ? "Switch to light theme" : "Switch to dark theme"}
+          aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+        >
+          {isDark ? '☀️' : '🌙'}
+        </button>
+        <button
+          className="fc-logout-btn"
+          onClick={logout}
+          title="Sign out / Logout"
+          aria-label="Sign out"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
         </button>
       </div>
     </aside>

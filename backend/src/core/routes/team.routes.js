@@ -1,9 +1,6 @@
 /**
  * Team Routes
- * GET    /api/team        — requires team:read
- * GET    /api/team/:id    — requires team:read
- * PUT    /api/team/:id    — requires team:update
- * DELETE /api/team/:id    — requires team:delete
+ * Endpoints for managing festival staff, juries, volunteers, and departments.
  */
 
 const express = require('express');
@@ -14,9 +11,14 @@ const { requirePermission } = require('../middleware/permission.middleware');
 
 router.use(authenticate);
 
-router.get('/', requirePermission('team:read'), teamController.list);
-router.get('/:id', requirePermission('team:read'), teamController.getById);
-router.put('/:id', requirePermission('team:update'), teamController.update);
-router.delete('/:id', requirePermission('team:delete'), teamController.remove);
+router.get('/search', requirePermission('team:view'), teamController.searchIndividuals);
+router.get('/custom-groups', requirePermission('team:view'), teamController.listCustomGroups);
+router.post('/custom-groups', requirePermission('team:manage'), teamController.createCustomGroup);
+router.delete('/custom-groups/:id', requirePermission('team:manage'), teamController.deleteCustomGroup);
+router.get('/', requirePermission('team:view'), teamController.list);
+router.post('/', requirePermission('team:manage'), teamController.create);
+router.get('/:id', requirePermission('team:view'), teamController.getById);
+router.put('/:id', requirePermission('team:manage'), teamController.update);
+router.delete('/:id', requirePermission('team:manage'), teamController.remove);
 
 module.exports = router;

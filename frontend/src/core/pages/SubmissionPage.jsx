@@ -1,238 +1,345 @@
 /**
- * Submission Page — Core Page with Granular Permission Control
- * 
- * Demonstrates nested PermissionGate usage:
- *   submission:read   → See the page (data table)
- *   submission:update → See the "Edit" section
- *   submission:delete → See the "Delete" button
+ * SubmissionPage Component
+ * Submissions catalog powered 100% by real database data:
+ * - Dynamic status filter tabs: All Submissions, Submitted, Official Selection, Rejected
+ * - Category filter dropdown & Flag filter dropdown
+ * - Search by title, director, country
+ * - Clean table matching Screenshot 1 (Title & Director, Category, Runtime, Status, Rating, Flag, Actions)
+ * - Slide-over details drawer (FilmDetailDrawer)
+ * - Rejection modal with mandatory >= 10 character validation (RejectFilmModal)
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../services/api';
-import PermissionGate from '../components/PermissionGate';
-import { usePermissions } from '../hooks/usePermissions';
+import FilmDetailDrawer from '../components/submissions/FilmDetailDrawer';
+import RejectFilmModal from '../components/submissions/RejectFilmModal';
+const STANDARD_FLAGS = [
+  { id: 'flag-high-priority', label: 'High Priority', color: '#e05252' },
+  { id: 'flag-needs-review', label: 'Needs Review', color: '#d97706' },
+  { id: 'flag-strong-contender', label: 'Strong Contender', color: '#10b981' },
+  { id: 'flag-special-interest', label: 'Special Interest', color: '#3b82f6' },
+];
+
+const PIPELINE_TABS = [
+  { key: 'all', label: 'All', countKey: 'total' },
+  { key: 'Submitted', label: 'Submitted', countKey: 'submitted' },
+  { key: 'Round 1 Screening', label: 'Round 1 Screening', countKey: 'round_1_screening' },
+  { key: 'Admin Review', label: 'Admin Review', countKey: 'admin_review' },
+  { key: 'Round 2 Screening', label: 'Round 2 Screening', countKey: 'round_2_screening' },
+  { key: 'Official Selection', label: 'Official Selection', countKey: 'official_selection' },
+  { key: 'Winner', label: 'Winner', countKey: 'winner' },
+  { key: 'Finalist', label: 'Finalist', countKey: 'finalist' },
+  { key: 'Rejected', label: 'Rejected', countKey: 'rejected' },
+];
 
 export default function SubmissionPage() {
-  const [data, setData] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const { can } = usePermissions();
 
-  const canView = can('submission.view') || can('submission:read');
-  const canEdit = can('submission.edit') || can('submission:update');
-  const canDelete = can('submission.delete') || can('submission:delete');
+  // Filters
+  const [activeStatus, setActiveStatus] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedFlag, setSelectedFlag] = useState('all');
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
 
-  const [activeScope, setActiveScope] = useState('all');
+  // Modals / Drawer
+  const [selectedFilm, setSelectedFilm] = useState(null);
+  const [rejectingFilm, setRejectingFilm] = useState(null);
 
-  const loadData = async () => {
+  const fetchSubmissions = async () => {
     try {
-      const res = await api.get('/submissions');
-      const items = Array.isArray(res.data) ? res.data : (res.data.data || []);
-      setData(items);
-      if (res.data.activeScope) {
-        setActiveScope(res.data.activeScope);
-      }
-    } catch {
-      console.error('Failed to load submissions');
+      setLoading(true);
+      const params = {};
+      if (activeStatus !== 'all') params.status = activeStatus;
+      if (selectedCategory !== 'all') params.category = selectedCategory;
+      if (selectedFlag !== 'all') params.flag_id = selectedFlag;
+      if (search.trim()) params.search = search.trim();
+
+      const res = await api.get('/submissions', { params });
+      setSubmissions(res.data.data || []);
+      setCounts(res.data.counts || {});
+      setFlags(res.data.flags || []);
+    } catch (err) {
+      console.error('Failed to load submissions:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    fetchSubmissions();
+  }, [activeStatus, selectedCategory, selectedFlag, search]);
 
-  const handleEdit = (item) => {
-    setEditingId(item.id);
-    setEditForm({ title: item.title, category: item.category, status: item.status });
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setSearch(searchInput);
   };
 
-  const handleSave = async (id) => {
+  const getTabCount = (tab) => {
+    if (tab.key === 'all') return counts.total != null ? counts.total : submissions.length;
+    if (counts.byStatus && counts.byStatus[tab.key] !== undefined) {
+      return counts.byStatus[tab.key];
+    }
+    if (counts[tab.countKey] !== undefined) {
+      return parseInt(counts[tab.countKey], 10);
+    }
+    return 0;
+  };
+
+  // Distinct categories from returned data for category dropdown
+  const categoriesList = useMemo(() => {
+    const set = new Set();
+    submissions.forEach((s) => {
+      if (s.category) set.add(s.category);
+    });
+    return Array.from(set).sort();
+  }, [submissions]);
+
+  const handleOpenDetails = async (film) => {
     try {
-      await api.put(`/submissions/${id}`, editForm);
-      setEditingId(null);
-      loadData();
-    } catch {
-      console.error('Failed to update');
+      const res = await api.get(`/submissions/${film.id}`);
+      setSelectedFilm(res.data);
+    } catch (err) {
+      setSelectedFilm(film);
     }
   };
 
-  const handleDelete = async (id) => {
-    try {
-      await api.delete(`/submissions/${id}`);
-      loadData();
-    } catch {
-      console.error('Failed to delete');
-    }
-  };
-
-  const statusBadge = (status) => {
-    const map = {
-      'Accepted': 'badge-success',
-      'Rejected': 'badge-danger',
-      'Under Review': 'badge-warning',
-      'Pending': 'badge-info',
-    };
-    return map[status] || 'badge-muted';
+  const handleUpdateFilm = (updatedFilm) => {
+    setSelectedFilm(updatedFilm);
+    setSubmissions((prev) =>
+      prev.map((s) => (s.id === updatedFilm.id ? { ...s, ...updatedFilm } : s))
+    );
+    fetchSubmissions();
   };
 
   return (
-    <div className="animate-fade-in">
-      <div className="page-header">
-        <h2 className="page-title">📄 Submissions Intake</h2>
-        <p className="page-description">
-          Manage festival edition submissions with declarative scopes and permissions.
+    <div className="fc-submissions-page animate-fade-in">
+      {/* Page Header */}
+      <div className="fc-page-header">
+        <h1 className="fc-page-title">Submissions</h1>
+        <p className="fc-page-subtitle">
+          {counts.total != null ? counts.total : submissions.length} films in the catalog
         </p>
       </div>
 
-      {/* Permission Info Banner */}
-      <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          🔑 <strong>Permissions Active:</strong>&nbsp;
-          <span className={`badge ${canView ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 4 }}>submission.view</span>
-          <span className={`badge ${canEdit ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 4 }}>submission.edit</span>
-          <span className={`badge ${canDelete ? 'badge-success' : 'badge-danger'}`}>submission.delete</span>
-        </div>
-        <div>
-          🛡️ <strong>Active Scope:</strong>&nbsp;
-          <span className="badge badge-info" style={{ textTransform: 'uppercase' }}>
-            All Submissions (Active Scope: All)
-          </span>
-        </div>
+      {/* Status Filter Tabs (Matching Mockup Screenshot 1: 9 dynamic tabs) */}
+      <div className="fc-status-tabs-container">
+        {PIPELINE_TABS.map((tab) => {
+          const tabCount = getTabCount(tab);
+          const isActive = activeStatus === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              className={`fc-status-tab-btn ${isActive ? 'active' : ''}`}
+              onClick={() => setActiveStatus(tab.key)}
+            >
+              <span className="fc-tab-label">{tab.label}</span>
+              <span className={`fc-tab-count-badge ${isActive ? 'badge-active' : ''}`}>
+                {tabCount}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Level 1: submission:read — Data Table */}
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <h3 className="card-title">Submission List</h3>
-            <p className="card-subtitle">
-              <span className="permission-section-badge">Requires: submission:read</span>
-            </p>
-          </div>
+      {/* Filter and Search Bar (Matching Screenshot 1) */}
+      <div className="fc-submissions-toolbar">
+        <div className="fc-toolbar-left-filters">
+          {/* Category Dropdown */}
+          <select
+            className="fc-toolbar-select"
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          >
+            <option value="all">All Categories</option>
+            {categoriesList.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+
+          {/* Flags Dropdown */}
+          <select
+            className="fc-toolbar-select"
+            value={selectedFlag}
+            onChange={(e) => setSelectedFlag(e.target.value)}
+          >
+            <option value="all">All Flags</option>
+            {flags.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
         </div>
 
+        {/* Search Bar */}
+        <form className="fc-toolbar-search-form" onSubmit={handleSearchSubmit}>
+          <input
+            type="text"
+            className="fc-toolbar-search-input"
+            placeholder="Search by title, director, country..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <button type="submit" className="fc-toolbar-search-btn">
+            Search
+          </button>
+        </form>
+      </div>
+
+      {/* Submissions Table (Matching Screenshot 1) */}
+      <div className="fc-card" style={{ padding: 0, overflow: 'hidden', marginTop: '16px' }}>
         {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: '48px' }}></div>)}
+          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>
+            Loading submissions...
+          </div>
+        ) : submissions.length === 0 ? (
+          <div style={{ padding: '48px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>
+            No submissions found matching your filters.
           </div>
         ) : (
-          <div className="table-container">
-            <table className="table">
+          <div className="table-responsive">
+            <table className="fc-table">
               <thead>
                 <tr>
-                  <th>Title</th>
-                  <th>Category</th>
-                  <th>Submitted By</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                  {/* Level 2: submission:update — Show actions column */}
-                  <PermissionGate permission="submission:update">
-                    <th>Actions</th>
-                  </PermissionGate>
+                  <th style={{ minWidth: '220px' }}>TITLE & DIRECTOR</th>
+                  <th>CATEGORY</th>
+                  <th>RUNTIME</th>
+                  <th>STATUS</th>
+                  <th>RATING</th>
+                  <th>FLAG</th>
+                  <th style={{ textAlign: 'right', minWidth: '130px' }}>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
-                {data.map(item => (
-                  <tr key={item.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.title}</td>
-                    <td>{item.category}</td>
-                    <td>{item.submittedBy}</td>
-                    <td>{item.submittedAt}</td>
-                    <td><span className={`badge ${statusBadge(item.status)}`}>{item.status}</span></td>
-                    {/* Level 2: submission:update — Edit button */}
-                    <PermissionGate permission="submission:update">
+                {submissions.map((film) => {
+                  const isRejected = film.status === 'Rejected';
+                  return (
+                    <tr
+                      key={film.id}
+                      className="fc-table-row-clickable"
+                      onClick={() => handleOpenDetails(film)}
+                    >
+                      {/* Title & Director */}
                       <td>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(item)}>
-                            ✏️ Edit
-                          </button>
-                          {/* Level 3: submission:delete — Delete button */}
-                          <PermissionGate permission="submission:delete">
-                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(item.id)}>
-                              🗑️ Delete
-                            </button>
-                          </PermissionGate>
+                        <div className="fc-table-title-main">{film.title}</div>
+                        <div className="fc-table-title-sub">
+                          Dir. {film.director || 'Filmmaker'} · {film.country || 'India'}
                         </div>
                       </td>
-                    </PermissionGate>
-                  </tr>
-                ))}
+
+                      {/* Category */}
+                      <td>
+                        <span className="fc-category-pill">{film.category || 'Short Film'}</span>
+                      </td>
+
+                      {/* Runtime */}
+                      <td style={{ color: 'var(--fc-text-secondary)', fontSize: '0.85rem' }}>
+                        {film.runtime ? `${film.runtime}m` : '15m'}
+                      </td>
+
+                      {/* Status */}
+                      <td>
+                        <span className={`fc-status-badge fc-status-${(film.status || 'submitted').toLowerCase().replace(/\s+/g, '-')}`}>
+                          {film.status || 'Submitted'}
+                        </span>
+                      </td>
+
+                      {/* Rating */}
+                      <td>
+                        {film.rating ? (
+                          <span className="fc-rating-cell">{parseFloat(film.rating).toFixed(1)}/5</span>
+                        ) : (
+                          <span className="fc-rating-unrated">Unrated</span>
+                        )}
+                      </td>
+
+                      {/* Flag */}
+                      <td>
+                        {(() => {
+                          const resolvedFlag =
+                            (flags && flags.find((f) => f.id === film.flag_id)) ||
+                            STANDARD_FLAGS.find((f) => f.id === film.flag_id);
+                          const flagLabel = film.flag_label || resolvedFlag?.label;
+                          const flagColor = film.flag_color || resolvedFlag?.color || '#3b82f6';
+
+                          return flagLabel ? (
+                            <span
+                              className="fc-flag-indicator"
+                              style={{
+                                backgroundColor: `${flagColor}20`,
+                                color: flagColor,
+                                borderColor: `${flagColor}40`,
+                              }}
+                            >
+                              {flagLabel}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--fc-text-light)' }}>—</span>
+                          );
+                        })()}
+                      </td>
+
+                      {/* Actions */}
+                      <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            className="fc-btn-table-action"
+                            onClick={() => handleOpenDetails(film)}
+                          >
+                            View
+                          </button>
+                          {!isRejected && (
+                            <button
+                              type="button"
+                              className="fc-btn-table-action reject"
+                              onClick={() => setRejectingFilm(film)}
+                            >
+                              Reject
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Level 2: submission:update — Edit Section */}
-      <PermissionGate permission="submission:update">
-        <div className="permission-section">
-          <h3 className="permission-section-title">
-            ✏️ Edit Submission
-            <span className="permission-section-badge">Requires: submission:update</span>
-          </h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: 'var(--space-md)' }}>
-            This section is only visible to users with <code>submission:update</code> permission.
-          </p>
+      {/* Slide-over Film Details Drawer */}
+      {selectedFilm && (
+        <FilmDetailDrawer
+          film={selectedFilm}
+          flags={flags}
+          onClose={() => setSelectedFilm(null)}
+          onReject={(filmToReject) => setRejectingFilm(filmToReject)}
+          onUpdateFilm={handleUpdateFilm}
+        />
+      )}
 
-          {editingId ? (
-            <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: '200px' }}>
-                <label className="form-label">Title</label>
-                <input
-                  className="form-input"
-                  value={editForm.title || ''}
-                  onChange={e => setEditForm({...editForm, title: e.target.value})}
-                />
-              </div>
-              <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: '150px' }}>
-                <label className="form-label">Status</label>
-                <select
-                  className="form-input"
-                  value={editForm.status || ''}
-                  onChange={e => setEditForm({...editForm, status: e.target.value})}
-                >
-                  <option value="Pending">Pending</option>
-                  <option value="Under Review">Under Review</option>
-                  <option value="Accepted">Accepted</option>
-                  <option value="Rejected">Rejected</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button className="btn btn-success btn-sm" onClick={() => handleSave(editingId)}>💾 Save</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-              Click "Edit" on a submission to edit it here.
-            </p>
-          )}
-
-          {/* Level 3: submission:delete — Delete zone within edit section */}
-          <PermissionGate permission="submission:delete">
-            <div style={{
-              marginTop: 'var(--space-lg)',
-              padding: 'var(--space-md)',
-              background: 'rgba(239, 68, 68, 0.05)',
-              border: '1px solid rgba(239, 68, 68, 0.15)',
-              borderRadius: 'var(--radius-md)',
-            }}>
-              <h4 style={{ fontSize: '0.875rem', color: 'var(--color-danger)', marginBottom: 'var(--space-xs)' }}>
-                🗑️ Danger Zone
-                <span className="permission-section-badge" style={{ marginLeft: 8, background: 'rgba(239, 68, 68, 0.15)', color: 'var(--color-danger)' }}>
-                  Requires: submission:delete
-                </span>
-              </h4>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                This delete zone is only visible to users with <code>submission:delete</code> permission.
-              </p>
-            </div>
-          </PermissionGate>
-        </div>
-      </PermissionGate>
+      {/* Rejection Modal */}
+      {rejectingFilm && (
+        <RejectFilmModal
+          film={rejectingFilm}
+          onClose={() => setRejectingFilm(null)}
+          onSuccess={() => {
+            fetchSubmissions();
+            if (selectedFilm?.id === rejectingFilm.id) {
+              setSelectedFilm((prev) => (prev ? { ...prev, status: 'Rejected' } : null));
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

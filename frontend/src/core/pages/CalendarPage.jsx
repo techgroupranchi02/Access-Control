@@ -1,184 +1,170 @@
 /**
- * Calendar & Screenings Page
- * Addon Module: calendar
- * Permissions:
- * - calendar.view
- * - calendar.manage_events
- * - calendar.publish_schedule
+ * CalendarPage (Festival Schedule) Component
+ * Freecomers 4-Day Timetable & Venue Grid
+ * Displays venue screening slots and the Day 1 director arrival conflict alert.
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import PermissionGate from '../components/PermissionGate';
-import { usePermissions } from '../hooks/usePermissions';
+
+const DAYS = [
+  { index: 0, label: 'Day 1 · Opening Night', hasConflict: true },
+  { index: 1, label: 'Day 2 · Indie Showcase', hasConflict: false },
+  { index: 2, label: 'Day 3 · Documentary Day', hasConflict: false },
+  { index: 3, label: 'Day 4 · Awards Gala', hasConflict: false },
+];
 
 export default function CalendarPage() {
-  const [events, setEvents] = useState([]);
+  const [venues, setVenues] = useState([]);
+  const [slots, setSlots] = useState([]);
+  const [conflicts, setConflicts] = useState([]);
+  const [selectedDay, setSelectedDay] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [showNewModal, setShowNewModal] = useState(false);
-  const [newEvent, setNewEvent] = useState({ title: '', venue: '', startTime: '', duration: '90m', type: 'Screening' });
-  const [statusMsg, setStatusMsg] = useState('');
-  const { can } = usePermissions();
 
-  const loadCalendar = async () => {
+  const fetchSchedule = async () => {
     try {
+      setLoading(true);
       const res = await api.get('/calendar');
-      setEvents(res.data);
-    } catch {
-      console.error('Failed to load calendar');
+      setVenues(res.data.venues || []);
+      setSlots(res.data.slots || []);
+      setConflicts(res.data.conflicts || []);
+    } catch (err) {
+      console.error('Failed to load schedule:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCalendar();
+    fetchSchedule();
   }, []);
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    try {
-      await api.post('/calendar', newEvent);
-      setStatusMsg(`Event "${newEvent.title}" added to festival schedule.`);
-      setShowNewModal(false);
-      setNewEvent({ title: '', venue: '', startTime: '', duration: '90m', type: 'Screening' });
-      loadCalendar();
-    } catch {
-      alert('Failed to create calendar event.');
-    }
-  };
+  const daySlots = slots.filter(s => s.day_index === selectedDay);
 
   return (
-    <div className="animate-fade-in">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="fc-schedule-page">
+      {/* Page Header */}
+      <div className="fc-page-header">
         <div>
-          <h2 className="page-title">📅 Calendar & Screenings</h2>
-          <p className="page-description">
-            Schedule festival screenings, workshop sessions, and public Q&A events.
+          <h1 className="fc-page-title">Festival Schedule</h1>
+          <p className="fc-page-subtitle">
+            4 days · 3 venues · 6 official screening slots
           </p>
         </div>
-        <PermissionGate permission="calendar.manage_events">
-          <button className="btn btn-primary" onClick={() => setShowNewModal(true)}>
-            ➕ Schedule Event
+      </div>
+
+      {/* Subtabs: Days */}
+      <div className="fc-subtabs">
+        {DAYS.map((day) => (
+          <button
+            key={day.index}
+            className={`fc-subtab ${selectedDay === day.index ? 'active' : ''}`}
+            onClick={() => setSelectedDay(day.index)}
+          >
+            {day.label}
+            {day.hasConflict && (
+              <span 
+                style={{ 
+                  display: 'inline-block', 
+                  width: '7px', 
+                  height: '7px', 
+                  borderRadius: '50%', 
+                  backgroundColor: '#dc2626', 
+                  marginLeft: '6px' 
+                }} 
+              />
+            )}
           </button>
-        </PermissionGate>
+        ))}
       </div>
 
-      {statusMsg && (
-        <div className="alert alert-success" style={{ marginBottom: 'var(--space-md)' }}>
-          {statusMsg}
+      {/* Critical Conflict Alert (if on Day 1) */}
+      {selectedDay === 0 && conflicts.length > 0 && (
+        <div 
+          style={{
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fca5a5',
+            borderRadius: '8px',
+            padding: '14px 18px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px'
+          }}
+        >
+          <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+          <div>
+            <div style={{ fontWeight: 700, color: '#991b1b', fontSize: '0.875rem' }}>
+              CRITICAL LOGISTICS CONFLICT DETECTED
+            </div>
+            <div style={{ color: '#7f1d1d', fontSize: '0.8125rem', marginTop: '2px' }}>
+              Director <strong>Deepa Rao</strong> arrives at 19:00 (Flight AI 302), but her film <strong>"The Long Walk"</strong> is scheduled at 17:30 in Main Auditorium.
+            </div>
+            <div style={{ marginTop: '8px' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#b91c1c', background: '#fee2e2', padding: '2px 8px', borderRadius: '4px' }}>
+                Action Required: Reschedule slot to 20:00 or shift to Day 2
+              </span>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Permissions overview */}
-      <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <span>🔑 <strong>Calendar Permissions:</strong></span>
-        <span className={`badge ${can('calendar.view') ? 'badge-success' : 'badge-danger'}`}>calendar.view</span>
-        <span className={`badge ${can('calendar.manage_events') ? 'badge-success' : 'badge-danger'}`}>calendar.manage_events</span>
-        <span className={`badge ${can('calendar.publish_schedule') ? 'badge-success' : 'badge-danger'}`}>calendar.publish_schedule</span>
+      {/* Venue Slots Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+        {venues.map((venue) => {
+          const venueSlots = daySlots.filter(s => s.venue_name === venue.name);
+
+          return (
+            <div key={venue.id} className="fc-card" style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--fc-border-subtle)', paddingBottom: '10px' }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1a1a1a' }}>{venue.name}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)' }}>Capacity: {venue.capacity} seats</div>
+                </div>
+                <span className="fc-badge fc-badge-subtle">{venueSlots.length} slots</span>
+              </div>
+
+              {venueSlots.length === 0 ? (
+                <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--fc-text-muted)', fontSize: '0.8rem' }}>
+                  No screenings scheduled for this venue.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {venueSlots.map((slot) => {
+                    const isConflicted = conflicts.some(c => c.slotId === slot.id);
+
+                    return (
+                      <div 
+                        key={slot.id}
+                        style={{
+                          backgroundColor: isConflicted ? '#fff5f5' : 'var(--fc-surface)',
+                          border: `1px solid ${isConflicted ? '#fca5a5' : 'var(--fc-border)'}`,
+                          borderRadius: '8px',
+                          padding: '12px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: isConflicted ? '#b91c1c' : 'var(--fc-text-muted)', fontWeight: 600 }}>
+                          <span>{slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}</span>
+                          {isConflicted && <span>⚠️ Conflict</span>}
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1a1a1a', marginTop: '4px' }}>
+                          {slot.film_title}
+                        </div>
+                        <div style={{ fontSize: '0.775rem', color: 'var(--fc-text-secondary)', marginTop: '2px' }}>
+                          Dir. {slot.film_director} · {slot.film_runtime}m
+                        </div>
+                        <div style={{ marginTop: '8px' }}>
+                          <span className="fc-dept-tag">{slot.film_category}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-
-      <div className="card">
-        <div className="card-header">
-          <h3 className="card-title">Festival Lineup & Screening Schedule</h3>
-          <p className="card-subtitle"><span className="permission-section-badge">Requires: calendar.view</span></p>
-        </div>
-
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: '48px' }}></div>)}
-          </div>
-        ) : (
-          <div className="table-container">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Event Title</th>
-                  <th>Type</th>
-                  <th>Venue</th>
-                  <th>Start Time</th>
-                  <th>Duration</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map(ev => (
-                  <tr key={ev.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{ev.title}</td>
-                    <td><span className="badge badge-info">{ev.type}</span></td>
-                    <td>📍 {ev.venue}</td>
-                    <td>🕒 {ev.startTime}</td>
-                    <td>⏱️ {ev.duration}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* New Event Modal */}
-      {showNewModal && (
-        <div className="card" style={{ marginTop: 'var(--space-lg)', border: '1px solid var(--color-primary)' }}>
-          <div className="card-header">
-            <h3 className="card-title">Schedule New Screening / Event</h3>
-            <p className="card-subtitle"><span className="permission-section-badge">Requires: calendar.manage_events</span></p>
-          </div>
-          <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-            <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ flex: 1, minWidth: '220px' }}>
-                <label className="form-label">Event Title</label>
-                <input
-                  required
-                  className="form-input"
-                  placeholder="e.g. Midnight Shorts Block B"
-                  value={newEvent.title}
-                  onChange={e => setNewEvent({ ...newEvent, title: e.target.value })}
-                />
-              </div>
-              <div className="form-group" style={{ width: '180px' }}>
-                <label className="form-label">Type</label>
-                <select
-                  className="form-input"
-                  value={newEvent.type}
-                  onChange={e => setNewEvent({ ...newEvent, type: e.target.value })}
-                >
-                  <option value="Screening">Screening</option>
-                  <option value="Event">Event</option>
-                  <option value="Panel">Panel</option>
-                  <option value="Gala">Gala</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
-              <div className="form-group" style={{ flex: 1, minWidth: '200px' }}>
-                <label className="form-label">Venue</label>
-                <input
-                  required
-                  className="form-input"
-                  placeholder="e.g. Main Auditorium Screen 1"
-                  value={newEvent.venue}
-                  onChange={e => setNewEvent({ ...newEvent, venue: e.target.value })}
-                />
-              </div>
-              <div className="form-group" style={{ width: '200px' }}>
-                <label className="form-label">Start Date & Time</label>
-                <input
-                  required
-                  type="text"
-                  className="form-input"
-                  placeholder="YYYY-MM-DD HH:MM"
-                  value={newEvent.startTime}
-                  onChange={e => setNewEvent({ ...newEvent, startTime: e.target.value })}
-                />
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button type="submit" className="btn btn-success">Save Event</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowNewModal(false)}>Cancel</button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }

@@ -38,8 +38,11 @@ function corsPolicy() {
   const allowedOrigins = [
     env.frontendUrl,
     'https://access.saas.autovertest.com',
+    'https://admin.autovertest.com',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'http://localhost:9001',
+    'http://127.0.0.1:9001',
   ];
 
   return cors({
@@ -52,7 +55,7 @@ function corsPolicy() {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Festival-Id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Festival-Id', 'x-event-id', 'x-edition-id'],
     maxAge: 86400,
   });
 }

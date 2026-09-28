@@ -224,28 +224,35 @@ async function removeUserGroup(userId, editionId, groupId) {
  * Get user's permissions for a specific edition.
  */
 async function getUserPermissions(userId, editionId) {
-  const rows = await query(
+  const customRows = await query(
+    `SELECT DISTINCT p.permission_key
+     FROM user_event_custom_groups uecg
+     JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
+     JOIN permissions p ON p.id = ecgp.permission_id
+     WHERE uecg.user_id = ? AND uecg.event_id = ?`,
+    [userId, editionId]
+  );
+
+  const standardRows = await query(
     `SELECT DISTINCT p.permission_key
      FROM user_event_groups ueg
      JOIN module_groups mg ON mg.group_id = ueg.group_id
      JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
      JOIN permissions p ON p.id = mgp.permission_id
-     WHERE ueg.user_id = ? AND ueg.event_id = ?
-     UNION
-     SELECT DISTINCT p.permission_key
-     FROM user_event_custom_groups uecg
-     JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
-     JOIN permissions p ON p.id = ecgp.permission_id
-     WHERE uecg.user_id = ? AND uecg.event_id = ?`,
-    [userId, editionId, userId, editionId]
+     WHERE ueg.user_id = ? AND ueg.event_id = ?`,
+    [userId, editionId]
   );
 
-  const keys = rows.map(r => r.permission_key);
+  const keySet = new Set([
+    ...customRows.map(r => r.permission_key),
+    ...standardRows.map(r => r.permission_key)
+  ]);
+  const keys = Array.from(keySet);
   const isSuperAdmin = keys.includes('*');
 
   return {
     permissions: keys,
-    details: rows,
+    details: [...customRows, ...standardRows],
     isSuperAdmin,
   };
 }
@@ -254,9 +261,19 @@ async function getUserPermissions(userId, editionId) {
  * Get all users with their edition groups.
  */
 async function getAllUsersWithGroups() {
-  const users = await query(
-    'SELECT id, name, email, is_active, created_at FROM users ORDER BY name'
-  );
+  const users = await query(`
+    SELECT 
+      u.id, 
+      COALESCE(i.name, o.name, u.email) as name, 
+      u.email, 
+      u.status,
+      (u.status = 1) as is_active, 
+      u.created_at 
+    FROM users u
+    LEFT JOIN individuals i ON i.user_id = u.id
+    LEFT JOIN organizations o ON o.user_id = u.id
+    ORDER BY name
+  `);
 
   for (const user of users) {
     user.eventGroups = await query(

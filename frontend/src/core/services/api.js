@@ -21,6 +21,7 @@ api.interceptors.request.use((config) => {
   if (editionId) {
     config.headers['X-Edition-Id'] = editionId;
     config.headers['X-Festival-Id'] = editionId;
+    config.headers['X-Event-Id'] = editionId;
   }
   const token = localStorage.getItem('authToken');
   if (token) {

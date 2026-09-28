@@ -21,11 +21,16 @@ const submissionRoutes = require('./core/routes/submission.routes');
 const teamRoutes = require('./core/routes/team.routes');
 const juryRoutes = require('./core/routes/jury.routes');
 const adminRoutes = require('./core/routes/admin.routes');
+const saasAdminRoutes = require('./core/routes/saasAdmin.routes');
 const {
   reviewRouter,
   calendarRouter,
   tasksRouter,
   departmentsRouter,
+  guestsRouter,
+  chatRouter,
+  sponsorsRouter,
+  payoutsRouter,
   paymentsRouter,
   settingsRouter,
   newsRouter,
@@ -57,13 +62,19 @@ app.use('/api/events', festivalRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/jury', juryRoutes);
+app.use('/api/admin/saas', saasAdminRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Declarative Module Routes
 app.use('/api/reviews', reviewRouter);
 app.use('/api/calendar', calendarRouter);
+app.use('/api/schedule', calendarRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/departments', departmentsRouter);
+app.use('/api/guests', guestsRouter);
+app.use('/api/chat', chatRouter);
+app.use('/api/sponsors', sponsorsRouter);
+app.use('/api/payouts', payoutsRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/news', newsRouter);

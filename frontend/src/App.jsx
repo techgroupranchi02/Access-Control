@@ -4,10 +4,11 @@
  * and dynamic plugin routes.
  */
 
-import { Suspense } from 'react';
+import { Suspense, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './core/context/AuthContext';
-import { FestivalProvider } from './core/context/FestivalContext';
+import { FestivalProvider, FestivalContext } from './core/context/FestivalContext';
+import { ThemeProvider } from './core/context/ThemeContext';
 import ProtectedRoute from './core/components/ProtectedRoute';
 import ModuleGate from './core/components/ModuleGate';
 import PermissionGate from './core/components/PermissionGate';
@@ -26,11 +27,14 @@ import AdminPage from './core/pages/AdminPage';
 // Addon Module Pages
 import CalendarPage from './core/pages/CalendarPage';
 import TasksPage from './core/pages/TasksPage';
-import DepartmentsPage from './core/pages/DepartmentsPage';
+
 import JuryPage from './core/pages/JuryPage';
 import DiscoveryPage from './core/pages/DiscoveryPage';
 import NewsPage from './core/pages/NewsPage';
 import AnalyticsPage from './core/pages/AnalyticsPage';
+import GuestsPage from './core/pages/GuestsPage';
+import ChatPage from './core/pages/ChatPage';
+import SponsorsPage from './core/pages/SponsorsPage';
 
 import pluginRegistry from './config/pluginRegistry';
 
@@ -62,11 +66,33 @@ function AccessDenied({ module, feature }) {
   );
 }
 
+// Smart home redirect based on enabled modules
+function HomeRedirect() {
+  const festivalCtx = useContext(FestivalContext);
+  if (!festivalCtx || festivalCtx.loading) {
+    return null;
+  }
+  if (festivalCtx.isModuleEnabled('dashboard')) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  if (festivalCtx.isModuleEnabled('submissions')) {
+    return <Navigate to="/submissions" replace />;
+  }
+  if (festivalCtx.isModuleEnabled('review_dashboard')) {
+    return <Navigate to="/reviews" replace />;
+  }
+  if (festivalCtx.isModuleEnabled('team_management')) {
+    return <Navigate to="/team" replace />;
+  }
+  return <Navigate to="/submissions" replace />;
+}
+
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
+        <ThemeProvider>
+          <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
 
@@ -80,8 +106,18 @@ function App() {
               </ProtectedRoute>
             }
           >
+            {/* Root index route inside protected layout */}
+            <Route index element={<HomeRedirect />} />
+
             {/* Dashboard (Core) */}
-            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ModuleGate module="dashboard" fallback={<AccessDenied module="dashboard" />}>
+                  <DashboardPage />
+                </ModuleGate>
+              }
+            />
 
             {/* Submissions Intake (Core) */}
             <Route
@@ -100,64 +136,77 @@ function App() {
               element={<Navigate to="/submissions" replace />}
             />
 
-            {/* Review & Scoring Pipeline (Core) */}
+            {/* Review Dashboard (Submissions Module Page 2) */}
             <Route
-              path="/reviews"
+              path="/review-dashboard"
               element={
-                <ModuleGate module="review_dashboard" fallback={<AccessDenied module="review_dashboard" />}>
-                  <PermissionGate permission="review.view" fallback={<AccessDenied />}>
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['review.view', 'review:view', 'submission.view', 'submission:view']} fallback={<AccessDenied />}>
                     <ReviewPage />
                   </PermissionGate>
                 </ModuleGate>
               }
+            />
+            {/* Legacy route alias */}
+            <Route
+              path="/reviews"
+              element={<Navigate to="/review-dashboard" replace />}
             />
 
             {/* Team & Access Control (Core) */}
             <Route
               path="/team"
               element={
-                <ModuleGate module="team_management" fallback={<AccessDenied module="team_management" />}>
-                  <PermissionGate permission="team.view" fallback={<AccessDenied />}>
+                <ModuleGate module="team" fallback={<AccessDenied module="team" />}>
+                  <PermissionGate anyPermissions={['team.view', 'team:view', 'team.manage', 'team:manage']} fallback={<AccessDenied />}>
                     <TeamPage />
                   </PermissionGate>
                 </ModuleGate>
               }
             />
 
-            {/* Payments & Payouts (Core) */}
+            {/* Payouts Hub (Core / Addon) */}
             <Route
-              path="/payments"
+              path="/payouts"
               element={
-                <ModuleGate module="payments" fallback={<AccessDenied module="payments" />}>
-                  <PermissionGate permission="payment.view" fallback={<AccessDenied />}>
+                <ModuleGate module="payouts" fallback={<AccessDenied module="payouts" />}>
+                  <PermissionGate anyPermissions={['payouts.view', 'payouts:view', 'payment.view', 'payment:view']} fallback={<AccessDenied />}>
                     <PaymentsPage />
                   </PermissionGate>
                 </ModuleGate>
               }
+            />
+            <Route
+              path="/payments"
+              element={<Navigate to="/payouts" replace />}
             />
 
             {/* Edition Settings (Core) */}
             <Route
               path="/settings"
               element={
-                <ModuleGate module="edition_settings" fallback={<AccessDenied module="edition_settings" />}>
-                  <PermissionGate permission="settings.view" fallback={<AccessDenied />}>
+                <ModuleGate module="settings" fallback={<AccessDenied module="settings" />}>
+                  <PermissionGate anyPermissions={['settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
                     <SettingsPage />
                   </PermissionGate>
                 </ModuleGate>
               }
             />
 
-            {/* Calendar & Screenings (Addon) */}
+            {/* Festival Schedule Grid (Addon / Core) */}
             <Route
-              path="/calendar"
+              path="/schedule"
               element={
-                <ModuleGate module="calendar" fallback={<AccessDenied module="calendar" />}>
-                  <PermissionGate permission="calendar.view" fallback={<AccessDenied />}>
+                <ModuleGate module="schedule" fallback={<AccessDenied module="schedule" />}>
+                  <PermissionGate anyPermissions={['schedule.view', 'schedule:view', 'calendar.view', 'calendar:view']} fallback={<AccessDenied />}>
                     <CalendarPage />
                   </PermissionGate>
                 </ModuleGate>
               }
+            />
+            <Route
+              path="/calendar"
+              element={<Navigate to="/schedule" replace />}
             />
 
             {/* Departmental Tasks (Addon) */}
@@ -172,17 +221,7 @@ function App() {
               }
             />
 
-            {/* Department Management (Addon) */}
-            <Route
-              path="/departments"
-              element={
-                <ModuleGate module="departments" fallback={<AccessDenied module="departments" />}>
-                  <PermissionGate permission="department.view" fallback={<AccessDenied />}>
-                    <DepartmentsPage />
-                  </PermissionGate>
-                </ModuleGate>
-              }
-            />
+
 
             {/* Jury Management (Addon) */}
             <Route
@@ -232,6 +271,16 @@ function App() {
               }
             />
 
+            {/* Guests & Hospitality */}
+            <Route path="/guests" element={<GuestsPage />} />
+
+            {/* Communications & Chat */}
+            <Route path="/chat" element={<ChatPage />} />
+
+            {/* Sponsors & Deliverables */}
+            <Route path="/sponsors" element={<SponsorsPage />} />
+
+
             {/* Dynamic Plugin Routes (Custom Modules) */}
             {Object.entries(pluginRegistry).map(([featureKey, plugin]) => {
               const PluginComponent = plugin.component;
@@ -253,7 +302,15 @@ function App() {
               );
             })}
 
-            {/* System Administration */}
+            {/* System Administration inside Freecomers Workbench */}
+            <Route
+              path="/freecomers-admin"
+              element={
+                <PermissionGate permission="admin:access" fallback={<AccessDenied />}>
+                  <AdminPage />
+                </PermissionGate>
+              }
+            />
             <Route
               path="/admin"
               element={
@@ -264,10 +321,10 @@ function App() {
             />
           </Route>
 
-          {/* Default redirect */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Default fallback redirects */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
   );

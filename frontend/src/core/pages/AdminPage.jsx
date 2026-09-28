@@ -265,19 +265,19 @@ export default function AdminPage() {
                         {editingPerms[role.id] ? (
                           /* Interactive Checkbox Grid Editor (identical to Tab View with search & quick actions) */
                           <div style={{
-                            background: 'rgba(15, 23, 42, 0.7)',
-                            border: '1px solid rgba(139, 92, 246, 0.35)',
-                            borderRadius: '12px',
-                            padding: '1rem',
+                            background: '#ffffff',
+                            border: '1px solid var(--fc-border, #e8e2db)',
+                            borderRadius: '10px',
+                            padding: '1.25rem',
                             animation: 'fadeIn 0.2s ease',
-                            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
                           }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                               <input
                                 type="text"
                                 placeholder="🔍 Filter permissions (e.g. custom, submission, review)..."
                                 className="form-input"
-                                style={{ maxWidth: '320px', padding: '0.4rem 0.75rem', fontSize: '0.825rem' }}
+                                style={{ maxWidth: '320px', padding: '0.4rem 0.75rem', fontSize: '0.825rem', background: '#ffffff', border: '1px solid var(--fc-border-strong, #bfb8ae)', color: '#1c1917' }}
                                 value={permSearch[role.id] || ''}
                                 onChange={(e) => setPermSearch(prev => ({ ...prev, [role.id]: e.target.value }))}
                               />
@@ -389,8 +389,8 @@ export default function AdminPage() {
                             )}
                             <button
                               type="button"
-                              className="btn btn-sm btn-ghost"
-                              style={{ fontSize: '0.75rem', padding: '2px 8px', border: '1px dashed rgba(255,255,255,0.2)', color: 'var(--color-primary-light)' }}
+                              className="btn btn-sm btn-outline"
+                              style={{ fontSize: '0.75rem', padding: '3px 10px', border: '1px solid var(--fc-border-strong, #bfb8ae)', color: 'var(--fc-brand, #a82f2f)', background: '#ffffff', borderRadius: '6px' }}
                               onClick={() => setEditingPerms(prev => ({ ...prev, [role.id]: true }))}
                             >
                               + Add / Edit Permissions
@@ -400,12 +400,12 @@ export default function AdminPage() {
                       </div>
 
                       {/* Level 3: Assigned Members */}
-                      <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '0.6rem', fontWeight: 600 }}>
+                      <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fc-text-muted, #8c827a)', marginBottom: '0.6rem', fontWeight: 600 }}>
                         👥 Assigned Members ({assignedUsers.length})
                       </div>
 
                       {assignedUsers.length === 0 ? (
-                        <div style={{ padding: '0.85rem 1rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px', border: '1px dashed rgba(255, 255, 255, 0.08)', color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', marginBottom: '1rem' }}>
+                        <div style={{ padding: '0.85rem 1rem', background: 'var(--fc-surface, #f7f5f2)', borderRadius: '8px', border: '1px dashed var(--fc-border, #e8e2db)', color: 'var(--fc-text-muted, #8c827a)', fontSize: '0.85rem', textAlign: 'center', marginBottom: '1rem' }}>
                           No members currently assigned to {role.name} in {currentFestival?.name || 'this edition'}.
                         </div>
                       ) : (
@@ -491,7 +491,7 @@ export default function AdminPage() {
               onClick={() => setShowModules(!showModules)}
             >
               <div className="hierarchy-group-info">
-                <div className="hierarchy-group-icon" style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+                <div className="hierarchy-group-icon" style={{ background: 'var(--fc-surface, #f7f5f2)', border: '1px solid var(--fc-border-subtle, #f0ebe4)', borderRadius: '8px' }}>
                   🧩
                 </div>
                 <div>
@@ -526,14 +526,14 @@ export default function AdminPage() {
                     </thead>
                     <tbody>
                       {(festivalConfigs[selectedFestId] || []).map(feat => (
-                        <tr key={feat.feature_key}>
-                          <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{feat.name}</td>
+                        <tr key={feat.module_key || feat.feature_key || feat.id}>
+                          <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{feat.name || feat.label}</td>
                           <td>
-                            <span className={`badge ${feat.feature_type === 'core' ? 'badge-info' : 'badge-warning'}`}>
-                              {feat.feature_type}
+                            <span className={`badge ${(feat.module_type || feat.feature_type || feat.type) === 'core' ? 'badge-info' : 'badge-warning'}`}>
+                              {feat.module_type || feat.feature_type || feat.type || 'module'}
                             </span>
                           </td>
-                          <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>{feat.route}</td>
+                          <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{feat.route}</td>
                           <td>
                             <span className={`badge ${feat.is_enabled ? 'badge-success' : 'badge-muted'}`}>
                               {feat.is_enabled ? 'Enabled' : 'Disabled'}
@@ -544,7 +544,7 @@ export default function AdminPage() {
                               <input
                                 type="checkbox"
                                 checked={!!feat.is_enabled}
-                                onChange={() => handleToggleFeature(selectedFestId, feat.feature_id, feat.is_enabled)}
+                                onChange={() => handleToggleFeature(selectedFestId, feat.module_id || feat.feature_id || feat.id, feat.is_enabled)}
                               />
                               <span className="toggle-slider"></span>
                             </label>
@@ -581,8 +581,8 @@ export default function AdminPage() {
               {roles.map(role => (
                 <div key={role.id} style={{
                   marginBottom: 'var(--space-lg)', padding: 'var(--space-lg)',
-                  background: 'var(--bg-glass)', borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-color)',
+                  background: 'var(--fc-surface-card, #ffffff)', borderRadius: '8px',
+                  border: '1px solid var(--fc-border, #e8e2db)',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-md)' }}>
                     <div>
@@ -707,16 +707,20 @@ export default function AdminPage() {
                       </thead>
                       <tbody>
                         {(festivalConfigs[fest.id] || []).map(feat => (
-                          <tr key={feat.feature_key}>
-                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{feat.name}</td>
-                            <td><span className={`badge ${feat.feature_type === 'core' ? 'badge-info' : 'badge-warning'}`}>{feat.feature_type}</span></td>
-                            <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>{feat.route}</td>
+                          <tr key={feat.module_key || feat.feature_key || feat.id}>
+                            <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{feat.name || feat.label}</td>
+                            <td>
+                              <span className={`badge ${(feat.module_type || feat.feature_type || feat.type) === 'core' ? 'badge-info' : 'badge-warning'}`}>
+                                {feat.module_type || feat.feature_type || feat.type || 'module'}
+                              </span>
+                            </td>
+                            <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{feat.route}</td>
                             <td>
                               <label className="toggle">
                                 <input
                                   type="checkbox"
                                   checked={!!feat.is_enabled}
-                                  onChange={() => handleToggleFeature(fest.id, feat.feature_id, feat.is_enabled)}
+                                  onChange={() => handleToggleFeature(fest.id, feat.module_id || feat.feature_id || feat.id, feat.is_enabled)}
                                 />
                                 <span className="toggle-slider"></span>
                               </label>

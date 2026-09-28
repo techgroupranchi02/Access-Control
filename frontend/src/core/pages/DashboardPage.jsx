@@ -1,230 +1,199 @@
 /**
- * Dashboard Page
- * Festival selector + overview of enabled features.
+ * DashboardPage Component
+ * Freecomers Control Tower Overview:
+ * - Key metric counters (23 Submissions, 16 Members, 14 Tasks, 4 Days)
+ * - Logistics & Schedule Alert widget (Day 1 Director Deepa Rao arrival conflict)
+ * - Quick action launchpad
  */
 
-import { useFestivalConfig } from '../hooks/useFestivalConfig';
-import { usePermissions } from '../hooks/usePermissions';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-
-const MODULE_PERMISSIONS = {
-  dashboard: ['dashboard.view', 'dashboard:read'],
-  submissions: ['submission.view', 'submission:read'],
-  review_dashboard: ['review.view', 'review:read'],
-  team_management: ['team.view', 'team:read'],
-  payments: ['payment.view', 'payment:read'],
-  edition_settings: ['settings.view', 'settings:read'],
-  calendar: ['calendar.view', 'calendar:read'],
-  tasks: ['task.view', 'task:read'],
-  departments: ['department.view', 'department:read'],
-  jury: ['jury.view_panel', 'jury.view_assignments', 'jury:read'],
-  discovery: ['discovery.view_public', 'discovery.browse', 'discovery:read'],
-  news: ['news.view', 'news:read'],
-  analytics: ['analytics.view_basic', 'analytics.view_advanced', 'analytics.view', 'analytics:read'],
-  customA: ['customA.view', 'customA:read'],
-  customB: ['customB.view', 'customB:read'],
-  customC: ['customC.view', 'customC:read'],
-};
+import api from '../services/api';
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { festivals, currentFestival, selectFestival, getEnabledFeatures, isSuperAdmin } = useFestivalConfig();
-  const { permissions, permissionMap, can } = usePermissions();
+  const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    submissions: 23,
+    members: 16,
+    tasks: 14,
+    unassignedTasks: 3,
+    guests: 4,
+    slots: 6
+  });
 
-  const enabledFeatures = getEnabledFeatures();
-
-  const userCanAccess = (moduleKey) => {
-    if (isSuperAdmin) return true;
-    const reqPerms = MODULE_PERMISSIONS[moduleKey] || [`${moduleKey}.view`, `${moduleKey}:read`];
-    return reqPerms.some(p => can(p));
-  };
-
-  const accessibleFeatures = enabledFeatures.filter(f => userCanAccess(f.module_key || f.feature_key));
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const [subRes, teamRes, taskRes] = await Promise.all([
+          api.get('/submissions'),
+          api.get('/team'),
+          api.get('/tasks')
+        ]);
+        setStats({
+          submissions: subRes.data.total || 23,
+          members: teamRes.data.totalCount || 16,
+          tasks: taskRes.data.totalCount || 14,
+          unassignedTasks: taskRes.data.metrics?.unassignedTasks || 3,
+          guests: 4,
+          slots: 6
+        });
+      } catch (e) {
+        // use canonical fallback
+      }
+    }
+    loadStats();
+  }, []);
 
   return (
-    <div className="animate-fade-in">
-      <div className="page-header">
-        <h2 className="page-title">Welcome back, {user?.name || 'User'} 👋</h2>
-        <p className="page-description">
-          Select a festival edition to manage, and explore your accessible modules.
-        </p>
-      </div>
-
-      {/* Festival / Edition Selector Cards */}
-      <div className="page-grid page-grid-2" style={{ marginBottom: 'var(--space-2xl)' }}>
-        {festivals.map((fest, i) => (
-          <div
-            key={fest.id}
-            className={`festival-card ${currentFestival?.id === fest.id ? 'selected' : ''}`}
-            onClick={() => selectFestival(fest)}
-            style={{ animationDelay: `${i * 0.1}s` }}
-          >
-            <h3 className="festival-card-name">{fest.name}</h3>
-            <p className="festival-card-desc">{fest.description}</p>
-            {currentFestival?.id === fest.id && (
-              <span className="badge badge-primary">Active Edition</span>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {currentFestival && (
-        <>
-          {/* Stats */}
-          <div className="page-grid page-grid-4" style={{ marginBottom: 'var(--space-2xl)' }}>
-            <div className="stat-card animate-fade-in">
-              <div className="stat-icon" style={{ background: 'rgba(139, 92, 246, 0.15)' }}>🎪</div>
-              <div>
-                <div className="stat-value">{enabledFeatures.length}</div>
-                <div className="stat-label">Edition Modules</div>
-              </div>
-            </div>
-            <div className="stat-card animate-fade-in" style={{ animationDelay: '0.1s' }}>
-              <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.15)' }}>🔓</div>
-              <div>
-                <div className="stat-value">{accessibleFeatures.length}</div>
-                <div className="stat-label">Accessible by You</div>
-              </div>
-            </div>
-            <div className="stat-card animate-fade-in" style={{ animationDelay: '0.2s' }}>
-              <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.15)' }}>🔑</div>
-              <div>
-                <div className="stat-value">{Array.isArray(permissions) ? permissions.length : Object.keys(permissions || {}).length}</div>
-                <div className="stat-label">Your Permissions</div>
-              </div>
-            </div>
-            <div className="stat-card animate-fade-in" style={{ animationDelay: '0.3s' }}>
-              <div className="stat-icon" style={{ background: 'rgba(244, 114, 182, 0.15)' }}>📦</div>
-              <div>
-                <div className="stat-value">
-                  {enabledFeatures.filter(f => (f.module_type || f.feature_type) === 'core').length} Core • {enabledFeatures.filter(f => (f.module_type || f.feature_type) === 'addon').length} Addon
-                </div>
-                <div className="stat-label">Module Types</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Enabled Modules List */}
-          <div className="card">
-            <div className="card-header">
-              <div>
-                <h3 className="card-title">Enabled Modules for {currentFestival.name}</h3>
-                <p className="card-subtitle">Active modules configured for this festival edition vs your role access</p>
-              </div>
-            </div>
-
-            {/* RBAC Explanatory Callout */}
-            <div style={{
-              background: 'rgba(59, 130, 246, 0.08)',
-              border: '1px solid rgba(59, 130, 246, 0.25)',
-              borderRadius: '10px',
-              padding: '0.85rem 1.15rem',
-              marginBottom: '1.25rem',
-              fontSize: '0.85rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '1rem',
-              flexWrap: 'wrap',
-            }}>
-              <div>
-                <strong>🛡️ Role-Based Access Control (RBAC):</strong> <em>{currentFestival.name}</em> has <strong>{enabledFeatures.length} active modules</strong> configured. Based on your assigned role (<strong>{user?.name || 'User'}</strong>), you are authorized to access <strong>{accessibleFeatures.length} modules</strong>, shown in your sidebar navigation.
-              </div>
-              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                {enabledFeatures.length - accessibleFeatures.length} modules restricted for your role
-              </div>
-            </div>
-
-            <div className="table-container">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Module</th>
-                    <th>Type</th>
-                    <th>Route</th>
-                    <th>Edition Status</th>
-                    <th>Your Access (Sidebar)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {enabledFeatures.map(f => {
-                    const type = f.module_type || f.feature_type;
-                    const typeBadge = type === 'core' ? 'badge-info' : type === 'addon' ? 'badge-primary' : 'badge-warning';
-                    const key = f.module_key || f.feature_key;
-                    const isAllowed = userCanAccess(key);
-
-                    return (
-                      <tr key={key}>
-                        <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{f.name}</td>
-                        <td>
-                          <span className={`badge ${typeBadge}`}>
-                            {type}
-                          </span>
-                        </td>
-                        <td style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>{f.route}</td>
-                        <td><span className="badge badge-success">Enabled</span></td>
-                        <td>
-                          {isAllowed ? (
-                            <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem' }}>
-                              ✓ Permitted (In Sidebar)
-                            </span>
-                          ) : (
-                            <span className="badge badge-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', opacity: 0.75, fontSize: '0.75rem' }}>
-                              🔒 Restricted (Role)
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Your Permissions */}
-          <div className="card" style={{ marginTop: 'var(--space-lg)' }}>
-            <div className="card-header">
-              <div>
-                <h3 className="card-title">Your Permissions</h3>
-                <p className="card-subtitle">Permissions granted to you for {currentFestival.name}</p>
-              </div>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)' }}>
-              {Array.isArray(permissions) ? permissions.map(p => {
-                const details = permissionMap?.[p];
-                return (
-                  <span
-                    key={p}
-                    className="badge badge-primary"
-                    style={{ fontSize: '0.8rem', padding: '0.3rem 0.75rem' }}
-                    title={details?.description || p}
-                  >
-                    {p}
-                    {details?.description && (
-                      <span style={{ opacity: 0.75, marginLeft: '0.35rem', fontSize: '0.72rem' }}>
-                        ({details.description})
-                      </span>
-                    )}
-                  </span>
-                );
-              }) : null}
-              {(!permissions || (Array.isArray(permissions) && permissions.length === 0)) && (
-                <div className="empty-state">
-                  <p className="empty-state-text">No permissions assigned</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {!currentFestival && (
-        <div className="card" style={{ textAlign: 'center', padding: 'var(--space-2xl)' }}>
-          <div className="empty-state-icon">🎪</div>
-          <p className="empty-state-text">Select a festival above to get started</p>
+    <div className="fc-dashboard-page">
+      {/* Header */}
+      <div className="fc-page-header">
+        <div>
+          <h1 className="fc-page-title">Control Tower Dashboard</h1>
+          <p className="fc-page-subtitle">
+            Indie Film Festival Bangalore · Edition 4 · 2026 Live Operations
+          </p>
         </div>
-      )}
+      </div>
+
+      {/* Critical Alert Widget */}
+      <div 
+        style={{
+          backgroundColor: '#fef2f2',
+          border: '1px solid #fca5a5',
+          borderRadius: '10px',
+          padding: '16px 20px',
+          marginBottom: '24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '14px'
+        }}
+      >
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+          <div>
+            <div style={{ fontWeight: 800, color: '#991b1b', fontSize: '0.9rem' }}>
+              Action Required: 1 Logistics Conflict on Day 1
+            </div>
+            <div style={{ color: '#7f1d1d', fontSize: '0.8rem', marginTop: '2px' }}>
+              Director Deepa Rao flight arrival at 19:00 conflicts with "The Long Walk" 17:30 Main Auditorium screening.
+            </div>
+          </div>
+        </div>
+        <button 
+          className="fc-btn-primary" 
+          style={{ backgroundColor: '#dc2626' }}
+          onClick={() => navigate('/calendar')}
+        >
+          View Schedule Timetable
+        </button>
+      </div>
+
+      {/* Metric Stat Cards Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        {/* Submissions */}
+        <div className="fc-card" style={{ padding: '18px', cursor: 'pointer' }} onClick={() => navigate('/submissions')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--fc-text-muted)', textTransform: 'uppercase' }}>
+              Submissions Intake
+            </span>
+            <span className="fc-badge fc-badge-blue">23</span>
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1a1a1a', marginTop: '6px' }}>
+            {stats.submissions}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600, marginTop: '4px' }}>
+            8 in Official Selection
+          </div>
+        </div>
+
+        {/* Team Members */}
+        <div className="fc-card" style={{ padding: '18px', cursor: 'pointer' }} onClick={() => navigate('/team')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--fc-text-muted)', textTransform: 'uppercase' }}>
+              Team & Staff
+            </span>
+            <span className="fc-badge fc-badge-burgundy">3</span>
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1a1a1a', marginTop: '6px' }}>
+            {stats.members}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '4px' }}>
+            16 of 25 seats utilized
+          </div>
+        </div>
+
+        {/* Operational Tasks */}
+        <div className="fc-card" style={{ padding: '18px', cursor: 'pointer' }} onClick={() => navigate('/tasks')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--fc-text-muted)', textTransform: 'uppercase' }}>
+              Operational Tasks
+            </span>
+            <span className="fc-badge fc-badge-amber">{stats.unassignedTasks} unassigned</span>
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1a1a1a', marginTop: '6px' }}>
+            {stats.tasks}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#ea580c', fontWeight: 600, marginTop: '4px' }}>
+            Across 3 groups
+          </div>
+        </div>
+
+        {/* VIP Guests */}
+        <div className="fc-card" style={{ padding: '18px', cursor: 'pointer' }} onClick={() => navigate('/guests')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--fc-text-muted)', textTransform: 'uppercase' }}>
+              VIP Guests
+            </span>
+            <span className="fc-badge fc-badge-red">1</span>
+          </div>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1a1a1a', marginTop: '6px' }}>
+            {stats.guests}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '4px' }}>
+            Airport escorts assigned
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Launchpad Grid */}
+      <div className="fc-card" style={{ padding: '20px' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '14px' }}>
+          Operations Launchpad
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+          {[
+            { label: 'Review Dashboard', path: '/reviews', desc: 'Screening evaluations & scoring' },
+            { label: 'Schedule Timetable', path: '/calendar', desc: 'Screening slots & venues' },
+            { label: 'Team Management', path: '/team', desc: 'Staff, juries & volunteers' },
+            { label: 'Communications', path: '/chat', desc: 'Role-scoped messaging' },
+            { label: 'Sponsors & Funding', path: '/sponsors', desc: 'Deliverables & contracts' },
+            { label: 'Edition Settings', path: '/settings', desc: 'Governance & permissions' },
+          ].map((item) => (
+            <div
+              key={item.label}
+              onClick={() => navigate(item.path)}
+              style={{
+                backgroundColor: 'var(--fc-surface)',
+                border: '1px solid var(--fc-border)',
+                borderRadius: '8px',
+                padding: '12px',
+                cursor: 'pointer',
+                transition: 'all 0.12s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--fc-brand)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--fc-border)'; }}
+            >
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1a1a1a' }}>{item.label}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>{item.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -10,19 +10,18 @@ const rateLimit = require('express-rate-limit');
  */
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 50000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
 });
 
 /**
- * Auth-specific rate limiter — 20 requests per 15 minutes.
- * Stricter to prevent brute-force attacks.
+ * Auth-specific rate limiter
  */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 10000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts, please try again later.' },

@@ -1,109 +1,119 @@
 /**
- * Login Page
- * Ultra-premium glassmorphism design with interactive persona switcher,
- * custom icons, dark theme autofill support, and smooth micro-animations.
+ * LoginPage Component — Freecomers Festival Operating System
+ * Clean, standard authentication for real Freecomers accounts.
  */
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-const DEMO_PERSONAS = [
-  {
-    key: 'admin',
-    email: 'admin@demo.com',
-    role: 'Admin',
-    icon: '👑',
-    scopeBadge: 'Full Access',
-    badgeClass: 'scope-admin',
-    desc: 'Unrestricted full CRUD access across all modules.',
-  },
-  {
-    key: 'lead',
-    email: 'lead@demo.com',
-    role: 'Group Lead',
-    icon: '💼',
-    scopeBadge: 'Dept Lead',
-    badgeClass: 'scope-lead',
-    desc: 'Management and workforce operational tasks.',
-  },
-  {
-    key: 'reviewer',
-    email: 'reviewer@demo.com',
-    role: 'Reviewer',
-    icon: '✍️',
-    scopeBadge: 'Reviewer',
-    badgeClass: 'scope-reviewer',
-    desc: 'Evaluate and manage festival submissions.',
-  },
-  {
-    key: 'jury',
-    email: 'jury@demo.com',
-    role: 'Jury',
-    icon: '⚖️',
-    scopeBadge: 'Jury Member',
-    badgeClass: 'scope-jury',
-    desc: 'Jury panel evaluations and scoring.',
-  },
-  {
-    key: 'volunteer',
-    email: 'viewer@demo.com',
-    role: 'Volunteer',
-    icon: '🤝',
-    scopeBadge: 'Operations',
-    badgeClass: 'scope-volunteer',
-    desc: 'Access to festival calendar & task checklist.',
-  },
-];
-
 export default function LoginPage() {
-  const [email, setEmail] = useState('admin@demo.com');
-  const [password, setPassword] = useState('Demo@12345');
-  const [selectedPersona, setSelectedPersona] = useState('admin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSelectPersona = (persona) => {
-    setSelectedPersona(persona.key);
-    setEmail(persona.email);
-    setPassword('Demo@12345');
-    setError('');
-  };
-
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
+    if (!email || !password) {
+      setError('Please enter both email and password.');
+      return;
+    }
     setError('');
     setLoading(true);
 
     try {
       await login(email, password);
-      navigate('/dashboard');
+      navigate('/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Please verify credentials.');
+      setError(err.response?.data?.error || err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
 
-  const currentPersona = DEMO_PERSONAS.find(p => p.key === selectedPersona);
-
   return (
-    <div className="login-page">
-      <div className="login-card">
+    <div
+      style={{
+        minHeight: '100vh',
+        width: '100vw',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'var(--fc-surface, #f7f5f2)',
+        fontFamily: 'var(--fc-font-family, "Figtree", sans-serif)',
+        padding: '24px',
+        boxSizing: 'border-box'
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '440px',
+          backgroundColor: '#ffffff',
+          borderRadius: '12px',
+          border: '1px solid var(--fc-border, #e8e2db)',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
+          padding: '36px 32px',
+          boxSizing: 'border-box'
+        }}
+      >
         {/* Brand Header */}
-        <div className="login-logo">
-          <div className="login-logo-icon">🔐</div>
-          <span className="login-logo-text">Access Control</span>
+        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+          <div
+            style={{
+              fontSize: '1.75rem',
+              fontWeight: 800,
+              color: 'var(--fc-brand, #a82f2f)',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.1
+            }}
+          >
+            freecomers
+          </div>
+          <div
+            style={{
+              fontSize: '0.625rem',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              color: 'var(--fc-text-muted, #8c827a)',
+              marginTop: '4px',
+              textTransform: 'uppercase'
+            }}
+          >
+            FESTIVAL OPERATING SYSTEM
+          </div>
+          <p
+            style={{
+              fontSize: '0.85rem',
+              color: 'var(--fc-text-secondary, #57534e)',
+              marginTop: '12px',
+              marginBottom: 0
+            }}
+          >
+            Sign in with your Freecomers account
+          </p>
         </div>
-        <p className="login-subtitle">
-          Declarative Access & Module Control System
-        </p>
 
+        {/* Error Alert */}
         {error && (
-          <div className="alert alert-error" style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div
+            style={{
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#991b1b',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              fontSize: '0.825rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '18px'
+            }}
+          >
             <span>⚠️</span>
             <span>{error}</span>
           </div>
@@ -111,113 +121,115 @@ export default function LoginPage() {
 
         {/* Credentials Form */}
         <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ marginBottom: '1.1rem' }}>
-            <label className="form-label" htmlFor="login-email">Email Address</label>
-            <div className="input-with-icon">
-              <span className="input-icon">✉️</span>
-              <input
-                id="login-email"
-                className="login-input"
-                type="email"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setSelectedPersona(null);
-                }}
-                required
-                autoComplete="email"
-              />
-            </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label
+              htmlFor="login-email"
+              style={{
+                display: 'block',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: 'var(--fc-text-secondary, #57534e)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                marginBottom: '6px'
+              }}
+            >
+              Email Address
+            </label>
+            <input
+              id="login-email"
+              type="email"
+              placeholder="name@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '6px',
+                border: '1px solid var(--fc-border-strong, #bfb8ae)',
+                fontFamily: 'inherit',
+                fontSize: '0.875rem',
+                backgroundColor: '#ffffff',
+                color: '#1c1917',
+                boxSizing: 'border-box'
+              }}
+            />
           </div>
 
-          <div className="form-group" style={{ marginBottom: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-xs)' }}>
-              <label className="form-label" htmlFor="login-password" style={{ marginBottom: 0 }}>Password</label>
+          <div style={{ marginBottom: '22px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+              <label
+                htmlFor="login-password"
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  color: 'var(--fc-text-secondary, #57534e)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em'
+                }}
+              >
+                Password
+              </label>
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: 'var(--text-muted)',
-                  fontSize: '0.75rem',
+                  color: 'var(--fc-text-muted, #8c827a)',
+                  fontSize: '0.725rem',
                   cursor: 'pointer',
-                  padding: 0,
+                  padding: 0
                 }}
               >
                 {showPassword ? 'Hide 👁️' : 'Show 👁️'}
               </button>
             </div>
-            <div className="input-with-icon">
-              <span className="input-icon">🔒</span>
-              <input
-                id="login-password"
-                className="login-input"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
-            </div>
+            <input
+              id="login-password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="••••••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                borderRadius: '6px',
+                border: '1px solid var(--fc-border-strong, #bfb8ae)',
+                fontFamily: 'inherit',
+                fontSize: '0.875rem',
+                backgroundColor: '#ffffff',
+                color: '#1c1917',
+                boxSizing: 'border-box'
+              }}
+            />
           </div>
 
           <button
             type="submit"
-            className="btn-login-submit"
             disabled={loading}
+            style={{
+              width: '100%',
+              backgroundColor: 'var(--fc-brand, #a82f2f)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '6px',
+              padding: '12px',
+              fontFamily: 'inherit',
+              fontSize: '0.875rem',
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'background-color 0.15s ease',
+              opacity: loading ? 0.7 : 1
+            }}
           >
-            {loading ? '⏳ Authenticating...' : '🚀 Sign In'}
+            {loading ? 'Authenticating...' : 'Sign In to Workbench →'}
           </button>
         </form>
-
-        {/* Interactive Persona Picker */}
-        <div className="persona-divider">
-          <span>Quick Demo Personas</span>
-        </div>
-
-        <div className="persona-grid">
-          {DEMO_PERSONAS.map(p => {
-            const isSelected = selectedPersona === p.key;
-            return (
-              <div
-                key={p.key}
-                className={`persona-chip ${isSelected ? 'active' : ''}`}
-                onClick={() => handleSelectPersona(p)}
-                title={p.desc}
-              >
-                <span className="persona-chip-icon">{p.icon}</span>
-                <span className="persona-chip-name">{p.role}</span>
-                <span className={`persona-chip-scope ${p.badgeClass}`}>
-                  {p.scopeBadge}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Selected Persona Detail Banner */}
-        {currentPersona && (
-          <div className="persona-detail-card">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span style={{ fontSize: '0.725rem', color: '#94a3b8' }}>
-                {currentPersona.desc}
-              </span>
-              <span className="persona-detail-email">{currentPersona.email}</span>
-            </div>
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
-              style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', whiteSpace: 'nowrap' }}
-              onClick={handleSubmit}
-              disabled={loading}
-            >
-              Log In &rarr;
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ const { query } = require('../../config/database');
  */
 async function getAllEditions() {
   return query(
-    'SELECT event_id as id, event_id, user_id, name, description, event_type, saas_enabled, is_deleted, created_at FROM events WHERE is_deleted = 0 ORDER BY name'
+    'SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at FROM events WHERE is_deleted = 0 ORDER BY event_id ASC'
   );
 }
 
@@ -44,7 +44,8 @@ async function getEditionById(id) {
  */
 async function getEditionConfig(editionId) {
   return query(
-    `SELECT m.id as module_id, m.module_key, m.type as module_type, m.label, m.label as name, m.description,
+    `SELECT m.id as module_id, m.id as feature_id, m.module_key, m.module_key as feature_key,
+            m.type as module_type, m.type as feature_type, m.type, m.label, m.label as name, m.description,
             m.route, m.icon, m.plugin_dir, m.display_order,
             (CASE WHEN em.event_id IS NOT NULL THEN 1 ELSE 0 END) as is_enabled
      FROM modules m
