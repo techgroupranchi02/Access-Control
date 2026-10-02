@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 
 const DAYS = [
@@ -43,6 +44,22 @@ export default function CalendarPage() {
 
   return (
     <div className="fc-schedule-page">
+      {/* Task Module Sub-Pages Navigation Tabs */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid var(--color-border)', paddingBottom: '12px' }}>
+        <Link
+          to="/tasks"
+          style={{ textDecoration: 'none', background: 'transparent', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', borderRadius: '6px', padding: '6px 16px', fontWeight: 500, fontSize: '0.875rem' }}
+        >
+          📋 Tasks Board
+        </Link>
+        <Link
+          to="/schedule"
+          style={{ textDecoration: 'none', background: 'var(--color-primary)', color: '#fff', borderRadius: '6px', padding: '6px 16px', fontWeight: 600, fontSize: '0.875rem' }}
+        >
+          🗓️ Festival Schedule (Sub-Page)
+        </Link>
+      </div>
+
       {/* Page Header */}
       <div className="fc-page-header">
         <div>

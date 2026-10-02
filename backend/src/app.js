@@ -36,6 +36,13 @@ const {
   newsRouter,
   analyticsRouter,
 } = require('./core/routes/modules.routes');
+const {
+  audienceRouter,
+  attendanceRouter,
+  votingRouter,
+  registrationRouter,
+  publicVoteRouter,
+} = require('./core/routes/audience.routes');
 
 const app = express();
 
@@ -79,6 +86,13 @@ app.use('/api/payments', paymentsRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/news', newsRouter);
 app.use('/api/analytics', analyticsRouter);
+
+// Audience Add-on Module Routes
+app.use('/api/audience', audienceRouter);
+app.use('/api/attendance', attendanceRouter);
+app.use('/api/voting', votingRouter);
+app.use('/api/registration', registrationRouter);
+app.use('/api/public/vote', publicVoteRouter);
 
 
 

@@ -99,11 +99,11 @@ export function FestivalProvider({ children }) {
       'review_dashboard': ['submissions', 'review_dashboard'],
       'team_management': ['team', 'team_management'],
       'edition_settings': ['settings', 'edition_settings'],
-      'calendar': ['schedule', 'calendar'],
+      'calendar': ['tasks', 'schedule', 'calendar'],
       'payments': ['payouts', 'payments'],
       'team': ['team', 'team_management'],
       'settings': ['settings', 'edition_settings'],
-      'schedule': ['schedule', 'calendar'],
+      'schedule': ['tasks', 'schedule', 'calendar'],
       'payouts': ['payouts', 'payments'],
       'chat': ['chat', 'comms'],
       'comms': ['comms', 'chat']

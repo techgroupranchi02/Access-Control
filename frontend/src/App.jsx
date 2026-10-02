@@ -36,6 +36,13 @@ import GuestsPage from './core/pages/GuestsPage';
 import ChatPage from './core/pages/ChatPage';
 import SponsorsPage from './core/pages/SponsorsPage';
 
+// Audience Module Pages
+import AudienceSettingsPage from './core/pages/AudienceSettingsPage';
+import AttendancePage from './core/pages/AttendancePage';
+import VotingPage from './core/pages/VotingPage';
+import RegistrationPage from './core/pages/RegistrationPage';
+import PublicVotingPage from './core/pages/PublicVotingPage';
+
 import pluginRegistry from './config/pluginRegistry';
 
 // Loading fallback for lazy-loaded plugins
@@ -95,6 +102,7 @@ function App() {
           <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/vote/:token" element={<PublicVotingPage />} />
 
           {/* Protected Routes — wrapped in FestivalProvider */}
           <Route
@@ -193,12 +201,12 @@ function App() {
               }
             />
 
-            {/* Festival Schedule Grid (Addon / Core) */}
+            {/* Festival Schedule Grid (Sub-Page under Tasks Module) */}
             <Route
               path="/schedule"
               element={
-                <ModuleGate module="schedule" fallback={<AccessDenied module="schedule" />}>
-                  <PermissionGate anyPermissions={['schedule.view', 'schedule:view', 'calendar.view', 'calendar:view']} fallback={<AccessDenied />}>
+                <ModuleGate module="tasks" fallback={<AccessDenied module="tasks" />}>
+                  <PermissionGate anyPermissions={['schedule.view', 'schedule:view', 'calendar.view', 'calendar:view', 'task.view', 'task:view']} fallback={<AccessDenied />}>
                     <CalendarPage />
                   </PermissionGate>
                 </ModuleGate>
@@ -206,6 +214,10 @@ function App() {
             />
             <Route
               path="/calendar"
+              element={<Navigate to="/schedule" replace />}
+            />
+            <Route
+              path="/tasks/schedule"
               element={<Navigate to="/schedule" replace />}
             />
 
@@ -280,6 +292,49 @@ function App() {
             {/* Sponsors & Deliverables */}
             <Route path="/sponsors" element={<SponsorsPage />} />
 
+            {/* Audience Add-on Module */}
+            <Route
+              path="/audience"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate permission="audience.view" fallback={<AccessDenied />}>
+                    <AudienceSettingsPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/attendance"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate permission="attendance.view" fallback={<AccessDenied />}>
+                    <AttendancePage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/voting"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate permission="voting.view_results" fallback={<AccessDenied />}>
+                    <VotingPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/registration"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate permission="registration.view" fallback={<AccessDenied />}>
+                    <RegistrationPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route path="/Registration" element={<Navigate to="/registration" replace />} />
+
 
             {/* Dynamic Plugin Routes (Custom Modules) */}
             {Object.entries(pluginRegistry).map(([featureKey, plugin]) => {
@@ -305,11 +360,7 @@ function App() {
             {/* System Administration inside Freecomers Workbench */}
             <Route
               path="/freecomers-admin"
-              element={
-                <PermissionGate permission="admin:access" fallback={<AccessDenied />}>
-                  <AdminPage />
-                </PermissionGate>
-              }
+              element={<Navigate to="/dashboard" replace />}
             />
             <Route
               path="/admin"

@@ -15,19 +15,69 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
 import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
+
+function ChevronIcon({ isOpen }) {
+  return (
+    <svg 
+      className={`fc-chevron-icon ${isOpen ? 'is-open' : ''}`} 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2.5" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+    >
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
 
 export default function Sidebar() {
   const { user, logout, switchPersona } = useAuth();
   const { currentFestival, currentEdition, isModuleEnabled, isSaasEnabled, isSuperAdmin } = useFestivalConfig();
   const { theme, toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = location.pathname;
   const [switching, setSwitching] = useState(false);
   const [submissionCount, setSubmissionCount] = useState(null);
+
+  const [openModules, setOpenModules] = useState({
+    submissions: true,
+    tasks: true,
+    audience: true,
+    marketing: false,
+  });
+
+  // Auto-expand module when current route is within it
+  useEffect(() => {
+    if (['/submissions', '/review-dashboard'].some(p => currentPath.startsWith(p))) {
+      setOpenModules(prev => ({ ...prev, submissions: true }));
+    }
+    if (['/tasks', '/schedule', '/calendar'].some(p => currentPath.startsWith(p))) {
+      setOpenModules(prev => ({ ...prev, tasks: true }));
+    }
+    if (['/audience', '/registration', '/attendance', '/voting', '/vote'].some(p => currentPath.startsWith(p))) {
+      setOpenModules(prev => ({ ...prev, audience: true }));
+    }
+    if (['/submission-buttons', '/laurel'].some(p => currentPath.startsWith(p))) {
+      setOpenModules(prev => ({ ...prev, marketing: true }));
+    }
+  }, [currentPath]);
+
+  const toggleModule = (moduleKey) => {
+    setOpenModules(prev => ({ ...prev, [moduleKey]: !prev[moduleKey] }));
+  };
+
+  const isSubmissionsActive = ['/submissions', '/review-dashboard'].some(p => currentPath.startsWith(p));
+  const isTasksActive = ['/tasks', '/schedule', '/calendar'].some(p => currentPath.startsWith(p));
+  const isAudienceActive = ['/audience', '/registration', '/attendance', '/voting', '/vote'].some(p => currentPath.startsWith(p));
+  const isMarketingActive = ['/submission-buttons', '/laurel'].some(p => currentPath.startsWith(p));
 
   useEffect(() => {
     if (currentFestival?.id && isModuleEnabled('submissions')) {
@@ -122,138 +172,274 @@ export default function Sidebar() {
 
       {/* Navigation Menu */}
       <nav className="fc-nav">
-        {/* Dashboard */}
+        {/* ── CORE MODULES ── */}
+        <div className="fc-section-header">
+          <span className="fc-section-title">CORE MODULES</span>
+          <span className="fc-section-pill">Core</span>
+        </div>
+
+        {/* Dashboard (Single Page) */}
         {isModuleEnabled('dashboard') && (
-          <NavLink 
-            to="/dashboard" 
-            className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-          >
-            <span>Dashboard</span>
-          </NavLink>
+          <div className="fc-module-block">
+            <NavLink 
+              to="/dashboard" 
+              className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+            >
+              <span>Dashboard</span>
+            </NavLink>
+          </div>
         )}
 
-        {/* Section: Submissions (Core) — Contains 2 pages: All Submissions & Review Dashboard */}
+        {/* Submissions (Multiple Pages: All Submissions + Review Dashboard) */}
         {isModuleEnabled('submissions') && (
-          <>
-            <div className="fc-nav-section-title">SUBMISSIONS</div>
-            <NavLink 
-              to="/submissions" 
-              className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+          <div className="fc-module-block">
+            <button 
+              type="button"
+              className={`fc-module-toggle ${isSubmissionsActive ? 'is-active-module' : ''}`}
+              onClick={() => toggleModule('submissions')}
+              aria-expanded={openModules.submissions}
             >
-              <span>All Submissions</span>
-              <span className="fc-badge fc-badge-blue">{submissionCount !== null ? submissionCount : (currentFestival?.id === 1 ? 23 : 4)}</span>
-            </NavLink>
-            <NavLink 
-              to="/review-dashboard" 
-              className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-            >
-              <span>Review Dashboard</span>
-            </NavLink>
-          </>
+              <span className="fc-toggle-title">Submissions</span>
+              <div className="fc-toggle-actions">
+                <span className="fc-badge fc-badge-blue">
+                  {submissionCount !== null ? submissionCount : (currentFestival?.id === 1 ? 23 : 6)}
+                </span>
+                <ChevronIcon isOpen={openModules.submissions} />
+              </div>
+            </button>
+            {openModules.submissions && (
+              <div className="fc-sub-nav">
+                <NavLink 
+                  to="/submissions" 
+                  className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                >
+                  <span>All Submissions</span>
+                </NavLink>
+                <NavLink 
+                  to="/review-dashboard" 
+                  className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                >
+                  <span>Review Dashboard</span>
+                </NavLink>
+              </div>
+            )}
+          </div>
         )}
 
-        {/* Section: Manage Festival (Addons) */}
-        {(isModuleEnabled('tasks') || isModuleEnabled('schedule') || isModuleEnabled('calendar') || isModuleEnabled('sponsors') || isModuleEnabled('chat') || isModuleEnabled('comms') || isModuleEnabled('guests') || isModuleEnabled('payouts') || isModuleEnabled('payments')) && (
-          <>
-            <div className="fc-nav-section-title">MANAGE FESTIVAL</div>
-            {isModuleEnabled('tasks') && (
-              <NavLink 
-                to="/tasks" 
-                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-              >
-                <span>Tasks</span>
-              </NavLink>
-            )}
-            {(isModuleEnabled('schedule') || isModuleEnabled('calendar')) && (
-              <NavLink 
-                to="/schedule" 
-                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-              >
-                <span>Schedule</span>
-                <span className="fc-badge fc-badge-red" title="1 Conflict Detected">1</span>
-              </NavLink>
-            )}
-            {isModuleEnabled('sponsors') && (
-              <NavLink 
-                to="/sponsors" 
-                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-              >
-                <span>Sponsors</span>
-                <span className="fc-badge fc-badge-amber">5</span>
-              </NavLink>
-            )}
-            {(isModuleEnabled('comms') || isModuleEnabled('chat')) && (
-              <NavLink 
-                to="/chat" 
-                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-              >
-                <span>Communications</span>
-              </NavLink>
-            )}
-            {isModuleEnabled('guests') && (
-              <NavLink 
-                to="/guests" 
-                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-              >
-                <span>Guests & Hospitality</span>
-                <span className="fc-badge fc-badge-red">1</span>
-              </NavLink>
-            )}
-            {(isModuleEnabled('payouts') || isModuleEnabled('payments')) && (
-              <NavLink 
-                to="/payouts" 
-                className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-              >
-                <span>Payouts</span>
-              </NavLink>
-            )}
-          </>
-        )}
-
-        {/* Section: Discovery */}
+        {/* Discovery (Single Page) */}
         {isModuleEnabled('discovery') && (
-          <>
-            <div className="fc-nav-section-title">DISCOVERY</div>
+          <div className="fc-module-block">
             <NavLink 
               to="/discovery" 
               className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
             >
               <span>Discovery</span>
             </NavLink>
+          </div>
+        )}
+
+        {/* Payouts (Single Page - Core) */}
+        {(isModuleEnabled('payouts') || isModuleEnabled('payments')) && (
+          <div className="fc-module-block">
+            <NavLink 
+              to="/payouts" 
+              className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+            >
+              <span>Payouts</span>
+              <span className="fc-badge fc-badge-subtle">Core</span>
+            </NavLink>
+          </div>
+        )}
+
+        {/* Team (Single Page - Core) */}
+        {(isModuleEnabled('team') || isModuleEnabled('team_management')) && (
+          <div className="fc-module-block">
+            <NavLink 
+              to="/team" 
+              className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+            >
+              <span>Team</span>
+              <span className="fc-badge fc-badge-burgundy">3</span>
+            </NavLink>
+          </div>
+        )}
+
+        {/* Settings (Single Page - Core) */}
+        {(isModuleEnabled('settings') || isModuleEnabled('edition_settings')) && (
+          <div className="fc-module-block">
+            <NavLink 
+              to="/settings" 
+              className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+            >
+              <span>Settings</span>
+            </NavLink>
+          </div>
+        )}
+
+        {/* ── ADD-ON MODULES ── */}
+        {(isModuleEnabled('tasks') || isModuleEnabled('sponsors') || isModuleEnabled('chat') || isModuleEnabled('comms') || isModuleEnabled('guests') || isModuleEnabled('audience') || isModuleEnabled('marketing')) && (
+          <>
+            <div className="fc-section-divider"></div>
+            <div className="fc-section-header">
+              <span className="fc-section-title">ADD-ON MODULES</span>
+              <span className="fc-section-pill fc-pill-addon">Add-ons</span>
+            </div>
+
+            {/* Tasks & Schedule (Multiple Pages: Tasks Board + Schedule) */}
+            {isModuleEnabled('tasks') && (
+              <div className="fc-module-block">
+                <button 
+                  type="button"
+                  className={`fc-module-toggle ${isTasksActive ? 'is-active-module' : ''}`}
+                  onClick={() => toggleModule('tasks')}
+                  aria-expanded={openModules.tasks}
+                >
+                  <span className="fc-toggle-title">Tasks</span>
+                  <div className="fc-toggle-actions">
+                    <span className="fc-badge fc-badge-red" title="1 Conflict Detected">1</span>
+                    <ChevronIcon isOpen={openModules.tasks} />
+                  </div>
+                </button>
+                {openModules.tasks && (
+                  <div className="fc-sub-nav">
+                    <NavLink 
+                      to="/tasks" 
+                      className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                      <span>Tasks Board</span>
+                    </NavLink>
+                    <NavLink 
+                      to="/schedule" 
+                      className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                      <span>↳ Schedule</span>
+                      <span className="fc-badge fc-badge-red" title="1 Conflict Detected">1</span>
+                    </NavLink>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Sponsors (Single Page) */}
+            {isModuleEnabled('sponsors') && (
+              <div className="fc-module-block">
+                <NavLink 
+                  to="/sponsors" 
+                  className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                >
+                  <span>Sponsors</span>
+                  <span className="fc-badge fc-badge-amber">5</span>
+                </NavLink>
+              </div>
+            )}
+
+            {/* Communications (Single Page) */}
+            {(isModuleEnabled('comms') || isModuleEnabled('chat')) && (
+              <div className="fc-module-block">
+                <NavLink 
+                  to="/chat" 
+                  className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                >
+                  <span>Communications</span>
+                </NavLink>
+              </div>
+            )}
+
+            {/* Guests & Hospitality (Single Page) */}
+            {isModuleEnabled('guests') && (
+              <div className="fc-module-block">
+                <NavLink 
+                  to="/guests" 
+                  className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                >
+                  <span>Guests & Hospitality</span>
+                  <span className="fc-badge fc-badge-red">1</span>
+                </NavLink>
+              </div>
+            )}
+
+            {/* Audience & Voting (Multiple Pages: Audience Settings, Registration & Passes, Gate Attendance, Audience Voting) */}
+            {isModuleEnabled('audience') && (
+              <div className="fc-module-block">
+                <button 
+                  type="button"
+                  className={`fc-module-toggle ${isAudienceActive ? 'is-active-module' : ''}`}
+                  onClick={() => toggleModule('audience')}
+                  aria-expanded={openModules.audience}
+                >
+                  <span className="fc-toggle-title">Audience & Voting</span>
+                  <div className="fc-toggle-actions">
+                    <span className="fc-badge fc-badge-blue">Live</span>
+                    <ChevronIcon isOpen={openModules.audience} />
+                  </div>
+                </button>
+                {openModules.audience && (
+                  <div className="fc-sub-nav">
+                    <NavLink 
+                      to="/audience" 
+                      className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                      <span>Audience Settings</span>
+                    </NavLink>
+                    <NavLink 
+                      to="/registration" 
+                      className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                      <span>Registration & Passes</span>
+                    </NavLink>
+                    <NavLink 
+                      to="/attendance" 
+                      className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                      <span>Gate Attendance</span>
+                      <span className="fc-badge fc-badge-blue">Live</span>
+                    </NavLink>
+                    <NavLink 
+                      to="/voting" 
+                      className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                      <span>Audience Voting</span>
+                      <span className="fc-badge fc-badge-amber">Awards</span>
+                    </NavLink>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Marketing (Multiple Pages if enabled: Submission Buttons, Laurel Studio) */}
+            {isModuleEnabled('marketing') && (
+              <div className="fc-module-block">
+                <button 
+                  type="button"
+                  className={`fc-module-toggle ${isMarketingActive ? 'is-active-module' : ''}`}
+                  onClick={() => toggleModule('marketing')}
+                  aria-expanded={openModules.marketing}
+                >
+                  <span className="fc-toggle-title">Marketing</span>
+                  <div className="fc-toggle-actions">
+                    <ChevronIcon isOpen={openModules.marketing} />
+                  </div>
+                </button>
+                {openModules.marketing && (
+                  <div className="fc-sub-nav">
+                    <NavLink 
+                      to="/submission-buttons" 
+                      className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                      <span>Submission Buttons</span>
+                    </NavLink>
+                    <NavLink 
+                      to="/laurel" 
+                      className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                    >
+                      <span>Laurel Studio</span>
+                    </NavLink>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
-
-        {/* Direct Links */}
-        {(isModuleEnabled('team') || isModuleEnabled('team_management')) && (
-          <NavLink 
-            to="/team" 
-            className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-          >
-            <span>Team</span>
-            <span className="fc-badge fc-badge-burgundy">3</span>
-          </NavLink>
-        )}
-        <div className="fc-nav-item disabled">
-          <span>Tickets</span>
-          <span className="fc-badge fc-badge-subtle">Soon</span>
-        </div>
-        {(isModuleEnabled('settings') || isModuleEnabled('edition_settings')) && (
-          <NavLink 
-            to="/settings" 
-            className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-          >
-            <span>Settings</span>
-          </NavLink>
-        )}
-
-        {/* Festival Admin (Local) */}
-        <NavLink 
-          to="/freecomers-admin" 
-          className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
-        >
-          <span>Festival Roles</span>
-          <span className="fc-badge fc-badge-subtle">👥</span>
-        </NavLink>
       </nav>
 
       {/* User Profile Footer */}
