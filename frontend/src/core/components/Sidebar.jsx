@@ -312,7 +312,7 @@ export default function Sidebar() {
                       to="/schedule" 
                       className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
                     >
-                      <span>↳ Schedule</span>
+                      <span>Schedule</span>
                       <span className="fc-badge fc-badge-red" title="1 Conflict Detected">1</span>
                     </NavLink>
                   </div>
