@@ -106,10 +106,10 @@ export default function AudienceSettingsPage() {
       {/* Page Header */}
       <div className="fc-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h1 className="fc-page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: 'var(--fc-text, #111827)' }}>
+          <h1 className="fc-page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: 'var(--fc-text-main)' }}>
             Audience & Delegate Settings
           </h1>
-          <p className="fc-page-subtitle" style={{ color: 'var(--fc-text-muted, #6b7280)', marginTop: '4px', fontSize: '0.9rem' }}>
+          <p className="fc-page-subtitle" style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem' }}>
             Manage delegate accreditation tiers, venue allocations, and audience voting parameters
           </p>
         </div>
@@ -139,25 +139,26 @@ export default function AudienceSettingsPage() {
         
         {/* Categories Panel */}
         <div style={{ gridColumn: 'span 2' }}>
-          <div className="fc-card" style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: '#1f2937' }}>
+          <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)' }}>
               Delegate Categories & Accreditation Tiers
             </h2>
 
             {loading ? (
-              <div style={{ padding: '30px', textAlign: 'center', color: '#9ca3af' }}>Loading categories...</div>
+              <div style={{ padding: '30px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>Loading categories...</div>
             ) : categories.length === 0 ? (
-              <div style={{ padding: '30px', textAlign: 'center', color: '#9ca3af' }}>No categories created yet. Click "+ Add Delegate Category" above.</div>
+              <div style={{ padding: '30px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>No categories created yet. Click "+ Add Delegate Category" above.</div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px' }}>
                 {categories.map((cat) => (
                   <div 
                     key={cat.id} 
+                    className="fc-audience-category-card"
                     style={{
-                      border: '1px solid #e5e7eb',
+                      border: '1px solid var(--fc-border)',
                       borderRadius: '10px',
                       padding: '14px',
-                      background: '#fafafa',
+                      background: 'var(--fc-surface)',
                       position: 'relative',
                       display: 'flex',
                       flexDirection: 'column',
@@ -179,20 +180,20 @@ export default function AudienceSettingsPage() {
                         >
                           {cat.badge_ribbon_text || cat.name.toUpperCase()}
                         </span>
-                        <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--fc-text-muted)' }}>
                           Code: <code>{cat.code}</code>
                         </span>
                       </div>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#111827', marginTop: '4px' }}>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--fc-text-main)', marginTop: '4px' }}>
                         {cat.name}
                       </div>
-                      <div style={{ display: 'flex', gap: '12px', marginTop: '10px', fontSize: '0.8rem', color: '#4b5563' }}>
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '10px', fontSize: '0.8rem', color: 'var(--fc-text-secondary)' }}>
                         <span>👥 <strong>{cat.attendee_count || 0}</strong> Registered</span>
                         <span>🗳️ {cat.can_vote ? 'Can Vote' : 'Voting Disabled'}</span>
                       </div>
                     </div>
 
-                    <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f3f4f6', paddingTop: '8px' }}>
+                    <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--fc-border)', paddingTop: '8px' }}>
                       <button
                         onClick={() => handleDeleteCategory(cat.id)}
                         style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
@@ -209,13 +210,13 @@ export default function AudienceSettingsPage() {
 
         {/* Global Voting & Eligibility Rules */}
         <div>
-          <div className="fc-card" style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: '#1f2937' }}>
+          <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)' }}>
               Voting & Eligibility Rules
             </h2>
             <form onSubmit={handleSaveSettings}>
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
                   Option 3 Screening Check-in Enforcement
                 </label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -226,41 +227,41 @@ export default function AudienceSettingsPage() {
                     onChange={(e) => setSettings({ ...settings, require_screening_checkin: e.target.checked })}
                     style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                   />
-                  <label htmlFor="reqCheckin" style={{ fontSize: '0.85rem', color: '#4b5563', cursor: 'pointer' }}>
+                  <label htmlFor="reqCheckin" style={{ fontSize: '0.85rem', color: 'var(--fc-text-secondary)', cursor: 'pointer' }}>
                     Require verified attendance at screening door before unlocking ballot
                   </label>
                 </div>
-                <small style={{ display: 'block', color: '#6b7280', marginTop: '4px', fontSize: '0.75rem' }}>
+                <small style={{ display: 'block', color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.75rem' }}>
                   Prevents non-attendees from scanning shared QR screenshots online.
                 </small>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
                   Minimum Quorum Threshold (m)
                 </label>
                 <input 
                   type="number" 
                   value={settings.minimum_quorum_threshold}
                   onChange={(e) => setSettings({ ...settings, minimum_quorum_threshold: parseInt(e.target.value, 10) || 0 })}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                 />
-                <small style={{ display: 'block', color: '#6b7280', marginTop: '4px', fontSize: '0.75rem' }}>
+                <small style={{ display: 'block', color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.75rem' }}>
                   Minimum votes required for a film to qualify for Audience Choice Award (Bayesian penalty applied below this).
                 </small>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
                   Default Voting Window (Minutes)
                 </label>
                 <input 
                   type="number" 
                   value={settings.voting_window_minutes}
                   onChange={(e) => setSettings({ ...settings, voting_window_minutes: parseInt(e.target.value, 10) || 0 })}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                 />
-                <small style={{ display: 'block', color: '#6b7280', marginTop: '4px', fontSize: '0.75rem' }}>
+                <small style={{ display: 'block', color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.75rem' }}>
                   Time window balloting remains active after end credits roll.
                 </small>
               </div>
@@ -271,7 +272,7 @@ export default function AudienceSettingsPage() {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  background: '#2563eb',
+                  background: 'var(--color-primary, #2563eb)',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '6px',
@@ -288,18 +289,18 @@ export default function AudienceSettingsPage() {
       </div>
 
       {/* Venues Section */}
-      <div className="fc-card" style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: '#1f2937' }}>
+      <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)' }}>
           Screening Venues & Auditoriums
         </h2>
         {venues.length === 0 ? (
-          <div style={{ color: '#9ca3af' }}>No venues registered.</div>
+          <div style={{ color: 'var(--fc-text-muted)' }}>No venues registered.</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
             {venues.map((v) => (
-              <div key={v.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px', background: '#fdfdfd' }}>
-                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#111827' }}>{v.name}</div>
-                <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '0.85rem', color: '#4b5563' }}>
+              <div key={v.id} className="fc-venue-card" style={{ border: '1px solid var(--fc-border)', borderRadius: '8px', padding: '16px', background: 'var(--fc-surface)' }}>
+                <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--fc-text-main)' }}>{v.name}</div>
+                <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '0.85rem', color: 'var(--fc-text-secondary)' }}>
                   <span>💺 Capacity: <strong>{v.capacity}</strong> seats</span>
                   <span>🎬 Screenings: <strong>{v.total_screenings || 0}</strong></span>
                 </div>
@@ -311,12 +312,12 @@ export default function AudienceSettingsPage() {
 
       {/* Modal: Add Category */}
       {showCatModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: '12px', width: '90%', maxWidth: '480px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: 700 }}>Add Delegate Category</h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--fc-surface-card)', color: 'var(--fc-text-main)', border: '1px solid var(--fc-border)', borderRadius: '12px', width: '90%', maxWidth: '480px', padding: '24px', boxShadow: 'var(--shadow-xl)' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '1.25rem', fontWeight: 700, color: 'var(--fc-text-main)' }}>Add Delegate Category</h3>
             <form onSubmit={handleCreateCategory}>
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Category Name *</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px', color: 'var(--fc-text-main)' }}>Category Name *</label>
                 <input 
                   type="text" 
                   required
@@ -327,46 +328,46 @@ export default function AudienceSettingsPage() {
                     const code = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
                     setCatForm({ ...catForm, name, code: catForm.code ? catForm.code : code, badge_ribbon_text: catForm.badge_ribbon_text ? catForm.badge_ribbon_text : name.toUpperCase() });
                   }}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                 />
               </div>
 
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Category Code * (Unique slug)</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px', color: 'var(--fc-text-main)' }}>Category Code * (Unique slug)</label>
                 <input 
                   type="text" 
                   required
                   placeholder="e.g. vip, press, delegate"
                   value={catForm.code} 
                   onChange={(e) => setCatForm({ ...catForm, code: e.target.value })}
-                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                 />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Badge Color</label>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px', color: 'var(--fc-text-main)' }}>Badge Color</label>
                   <input 
                     type="color" 
                     value={catForm.badge_color} 
                     onChange={(e) => setCatForm({ ...catForm, badge_color: e.target.value })}
-                    style={{ width: '100%', height: '40px', padding: '2px', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer' }}
+                    style={{ width: '100%', height: '40px', padding: '2px', border: '1px solid var(--fc-border)', borderRadius: '6px', cursor: 'pointer', background: 'var(--fc-surface)' }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>Ribbon Text</label>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px', color: 'var(--fc-text-main)' }}>Ribbon Text</label>
                   <input 
                     type="text" 
                     placeholder="DELEGATE"
                     value={catForm.badge_ribbon_text} 
                     onChange={(e) => setCatForm({ ...catForm, badge_ribbon_text: e.target.value.toUpperCase() })}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                   />
                 </div>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--fc-text-main)' }}>
                   <input 
                     type="checkbox" 
                     checked={catForm.can_vote} 
@@ -378,8 +379,8 @@ export default function AudienceSettingsPage() {
               </div>
 
               {/* Badge Preview */}
-              <div style={{ background: '#f3f4f6', padding: '12px', borderRadius: '8px', marginBottom: '16px', textAlign: 'center' }}>
-                <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '6px' }}>LIVE BADGE PREVIEW</div>
+              <div style={{ background: 'var(--fc-surface)', border: '1px solid var(--fc-border)', padding: '12px', borderRadius: '8px', marginBottom: '16px', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginBottom: '6px' }}>LIVE BADGE PREVIEW</div>
                 <span style={{ background: catForm.badge_color, color: '#fff', padding: '4px 12px', borderRadius: '4px', fontWeight: 800, fontSize: '0.8rem', letterSpacing: '0.05em' }}>
                   {catForm.badge_ribbon_text || 'RIBBON TEXT'}
                 </span>
@@ -389,12 +390,12 @@ export default function AudienceSettingsPage() {
                 <button 
                   type="button" 
                   onClick={() => setShowCatModal(false)}
-                  style={{ padding: '8px 16px', border: '1px solid #d1d5db', background: '#fff', borderRadius: '6px', cursor: 'pointer' }}
+                  style={{ padding: '8px 16px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', borderRadius: '6px', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button 
-                  type="submit"
+                  type="submit" 
                   style={{ padding: '8px 16px', background: '#e11d48', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                 >
                   Create Category

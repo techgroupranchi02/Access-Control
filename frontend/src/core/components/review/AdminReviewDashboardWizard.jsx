@@ -28,7 +28,7 @@ const CRITERIA_KEYS = [
   { key: 'message_importance', label: 'Importance of film message' },
 ];
 
-export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
+export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchToJury }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const subTab = searchParams.get('sub') || 'assign';
   const urlFilmId = searchParams.get('filmId');
@@ -36,7 +36,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
 
   const [activeRound, setActiveRound] = useState(paramRound ? parseInt(paramRound, 10) : 1);
   const [pipelineData, setPipelineData] = useState(null);
-  const [judgesList, setJudgesList] = useState([]);
+  const [juryList, setJuryList] = useState([]);
   const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -53,11 +53,11 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
       setLoading(true);
       const [pipeRes, judgesRes, flagsRes] = await Promise.all([
         api.get('/reviews/pipeline', { params: { round: roundToFetch } }),
-        api.get('/reviews/judges'),
+        api.get('/reviews/jury').catch(() => api.get('/reviews/judges')),
         api.get('/submissions', { params: { limit: 1 } }),
       ]);
       setPipelineData(pipeRes.data);
-      setJudgesList(judgesRes.data?.data || []);
+      setJuryList(judgesRes.data?.data || []);
       setFlags(flagsRes.data?.flags || []);
 
       const films = pipeRes.data?.filmsInRound || [];
@@ -118,15 +118,15 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
     }
   };
 
-  // Handle assigning/unassigning a judge
-  const handleToggleJudgeAssignment = async (judgeId) => {
+  // Handle assigning/unassigning a jury member
+  const handleToggleJuryAssignment = async (juryId) => {
     if (!selectedFilm) return;
-    const currentJudges = selectedFilm.assigned_judge_ids || [];
+    const currentJury = selectedFilm.assigned_jury_ids || selectedFilm.assigned_judge_ids || [];
     let updated;
-    if (currentJudges.includes(judgeId)) {
-      updated = currentJudges.filter((id) => id !== judgeId);
+    if (currentJury.includes(juryId)) {
+      updated = currentJury.filter((id) => id !== juryId);
     } else {
-      updated = [...currentJudges, judgeId];
+      updated = [...currentJury, juryId];
     }
 
     // Optimistic update
@@ -134,13 +134,15 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
       if (!prev) return prev;
       const updatedFilms = prev.filmsInRound.map((f) => {
         if (f.id === selectedFilm.id) {
-          const assigned_judges = judgesList
+          const assigned_jury = juryList
             .filter((j) => updated.includes(j.id))
-            .map((j) => ({ id: j.id, judge_name: j.name, status: 'assigned' }));
+            .map((j) => ({ id: j.id, jury_name: j.name, judge_name: j.name, status: 'assigned' }));
           return {
             ...f,
+            assigned_jury_ids: updated,
             assigned_judge_ids: updated,
-            assigned_judges,
+            assigned_jury,
+            assigned_judges: assigned_jury,
           };
         }
         return f;
@@ -152,6 +154,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
       await api.post('/reviews/assign', {
         film_id: selectedFilm.id,
         round_number: activeRound,
+        jury_ids: updated,
         judge_ids: updated,
       });
       await fetchData(activeRound);
@@ -159,7 +162,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
         handleOpenFilmDetails(selectedFilm);
       }
     } catch (err) {
-      alert('Failed to update judge assignment.');
+      alert('Failed to update jury assignment.');
     }
   };
 
@@ -208,9 +211,9 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
       {/* Historical Alert Banner (Matching Screenshots) */}
       <div className="fc-notice-banner">
         <span>This step is complete. You're viewing the historical record.</span>
-        {onSwitchToJudge && (
-          <button type="button" className="fc-btn-link" onClick={onSwitchToJudge}>
-            Switch to Judge View ↗
+        {(onSwitchToJury || onSwitchToJudge) && (
+          <button type="button" className="fc-btn-link" onClick={onSwitchToJury || onSwitchToJudge}>
+            Switch to Jury View ↗
           </button>
         )}
       </div>
@@ -288,7 +291,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
           {subTab === 'assign'
             ? `Assign reviewers to ${filmsInRound.length} films in Round ${activeRound}`
             : subTab === 'scores'
-            ? `Evaluate judge scorecards, aggregate criteria points, and track review progress for Round ${activeRound}`
+            ? `Evaluate jury scorecards, aggregate criteria points, and track review progress for Round ${activeRound}`
             : `Review scores and advance or reject ${filmsInRound.length} films in Round ${activeRound}`}
         </p>
 
@@ -399,7 +402,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
                   <div>
                     <div className="fc-assign-film-header">
                       <div>
-                        <h3 className="fc-assign-film-title">Judge assignment · {selectedFilm.title}</h3>
+                        <h3 className="fc-assign-film-title">Jury assignment · {selectedFilm.title}</h3>
                         <p className="fc-assign-film-director">{selectedFilm.director || 'Filmmaker'}</p>
                       </div>
                       <button
@@ -414,21 +417,21 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
                     <div className="fc-assign-box">
                       <div className="fc-assign-box-title">Reviewers: Assign reviewers</div>
                       <div className="fc-assign-checkboxes-list">
-                        {judgesList.length === 0 ? (
+                        {juryList.length === 0 ? (
                           <div style={{ color: 'var(--fc-text-muted)', fontSize: '0.85rem' }}>
-                            No judges configured in team yet. Assign users to the "Judge" group in Team Management.
+                            No jury members configured in team yet. Assign users to the "Jury" group in Team Management.
                           </div>
                         ) : (
-                          judgesList.map((judge) => {
-                            const isAssigned = (selectedFilm.assigned_judge_ids || []).includes(judge.id);
+                          juryList.map((juryMember) => {
+                            const isAssigned = (selectedFilm.assigned_jury_ids || selectedFilm.assigned_judge_ids || []).includes(juryMember.id);
                             return (
-                              <label key={judge.id} className="fc-assign-checkbox-item">
+                              <label key={juryMember.id} className="fc-assign-checkbox-item">
                                 <input
                                   type="checkbox"
                                   checked={isAssigned}
-                                  onChange={() => handleToggleJudgeAssignment(judge.id)}
+                                  onChange={() => handleToggleJuryAssignment(juryMember.id)}
                                 />
-                                <span>{judge.name || judge.email}</span>
+                                <span>{juryMember.name || juryMember.email}</span>
                               </label>
                             );
                           })
@@ -535,10 +538,10 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge }) {
                   </div>
                 </div>
 
-                {/* Judge Progress Matrix Table (Matching Screenshot 2) */}
+                {/* Jury Progress Matrix Table (Matching Screenshot 2) */}
                 <div className="fc-card" style={{ padding: '20px', marginTop: '16px' }}>
                   <h4 style={{ margin: '0 0 14px 0', fontSize: '0.95rem', fontWeight: 600 }}>
-                    Judge Progress Matrix
+                    Jury Progress Matrix
                   </h4>
                   <div className="table-responsive">
                     <table className="fc-table">

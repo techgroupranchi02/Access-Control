@@ -60,9 +60,10 @@ export default function DashboardPage() {
 
       {/* Critical Alert Widget */}
       <div 
+        className="fc-dashboard-alert"
         style={{
-          backgroundColor: '#fef2f2',
-          border: '1px solid #fca5a5',
+          backgroundColor: 'var(--fc-alert-bg, #fef2f2)',
+          border: '1px solid var(--fc-alert-border, #fca5a5)',
           borderRadius: '10px',
           padding: '16px 20px',
           marginBottom: '24px',
@@ -76,10 +77,10 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <span style={{ fontSize: '1.5rem' }}>⚠️</span>
           <div>
-            <div style={{ fontWeight: 800, color: '#991b1b', fontSize: '0.9rem' }}>
+            <div style={{ fontWeight: 800, color: 'var(--fc-alert-title, #991b1b)', fontSize: '0.9rem' }}>
               Action Required: 1 Logistics Conflict on Day 1
             </div>
-            <div style={{ color: '#7f1d1d', fontSize: '0.8rem', marginTop: '2px' }}>
+            <div style={{ color: 'var(--fc-alert-text, #7f1d1d)', fontSize: '0.8rem', marginTop: '2px' }}>
               Director Deepa Rao flight arrival at 19:00 conflicts with "The Long Walk" 17:30 Main Auditorium screening.
             </div>
           </div>
@@ -103,7 +104,7 @@ export default function DashboardPage() {
             </span>
             <span className="fc-badge fc-badge-blue">23</span>
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1a1a1a', marginTop: '6px' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--fc-text-main)', marginTop: '6px' }}>
             {stats.submissions}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 600, marginTop: '4px' }}>
@@ -119,7 +120,7 @@ export default function DashboardPage() {
             </span>
             <span className="fc-badge fc-badge-burgundy">3</span>
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1a1a1a', marginTop: '6px' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--fc-text-main)', marginTop: '6px' }}>
             {stats.members}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '4px' }}>
@@ -135,7 +136,7 @@ export default function DashboardPage() {
             </span>
             <span className="fc-badge fc-badge-amber">{stats.unassignedTasks} unassigned</span>
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1a1a1a', marginTop: '6px' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--fc-text-main)', marginTop: '6px' }}>
             {stats.tasks}
           </div>
           <div style={{ fontSize: '0.75rem', color: '#ea580c', fontWeight: 600, marginTop: '4px' }}>
@@ -151,7 +152,7 @@ export default function DashboardPage() {
             </span>
             <span className="fc-badge fc-badge-red">1</span>
           </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#1a1a1a', marginTop: '6px' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--fc-text-main)', marginTop: '6px' }}>
             {stats.guests}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '4px' }}>
@@ -162,7 +163,7 @@ export default function DashboardPage() {
 
       {/* Quick Launchpad Grid */}
       <div className="fc-card" style={{ padding: '20px' }}>
-        <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '14px' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '14px', color: 'var(--fc-text-main)' }}>
           Operations Launchpad
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
@@ -178,7 +179,7 @@ export default function DashboardPage() {
               key={item.label}
               onClick={() => navigate(item.path)}
               style={{
-                backgroundColor: 'var(--fc-surface)',
+                backgroundColor: 'var(--fc-surface-card)',
                 border: '1px solid var(--fc-border)',
                 borderRadius: '8px',
                 padding: '12px',
@@ -188,7 +189,7 @@ export default function DashboardPage() {
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--fc-brand)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--fc-border)'; }}
             >
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1a1a1a' }}>{item.label}</div>
+              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--fc-text-main)' }}>{item.label}</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>{item.desc}</div>
             </div>
           ))}

@@ -144,20 +144,20 @@ async function getFestivalArchitecture(req, res) {
     const limitRows = await query('SELECT max_users FROM event_user_limits WHERE event_id = ? LIMIT 1', [eventId]);
     const maxUsers = limitRows.length > 0 ? limitRows[0].max_users : 25;
 
-    // 2. Fetch canonical active groups (Admin, Judge, Volunteer)
+    // 2. Fetch canonical active groups (Admin, Jury, Volunteer)
     const rawGroups = await query('SELECT id, group_key, label, description FROM `groups` ORDER BY id ASC');
-    const standardKeysOrder = ['admin', 'judge', 'volunteer'];
+    const standardKeysOrder = ['admin', 'jury', 'volunteer'];
     const groups = [];
     
     // Sort / normalize groups to match canonical 3-role architecture
     for (const key of standardKeysOrder) {
-      const g = rawGroups.find(r => r.group_key === key);
+      const g = rawGroups.find(r => r.group_key === key || (key === 'jury' && r.group_key === 'judge'));
       if (g) {
         groups.push({
           id: g.id,
-          key: g.group_key,
+          key: g.group_key === 'judge' ? 'jury' : g.group_key,
           label: g.group_key === 'admin' ? 'Admin' :
-                 g.group_key === 'judge' ? 'Judge' :
+                 (g.group_key === 'jury' || g.group_key === 'judge') ? 'Jury' :
                  g.group_key === 'volunteer' ? 'Volunteer' : g.label
         });
       }

@@ -11,7 +11,7 @@ require('dotenv').config({ path: '/var/www/Access-Control/backend/.env' });
 
 const CANONICAL_GROUPS = [
   { key: 'admin', label: 'Admin', description: 'Festival Director & Control Tower governance', is_system: 1 },
-  { key: 'judge', label: 'Judge', description: 'Screening reviews, 5-criteria scorecards and jury ballots', is_system: 1 },
+  { key: 'jury', label: 'Jury', description: 'Screening reviews, scorecards and jury ballots', is_system: 1 },
   { key: 'volunteer', label: 'Volunteer', description: 'Shift operations, task execution and check-in desk', is_system: 1 }
 ];
 
@@ -36,14 +36,14 @@ const MODULES_SPECS = [
       { key: 'submission:reject', label: 'Reject Submission', description: 'Execute permanent terminal rejection with mandatory 10-char reason.' },
       { key: 'submission:delete', label: 'Delete Submission', description: 'Purge a film record from the festival database.' },
       { key: 'review:view', label: 'View Reviews', description: 'Access the screening pipeline and review scoreboard.' },
-      { key: 'review:assign', label: 'Assign Reviews', description: 'Assign judges to screening rounds.' },
+      { key: 'review:assign', label: 'Assign Reviews', description: 'Assign jury members to screening rounds.' },
       { key: 'review:score', label: 'Score Submission', description: 'Submit ratings, criteria scorecards, and private review notes.' },
       { key: 'review:advance', label: 'Advance Submission', description: 'Promote submissions to subsequent screening rounds or Official Selection.' },
-      { key: 'review:override', label: 'Override Review', description: 'Override judge consensus or manually decide borderline films.' }
+      { key: 'review:override', label: 'Override Review', description: 'Override jury consensus or manually decide borderline films.' }
     ],
     groupAccess: {
       admin: ['submission:view', 'submission:create', 'submission:edit', 'submission:flag', 'submission:reject', 'submission:delete', 'review:view', 'review:assign', 'review:score', 'review:advance', 'review:override'],
-      judge: ['submission:view', 'review:view', 'review:score'],
+      jury: ['submission:view', 'review:view', 'review:score'],
       volunteer: []
     }
   },
@@ -57,7 +57,7 @@ const MODULES_SPECS = [
     display_order: 2,
     pages: [
       { page_key: 'discover_jury', label: 'Discover Jury', route: '/discover-jury', display_order: 1 },
-      { page_key: 'judge_workspace', label: 'Judge Workspace & Ballot Portal', route: '/judge/:userId/review-dashboard', display_order: 2 }
+      { page_key: 'jury_workspace', label: 'Jury Workspace & Ballot Portal', route: '/jury/:userId/review-dashboard', display_order: 2 }
     ],
     permissions: [
       { key: 'jury:view_directory', label: 'View Directory', description: 'Browse verified industry jurors and their credits.' },
@@ -69,7 +69,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['jury:view_directory', 'jury:invite', 'jury:manage_awards', 'jury:vote_control', 'jury:submit_ballot', 'jury:publish_awards'],
-      judge: ['jury:submit_ballot'],
+      jury: ['jury:submit_ballot'],
       volunteer: []
     }
   },
@@ -90,7 +90,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['team:view', 'team:manage'],
-      judge: [],
+      jury: [],
       volunteer: []
     }
   },
@@ -115,7 +115,7 @@ const MODULES_SPECS = [
     groupAccess: {
       admin: ['task:view', 'task:create', 'task:edit', 'task:status_update', 'task:delete'],
       volunteer: ['task:view', 'task:status_update'],
-      judge: []
+      jury: []
     }
   },
   {
@@ -137,7 +137,7 @@ const MODULES_SPECS = [
     groupAccess: {
       admin: ['schedule:view', 'schedule:manage', 'schedule:resolve_conflicts'],
       volunteer: ['schedule:view'],
-      judge: ['schedule:view']
+      jury: ['schedule:view']
     }
   },
   {
@@ -161,7 +161,7 @@ const MODULES_SPECS = [
     groupAccess: {
       admin: ['guest:view', 'guest:create', 'guest:edit', 'guest:checkin', 'guest:message'],
       volunteer: ['guest:view', 'guest:checkin', 'guest:message'],
-      judge: []
+      jury: []
     }
   },
   {
@@ -182,7 +182,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['chat:view', 'chat:create_group', 'chat:delete_message'],
-      judge: ['chat:view'],
+      jury: ['chat:view'],
       volunteer: ['chat:view']
     }
   },
@@ -202,7 +202,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['dashboard:view_global'],
-      judge: [],
+      jury: [],
       volunteer: []
     }
   },
@@ -223,7 +223,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['sponsors:view', 'sponsors:manage'],
-      judge: [],
+      jury: [],
       volunteer: []
     }
   },
@@ -245,7 +245,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['comms:view', 'comms:publish', 'comms:templates'],
-      judge: [],
+      jury: [],
       volunteer: []
     }
   },
@@ -266,7 +266,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['payouts:view', 'payouts:disburse'],
-      judge: [],
+      jury: [],
       volunteer: []
     }
   },
@@ -286,7 +286,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['settings:manage'],
-      judge: [],
+      jury: [],
       volunteer: []
     }
   },
@@ -306,7 +306,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['discover:browse'],
-      judge: [],
+      jury: [],
       volunteer: []
     }
   },
@@ -327,7 +327,7 @@ const MODULES_SPECS = [
     ],
     groupAccess: {
       admin: ['marketing:export'],
-      judge: [],
+      jury: [],
       volunteer: []
     }
   }
@@ -361,8 +361,8 @@ async function syncDatabase(dbName) {
     await conn.query(`ALTER TABLE pages ADD COLUMN label VARCHAR(100) NULL AFTER page_key`);
   }
 
-  // 2. Align canonical groups (Admin, Judge, Volunteer)
-  console.log('[Groups] Aligning 3 canonical active groups (admin, judge, volunteer)...');
+  // 2. Align canonical groups (Admin, Jury, Volunteer)
+  console.log('[Groups] Aligning 3 canonical active groups (admin, jury, volunteer)...');
   const groupMap = {}; // groupKey -> id
 
   for (const g of CANONICAL_GROUPS) {

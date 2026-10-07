@@ -72,14 +72,14 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
   const fetchAssignments = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/reviews/assignments', { params: { view: 'judge' } });
+      const res = await api.get('/reviews/assignments', { params: { view: 'jury' } });
       const data = res.data.data || [];
       setAssignments(data);
       if (data.length > 0 && !selectedAssignmentId) {
         setSelectedAssignmentId(data[0].assignment_id);
       }
     } catch (err) {
-      console.error('Failed to load judge assignments:', err);
+      console.error('Failed to load jury assignments:', err);
     } finally {
       setLoading(false);
     }
@@ -110,6 +110,7 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
       (a) =>
         (a.title && a.title.toLowerCase().includes(q)) ||
         (a.director && a.director.toLowerCase().includes(q)) ||
+        (a.jury_name && a.jury_name.toLowerCase().includes(q)) ||
         (a.judge_name && a.judge_name.toLowerCase().includes(q))
     );
   }, [roundAssignments, queueSearch]);
@@ -255,7 +256,7 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
                     </div>
                     <div className="fc-judge-queue-film-meta">
                       <span style={{ fontWeight: 600, color: '#2563eb' }}>
-                        Jury: {item.judge_name || 'Reviewer'}
+                        Jury: {item.jury_name || item.judge_name || 'Jury Member'}
                       </span>
                       {' · '}{item.director || 'Filmmaker'} · {item.category || 'Short Film'} · {item.runtime ? `${item.runtime} min` : '15 min'}
                     </div>
@@ -286,7 +287,7 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
                   <div className="fc-judge-form-subtitle">
                     <span>{selectedAssignment.title} · {selectedAssignment.director || 'Filmmaker'}</span>
                     <span style={{ marginLeft: '10px', padding: '3px 10px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', fontWeight: 600, fontSize: '0.82rem' }}>
-                      Jury: {selectedAssignment.judge_name || 'Reviewer'}
+                      Jury: {selectedAssignment.jury_name || selectedAssignment.judge_name || 'Jury Member'}
                     </span>
                   </div>
                 </div>

@@ -45,6 +45,15 @@ export function AuthProvider({ children }) {
     return res.data;
   }, []);
 
+  const loginWithGoogle = useCallback(async (credential) => {
+    const res = await api.post('/auth/google', { credential });
+    if (res.data.token) {
+      localStorage.setItem('authToken', res.data.token);
+    }
+    setUser(res.data.user);
+    return res.data;
+  }, []);
+
   const switchPersona = useCallback(async () => {
     // Persona switching removed — use proper role assignment instead.
     console.warn('switchPersona is deprecated. Use the admin panel to assign roles.');
@@ -82,6 +91,7 @@ export function AuthProvider({ children }) {
     user,
     loading,
     login,
+    loginWithGoogle,
     register,
     logout,
     switchPersona,

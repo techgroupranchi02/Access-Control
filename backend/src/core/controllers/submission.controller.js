@@ -297,19 +297,20 @@ async function getById(req, res) {
     if (rows.length === 0) return res.status(404).json({ error: 'Submission not found.' });
 
     // Fetch assignments for this film
+    // Fetch assigned jury members
     const assignments = await query(`
       SELECT 
         sa.id as assignment_id,
         sa.film_id,
         sa.round_number,
-        sa.judge_user_id,
+        sa.jury_user_id,
         sa.status as assignment_status,
         sa.assigned_at,
         sa.completed_at,
-        COALESCE(i.name, o.name, u.email) as judge_name,
-        u.email as judge_email
+        COALESCE(i.name, o.name, u.email) as jury_name,
+        u.email as jury_email
       FROM screening_assignments sa
-      JOIN users u ON u.id = sa.judge_user_id
+      JOIN users u ON u.id = sa.jury_user_id
       LEFT JOIN individuals i ON i.user_id = u.id
       LEFT JOIN organizations o ON o.user_id = u.id
       WHERE sa.film_id = ?
@@ -322,28 +323,30 @@ async function getById(req, res) {
         sr.id as review_id,
         sr.assignment_id,
         sr.film_id,
-        sr.judge_user_id,
+        sr.jury_user_id,
         sr.round_number,
         sr.criteria_scores,
         sr.overall_rating,
         sr.notes,
         sr.submitted_at,
-        COALESCE(i.name, o.name, u.email) as judge_name
+        COALESCE(i.name, o.name, u.email) as jury_name
       FROM screening_reviews sr
-      JOIN users u ON u.id = sr.judge_user_id
+      JOIN users u ON u.id = sr.jury_user_id
       LEFT JOIN individuals i ON i.user_id = u.id
       LEFT JOIN organizations o ON o.user_id = u.id
       WHERE sr.film_id = ?
     `, [id]);
 
-    // Merge assignments with review outcomes so assigned judges always appear
+    // Merge assignments with review outcomes so assigned jury always appears
     const mergedReviewItems = assignments.map(a => {
-      const rev = reviews.find(r => (r.assignment_id && r.assignment_id === a.assignment_id) || (r.judge_user_id === a.judge_user_id && r.round_number === a.round_number));
+      const rev = reviews.find(r => (r.assignment_id && r.assignment_id === a.assignment_id) || (r.jury_user_id === a.jury_user_id && r.round_number === a.round_number));
       return {
         assignment_id: a.assignment_id,
-        judge_id: a.judge_user_id,
-        judge_name: a.judge_name,
-        name: a.judge_name,
+        jury_id: a.jury_user_id,
+        judge_id: a.jury_user_id,
+        jury_name: a.jury_name,
+        judge_name: a.jury_name,
+        name: a.jury_name,
         round_number: a.round_number || 1,
         status: rev ? 'completed' : (a.assignment_status || 'assigned'),
         overall_rating: rev ? rev.overall_rating : null,
@@ -355,12 +358,14 @@ async function getById(req, res) {
 
     // Also include any standalone review without an assignment
     reviews.forEach(r => {
-      if (!mergedReviewItems.some(item => (r.assignment_id && item.assignment_id === r.assignment_id) || (item.judge_id === r.judge_user_id && item.round_number === r.round_number))) {
+      if (!mergedReviewItems.some(item => (r.assignment_id && item.assignment_id === r.assignment_id) || (item.jury_id === r.jury_user_id && item.round_number === r.round_number))) {
         mergedReviewItems.push({
           assignment_id: r.assignment_id,
-          judge_id: r.judge_user_id,
-          judge_name: r.judge_name,
-          name: r.judge_name,
+          jury_id: r.jury_user_id,
+          judge_id: r.jury_user_id,
+          jury_name: r.jury_name,
+          judge_name: r.jury_name,
+          name: r.jury_name,
           round_number: r.round_number || 1,
           status: 'completed',
           overall_rating: r.overall_rating,
@@ -384,6 +389,7 @@ async function getById(req, res) {
 
     res.json({
       ...rows[0],
+      assigned_jury: mergedReviewItems,
       assigned_judges: mergedReviewItems,
       reviews: mergedReviewItems,
       assignments,

@@ -129,10 +129,10 @@ export default function RegistrationPage() {
       {/* Page Header */}
       <div className="fc-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h1 className="fc-page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: '#111827' }}>
+          <h1 className="fc-page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: 'var(--fc-text-main)' }}>
             Attendee Registration & Badges
           </h1>
-          <p className="fc-page-subtitle" style={{ color: '#6b7280', marginTop: '4px', fontSize: '0.9rem' }}>
+          <p className="fc-page-subtitle" style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem' }}>
             Onboard Bangalore audience delegates, bulk import Kashish data, and print physical accreditation passes
           </p>
         </div>
@@ -140,8 +140,9 @@ export default function RegistrationPage() {
         <button
           onClick={() => setShowImportModal(true)}
           style={{
-            background: '#fff',
-            border: '1px solid #d1d5db',
+            background: 'var(--fc-surface-card)',
+            color: 'var(--fc-text-main)',
+            border: '1px solid var(--fc-border)',
             padding: '10px 18px',
             borderRadius: '8px',
             fontWeight: 600,
@@ -149,7 +150,7 @@ export default function RegistrationPage() {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+            boxShadow: 'var(--shadow-sm)'
           }}
         >
           <span>📁 Import Kashish CSV / Data</span>
@@ -161,14 +162,14 @@ export default function RegistrationPage() {
         
         {/* Left: Registration Intake Form */}
         <div>
-          <div className="fc-card" style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-            <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: '#1f2937' }}>
+          <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
+            <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)' }}>
               Bangalore Attendee Intake
             </h2>
 
             <form onSubmit={handleIntakeSubmit}>
               <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
                   Full Name *
                 </label>
                 <input 
@@ -177,12 +178,12 @@ export default function RegistrationPage() {
                   placeholder="e.g. Alex Fernandes"
                   value={intakeForm.name}
                   onChange={(e) => setIntakeForm({ ...intakeForm, name: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                 />
               </div>
 
               <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
                   Mobile Number
                 </label>
                 <input 
@@ -190,12 +191,12 @@ export default function RegistrationPage() {
                   placeholder="+91 98765 43210"
                   value={intakeForm.phone}
                   onChange={(e) => setIntakeForm({ ...intakeForm, phone: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                 />
               </div>
 
               <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
                   Email Address
                 </label>
                 <input 
@@ -203,18 +204,18 @@ export default function RegistrationPage() {
                   placeholder="alex@example.com"
                   value={intakeForm.email}
                   onChange={(e) => setIntakeForm({ ...intakeForm, email: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                 />
               </div>
 
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '4px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
                   Delegate Category
                 </label>
                 <select 
                   value={intakeForm.delegate_category}
                   onChange={(e) => setIntakeForm({ ...intakeForm, delegate_category: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db', background: '#fff' }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                 >
                   {categories.map(c => (
                     <option key={c.id} value={c.code}>{c.name} ({c.badge_ribbon_text || c.code})</option>
@@ -249,7 +250,7 @@ export default function RegistrationPage() {
 
         {/* Right: Attendee Roster Table */}
         <div>
-          <div className="fc-card" style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+          <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
             
             {/* Filter & Search Bar */}
             <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
@@ -259,14 +260,14 @@ export default function RegistrationPage() {
                   placeholder="Search by name, mobile, email, or badge #..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  style={{ width: '100%', padding: '8px 14px', borderRadius: '6px', border: '1px solid #d1d5db' }}
+                  style={{ width: '100%', padding: '8px 14px', borderRadius: '6px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
                 />
               </form>
 
               <select 
                 value={selectedCat} 
                 onChange={(e) => setSelectedCat(e.target.value)}
-                style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #d1d5db', background: '#fff' }}
+                style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
               >
                 <option value="">All Categories</option>
                 {categories.map(c => (
@@ -286,7 +287,7 @@ export default function RegistrationPage() {
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
-                    <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb', textAlign: 'left', color: '#6b7280' }}>
+                    <tr style={{ background: 'var(--fc-surface)', borderBottom: '1px solid var(--fc-border)', textAlign: 'left', color: 'var(--fc-text-muted)' }}>
                       <th style={{ padding: '10px 12px' }}>Badge #</th>
                       <th style={{ padding: '10px 12px' }}>Delegate</th>
                       <th style={{ padding: '10px 12px' }}>Category</th>
@@ -297,12 +298,12 @@ export default function RegistrationPage() {
                   </thead>
                   <tbody>
                     {attendees.map((a) => (
-                      <tr key={a.attendee_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <tr key={a.attendee_id} style={{ borderBottom: '1px solid var(--fc-border-subtle, var(--fc-border))' }}>
                         <td style={{ padding: '10px 12px', fontWeight: 700, color: '#3b82f6' }}>
                           #{a.attendee_id}
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <div style={{ fontWeight: 600, color: '#111827' }}>{a.name}</div>
+                          <div style={{ fontWeight: 600, color: 'var(--fc-text-main)' }}>{a.name}</div>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <span 
@@ -319,17 +320,17 @@ export default function RegistrationPage() {
                             {a.badge_ribbon || a.delegate_category}
                           </span>
                         </td>
-                        <td style={{ padding: '10px 12px', color: '#4b5563' }}>
+                        <td style={{ padding: '10px 12px', color: 'var(--fc-text-secondary)' }}>
                           <div>{a.phone || '—'}</div>
-                          <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{a.email}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)' }}>{a.email}</div>
                         </td>
-                        <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0f172a' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--fc-text-main)' }}>
                           🎬 {a.screenings_attended || 0}
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <button
                             onClick={() => setBadgeModal(a)}
-                            style={{ background: '#f3f4f6', border: '1px solid #d1d5db', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+                            style={{ background: 'var(--fc-surface)', color: 'var(--fc-text-main)', border: '1px solid var(--fc-border)', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
                           >
                             🪪 View Pass
                           </button>
@@ -347,28 +348,28 @@ export default function RegistrationPage() {
 
       {/* ── MODAL: BADGE PASS PREVIEW ───────────────────────────────────────── */}
       {badgeModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
-          <div style={{ background: '#fff', borderRadius: '16px', maxWidth: '380px', width: '90%', padding: '24px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <div style={{ background: 'var(--fc-surface-card)', color: 'var(--fc-text-main)', border: '1px solid var(--fc-border)', borderRadius: '16px', maxWidth: '380px', width: '90%', padding: '24px', textAlign: 'center', boxShadow: 'var(--shadow-xl)' }}>
             
             {/* Lanyard Punch Hole Indicator */}
-            <div style={{ width: '40px', height: '10px', background: '#e5e7eb', borderRadius: '5px', margin: '0 auto 16px auto' }}></div>
+            <div style={{ width: '40px', height: '10px', background: 'var(--fc-border)', borderRadius: '5px', margin: '0 auto 16px auto' }}></div>
 
             {/* Festival Header */}
             <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#e11d48', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
               KASHISH PRIDE FILM FESTIVAL
             </div>
-            <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '16px' }}>Bangalore Edition · 2026</div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--fc-text-muted)', marginBottom: '16px' }}>Bangalore Edition · 2026</div>
 
             {/* Delegate Name */}
-            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: '#111827', margin: '0 0 6px 0' }}>
+            <div style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--fc-text-main)', margin: '0 0 6px 0' }}>
               {badgeModal.name}
             </div>
-            <div style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '16px' }}>
+            <div style={{ fontSize: '0.9rem', color: 'var(--fc-text-secondary)', marginBottom: '16px' }}>
               Badge #{badgeModal.attendee_id}
             </div>
 
             {/* QR Code Container */}
-            <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', display: 'inline-block', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+            <div style={{ background: '#ffffff', padding: '16px', borderRadius: '12px', display: 'inline-block', border: '1px solid var(--fc-border)', marginBottom: '16px' }}>
               <img 
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(badgeModal.qr_token || String(badgeModal.attendee_id))}`} 
                 alt="Badge QR"
@@ -404,7 +405,7 @@ export default function RegistrationPage() {
               </button>
               <button 
                 onClick={() => setBadgeModal(null)}
-                style={{ padding: '10px 16px', border: '1px solid #d1d5db', background: '#fff', borderRadius: '8px', cursor: 'pointer' }}
+                style={{ padding: '10px 16px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', borderRadius: '8px', cursor: 'pointer' }}
               >
                 Close
               </button>
@@ -415,10 +416,10 @@ export default function RegistrationPage() {
 
       {/* ── MODAL: CSV BULK IMPORTER ────────────────────────────────────────── */}
       {showImportModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
-          <div style={{ background: '#fff', borderRadius: '16px', maxWidth: '540px', width: '90%', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.2)' }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '1.25rem', fontWeight: 700 }}>Import Kashish Delegates</h3>
-            <p style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: '#6b7280' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <div style={{ background: 'var(--fc-surface-card)', color: 'var(--fc-text-main)', border: '1px solid var(--fc-border)', borderRadius: '16px', maxWidth: '540px', width: '90%', padding: '24px', boxShadow: 'var(--shadow-xl)' }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '1.25rem', fontWeight: 700, color: 'var(--fc-text-main)' }}>Import Kashish Delegates</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '0.85rem', color: 'var(--fc-text-muted)' }}>
               Paste comma-separated delegate rows in the format: <code>Name, Email, Mobile, Category</code>
             </p>
 
@@ -429,14 +430,14 @@ export default function RegistrationPage() {
                 placeholder="Rohan Verma, rohan@example.com, +91 9876543210, delegate&#10;Priya Sharma, priya@example.com, +91 9123456780, vip"
                 value={csvText}
                 onChange={(e) => setCsvText(e.target.value)}
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontFamily: 'monospace', fontSize: '0.85rem', marginBottom: '16px' }}
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontFamily: 'monospace', fontSize: '0.85rem', marginBottom: '16px' }}
               ></textarea>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button 
                   type="button" 
                   onClick={() => setShowImportModal(false)}
-                  style={{ padding: '8px 16px', border: '1px solid #d1d5db', background: '#fff', borderRadius: '6px', cursor: 'pointer' }}
+                  style={{ padding: '8px 16px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', borderRadius: '6px', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>

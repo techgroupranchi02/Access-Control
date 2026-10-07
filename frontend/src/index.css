@@ -41,6 +41,12 @@
   --fc-badge-burgundy: #a82f2f;
   --fc-badge-subtle: #e5e0d8;
 
+  /* Alerts */
+  --fc-alert-bg: #fef2f2;
+  --fc-alert-border: #fca5a5;
+  --fc-alert-title: #991b1b;
+  --fc-alert-text: #7f1d1d;
+
   /* Font */
   --fc-font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-family: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -3892,6 +3898,12 @@ body.dark-theme,
   --fc-border-strong: rgba(255, 255, 255, 0.28);
   --fc-border-subtle: rgba(255, 255, 255, 0.06);
 
+  /* Alerts */
+  --fc-alert-bg: rgba(220, 38, 38, 0.15);
+  --fc-alert-border: rgba(220, 38, 38, 0.35);
+  --fc-alert-title: #fca5a5;
+  --fc-alert-text: #fecaca;
+
   /* Base Variables */
   --bg-primary: #0e131b;
   --bg-secondary: #161f2c;
@@ -3978,20 +3990,33 @@ body.dark-theme .card-title,
 body.dark-theme .fc-card-title,
 body.dark-theme .hierarchy-group-title,
 body.dark-theme .modal-title,
-body.dark-theme .fc-modal-header h2 {
+body.dark-theme .fc-modal-header h2,
+body.dark-theme h1,
+body.dark-theme h2,
+body.dark-theme h3,
+[data-theme="dark"] .fc-page-title,
+[data-theme="dark"] .page-title,
+[data-theme="dark"] .card-title,
+[data-theme="dark"] .fc-card-title,
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3 {
   color: #ffffff;
 }
 
 body.dark-theme .fc-card,
+[data-theme="dark"] .fc-card,
 body.dark-theme .fc-table-card,
+[data-theme="dark"] .fc-table-card,
 body.dark-theme .card,
+[data-theme="dark"] .card,
 body.dark-theme .hierarchy-group-card,
 body.dark-theme .hierarchy-edition-bar,
 body.dark-theme .view-mode-toggle,
 body.dark-theme .stat-card {
-  background-color: #161f2c;
-  border-color: rgba(255, 255, 255, 0.1);
-  color: #f3f4f6;
+  background-color: var(--fc-surface-card);
+  border-color: var(--fc-border);
+  color: var(--fc-text-main);
 }
 
 body.dark-theme .fc-table thead,
@@ -4536,6 +4561,37 @@ body.dark-theme .checkbox-label.checked {
   border: 1px solid #f5d0fe;
 }
 
+/* Dark theme overrides for Member Table Group Badges */
+body.dark-theme .fc-group-badge.admin,
+[data-theme="dark"] .fc-group-badge.admin {
+  background: rgba(220, 38, 38, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(220, 38, 38, 0.4);
+}
+
+body.dark-theme .fc-group-badge.judge,
+body.dark-theme .fc-group-badge.jury,
+[data-theme="dark"] .fc-group-badge.judge,
+[data-theme="dark"] .fc-group-badge.jury {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+body.dark-theme .fc-group-badge.volunteer,
+[data-theme="dark"] .fc-group-badge.volunteer {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+body.dark-theme .fc-group-badge.custom,
+[data-theme="dark"] .fc-group-badge.custom {
+  background: rgba(168, 85, 247, 0.2);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
 /* Dark theme overrides for new elements */
 body.dark-theme .fc-group-card,
 [data-theme="dark"] .fc-group-card {
@@ -4843,10 +4899,35 @@ body.dark-theme .fc-perm-checkbox-item.read-only.unchecked,
 
 /* Dark Theme Overrides for Tree Layout */
 body.dark-theme .fc-perm-tree-card,
-[data-theme="dark"] .fc-perm-tree-card {
-  background: #111827;
-  border-color: rgba(255, 255, 255, 0.1);
+body.dark-theme .fc-single-tree-card,
+[data-theme="dark"] .fc-perm-tree-card,
+[data-theme="dark"] .fc-single-tree-card {
+  background: #111827 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
   box-shadow: none;
+}
+
+body.dark-theme .fc-tree-domain-branch,
+[data-theme="dark"] .fc-tree-domain-branch {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+body.dark-theme .fc-perm-source-tag,
+[data-theme="dark"] .fc-perm-source-tag {
+  background: rgba(220, 38, 38, 0.2) !important;
+  color: #fca5a5 !important;
+}
+
+body.dark-theme .fc-perm-custom-tag,
+[data-theme="dark"] .fc-perm-custom-tag {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+body.dark-theme .fc-perm-tree-bullet,
+[data-theme="dark"] .fc-perm-tree-bullet {
+  color: #64748b;
 }
 
 body.dark-theme .fc-perm-card-title,

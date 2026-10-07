@@ -69,14 +69,15 @@ export default function FilmDetailDrawer({
   const [advanceLoading, setAdvanceLoading] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState('');
 
-  // Fetch available judges for assignment
+  // Fetch available jury members for assignment
   useEffect(() => {
-    api.get('/reviews/judges')
+    api.get('/reviews/jury')
+      .catch(() => api.get('/reviews/judges'))
       .then((res) => {
         setAvailableJudges(res.data?.data || []);
       })
       .catch((err) => {
-        console.error('Failed to load judges:', err);
+        console.error('Failed to load jury members:', err);
       });
   }, []);
 
@@ -99,18 +100,20 @@ export default function FilmDetailDrawer({
 
   useEffect(() => {
     if (showAdvanceModal && activeFilm) {
-      const existingR2JudgeIds = (activeFilm.assigned_judges || [])
+      const assignedList = activeFilm.assigned_jury || activeFilm.assigned_judges || [];
+      const existingR2JudgeIds = assignedList
         .filter((j) => j.round_number === 2)
-        .map((j) => j.judge_id || j.id);
+        .map((j) => j.jury_id || j.judge_id || j.id);
       setSelectedR2JudgeIds(existingR2JudgeIds);
     }
   }, [showAdvanceModal, activeFilm]);
 
   useEffect(() => {
     if (showR1AssignModal && activeFilm) {
-      const existingR1JudgeIds = (activeFilm.assigned_judges || [])
+      const assignedList = activeFilm.assigned_jury || activeFilm.assigned_judges || [];
+      const existingR1JudgeIds = assignedList
         .filter((j) => (j.round_number || 1) === 1)
-        .map((j) => j.judge_id || j.id);
+        .map((j) => j.jury_id || j.judge_id || j.id);
       setSelectedR1JudgeIds(existingR1JudgeIds);
     }
   }, [showR1AssignModal, activeFilm]);
@@ -257,8 +260,10 @@ export default function FilmDetailDrawer({
     setExpandedReviews((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Determine review items from assigned_judges or reviews
-  const reviewItems = (activeFilm.assigned_judges && activeFilm.assigned_judges.length > 0)
+  // Determine review items from assigned_jury or assigned_judges or reviews
+  const reviewItems = (activeFilm.assigned_jury && activeFilm.assigned_jury.length > 0)
+    ? activeFilm.assigned_jury
+    : (activeFilm.assigned_judges && activeFilm.assigned_judges.length > 0)
     ? activeFilm.assigned_judges
     : (activeFilm.reviews || []);
 
@@ -268,16 +273,16 @@ export default function FilmDetailDrawer({
   const r2Completed = round2Items.filter((i) => i.status === 'completed' || i.overall_rating != null).length;
 
   const renderReviewCard = (item, idx, prefix) => {
-    const cardKey = `${prefix}-${item.assignment_id || item.judge_id || idx}`;
+    const cardKey = `${prefix}-${item.assignment_id || item.jury_id || item.judge_id || idx}`;
     const isExpanded = expandedReviews[cardKey];
     const isCompleted = item.status === 'completed' || item.overall_rating != null;
-    const judgeName = item.judge_name || item.name || 'Judge';
+    const juryName = item.jury_name || item.judge_name || item.name || 'Jury Member';
 
     return (
       <div key={cardKey} className="fc-drawer-review-card">
         <div className="fc-drawer-review-header" onClick={() => toggleReviewExpand(cardKey)}>
           <div className="fc-drawer-review-left">
-            <span className="fc-drawer-review-judge">{judgeName}</span>
+            <span className="fc-drawer-review-judge">{juryName}</span>
             {isCompleted && (
               <>
                 <span className="fc-drawer-review-done-pill">Done</span>
@@ -319,7 +324,7 @@ export default function FilmDetailDrawer({
               </>
             ) : (
               <div style={{ color: 'var(--fc-text-muted)', fontSize: '0.82rem', fontStyle: 'italic', padding: '6px 0' }}>
-                Awaiting screening review submission from {judgeName}.
+                Awaiting screening review submission from {juryName}.
               </div>
             )}
           </div>
@@ -716,10 +721,10 @@ export default function FilmDetailDrawer({
               {/* Reviewer Selection */}
               <div>
                 <div className="fc-advance-section-label">
-                  ASSIGN ROUND 2 REVIEWERS (OPTIONAL)
+                  ASSIGN ROUND 2 JURY MEMBERS (OPTIONAL)
                 </div>
                 <p style={{ fontSize: '0.8rem', color: 'var(--fc-text-secondary)', margin: '0 0 10px 0' }}>
-                  Select jury members to evaluate this film in Round 2. Reviewers can also be assigned or changed later in the Review Dashboard.
+                  Select jury members to evaluate this film in Round 2. Jury can also be assigned or changed later in the Review Dashboard.
                 </p>
 
                 {availableJudges.length === 0 ? (
@@ -818,10 +823,10 @@ export default function FilmDetailDrawer({
 
               <div>
                 <div className="fc-advance-section-label">
-                  SELECT ROUND 1 REVIEWERS
+                  SELECT ROUND 1 JURY MEMBERS
                 </div>
                 <p style={{ fontSize: '0.8rem', color: 'var(--fc-text-secondary)', margin: '0 0 10px 0' }}>
-                  Choose reviewers who will receive this film in their queue to review and score.
+                  Choose jury members who will receive this film in their queue to review and score.
                 </p>
 
                 {availableJudges.length === 0 ? (

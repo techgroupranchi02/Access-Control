@@ -15,6 +15,13 @@ const GROUP_PERMISSIONS = {
     { key: 'tasks:*', label: 'Task Management' },
     { key: 'payouts:*', label: 'Payouts Control' }
   ],
+  jury: [
+    { key: 'jury:view_panel', label: 'View Jury Panel' },
+    { key: 'jury:score', label: 'Score Submissions' },
+    { key: 'jury:submit_decision', label: 'Submit Ballots' },
+    { key: 'review:evaluate', label: 'Evaluate Reviews' },
+    { key: 'submission:view', label: 'View Submissions' }
+  ],
   judge: [
     { key: 'jury:view_panel', label: 'View Jury Panel' },
     { key: 'jury:score', label: 'Score Submissions' },
@@ -177,7 +184,7 @@ async function list(req, res) {
 
       let accessTier = 'General Access';
       if (permData.roleKeys.includes('admin')) accessTier = 'Full Control';
-      else if (permData.roleKeys.includes('judge')) accessTier = 'Jury & Scoring';
+      else if (permData.roleKeys.includes('jury') || permData.roleKeys.includes('judge')) accessTier = 'Jury & Scoring';
       else if (permData.roleKeys.includes('volunteer')) accessTier = 'Assigned Only';
 
       return {
@@ -205,7 +212,7 @@ async function list(req, res) {
       JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
       JOIN permissions p ON p.id = mgp.permission_id
     `);
-    const groupDefaults = { admin: [], judge: [], volunteer: [] };
+    const groupDefaults = { admin: [], jury: [], judge: [], volunteer: [] };
     for (const gp of groupPermRows) {
       if (groupDefaults[gp.group_key]) {
         groupDefaults[gp.group_key].push(gp.permission_key);
@@ -352,6 +359,7 @@ async function searchIndividuals(req, res) {
       JOIN users u ON u.id = i.user_id
       WHERE 
         (u.status = 1 OR u.status IS NULL)
+        AND u.account_type = 'individual'
         AND (
           i.name LIKE ? 
           OR u.email LIKE ? 
@@ -398,7 +406,7 @@ async function syncUserCustomPermissions(userId, eventId, permissions, targetRol
     } else if (typeof targetRole === 'number') {
       const rows = await query('SELECT id, name FROM event_custom_groups WHERE id = ? AND event_id = ?', [targetRole, eventId]);
       if (rows.length > 0) customGroup = rows[0];
-    } else if (typeof targetRole === 'string' && targetRole !== 'admin' && targetRole !== 'judge' && targetRole !== 'volunteer') {
+    } else if (typeof targetRole === 'string' && targetRole !== 'admin' && targetRole !== 'jury' && targetRole !== 'judge' && targetRole !== 'volunteer') {
       const rows = await query('SELECT id, name FROM event_custom_groups WHERE name = ? AND event_id = ?', [targetRole, eventId]);
       if (rows.length > 0) customGroup = rows[0];
     }
@@ -499,7 +507,7 @@ async function create(req, res) {
         SELECT u.id 
         FROM users u 
         JOIN individuals i ON i.user_id = u.id 
-        WHERE u.email = ?
+        WHERE u.email = ? AND u.account_type = 'individual'
         LIMIT 1
       `, [email.toLowerCase().trim()]);
 
@@ -510,7 +518,7 @@ async function create(req, res) {
 
     if (!targetUserId) {
       return res.status(400).json({ 
-        error: 'Only registered users from the Freecomers individuals directory can be added to a team.' 
+        error: 'Only registered individual / Filmmaker accounts from Freecomers can be added to a team.' 
       });
     }
 
@@ -519,13 +527,13 @@ async function create(req, res) {
       SELECT u.id, u.email, i.name, i.username, i.image_name 
       FROM individuals i 
       JOIN users u ON u.id = i.user_id 
-      WHERE u.id = ?
+      WHERE u.id = ? AND u.account_type = 'individual'
       LIMIT 1
     `, [targetUserId]);
 
     if (indRows.length === 0) {
       return res.status(400).json({ 
-        error: 'Selected user is not a registered individual. Other users cannot be added to a team.' 
+        error: 'Selected user is not a registered individual / Filmmaker account. Film Organization accounts cannot be added to a team.' 
       });
     }
 
@@ -602,8 +610,8 @@ async function assignUserToGroups(userId, eventId, rawGroups) {
       const k = gk.toLowerCase().trim();
       if (k === 'admin' || k.includes('admin')) {
         if (!standardKeys.includes('admin')) standardKeys.push('admin');
-      } else if (k === 'judge' || k.includes('judge')) {
-        if (!standardKeys.includes('judge')) standardKeys.push('judge');
+      } else if (k === 'jury' || k === 'judge' || k.includes('jury') || k.includes('judge')) {
+        if (!standardKeys.includes('jury')) standardKeys.push('jury');
       } else if (k === 'volunteer' || k.includes('volunteer')) {
         if (!standardKeys.includes('volunteer')) standardKeys.push('volunteer');
       }
@@ -816,7 +824,7 @@ async function createCustomGroup(req, res) {
     const trimmedName = name.trim();
 
     // Prevent using reserved group names
-    if (['admin', 'judge', 'volunteer', 'all'].includes(trimmedName.toLowerCase())) {
+    if (['admin', 'jury', 'judge', 'volunteer', 'all'].includes(trimmedName.toLowerCase())) {
       return res.status(400).json({ error: `"${trimmedName}" is a reserved group name. Please choose another name.` });
     }
 

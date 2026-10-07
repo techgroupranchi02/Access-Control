@@ -1,7 +1,7 @@
 /**
  * Audience Module Routes
  * 
- * Defines protected API endpoints for festival staff (Admin, Volunteer, Judge)
+ * Defines protected API endpoints for festival staff (Admin, Volunteer, Jury)
  * and public endpoints for mobile voters scanning projected screen QR codes.
  */
 

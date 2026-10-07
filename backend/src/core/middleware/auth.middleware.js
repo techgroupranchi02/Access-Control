@@ -44,6 +44,8 @@ function authenticate(req, res, next) {
       id: decoded.id,
       email: decoded.email,
       name: decoded.name,
+      role: decoded.role || (decoded.isSuperAdmin ? 'admin' : 'user'),
+      isSuperAdmin: Boolean(decoded.isSuperAdmin),
     };
 
     next();
@@ -68,7 +70,13 @@ function optionalAuth(req, res, next) {
     }
     if (token) {
       const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
-      req.user = { id: decoded.id, email: decoded.email, name: decoded.name };
+      req.user = {
+        id: decoded.id,
+        email: decoded.email,
+        name: decoded.name,
+        role: decoded.role || (decoded.isSuperAdmin ? 'admin' : 'user'),
+        isSuperAdmin: Boolean(decoded.isSuperAdmin),
+      };
     }
   } catch {
     // Silently ignore — user remains unauthenticated

@@ -265,7 +265,7 @@ export default function AdminPage() {
                         {editingPerms[role.id] ? (
                           /* Interactive Checkbox Grid Editor (identical to Tab View with search & quick actions) */
                           <div style={{
-                            background: '#ffffff',
+                            background: 'var(--fc-surface-card)',
                             border: '1px solid var(--fc-border, #e8e2db)',
                             borderRadius: '10px',
                             padding: '1.25rem',
@@ -277,7 +277,7 @@ export default function AdminPage() {
                                 type="text"
                                 placeholder="🔍 Filter permissions (e.g. custom, submission, review)..."
                                 className="form-input"
-                                style={{ maxWidth: '320px', padding: '0.4rem 0.75rem', fontSize: '0.825rem', background: '#ffffff', border: '1px solid var(--fc-border-strong, #bfb8ae)', color: '#1c1917' }}
+                                style={{ maxWidth: '320px', padding: '0.4rem 0.75rem', fontSize: '0.825rem', background: 'var(--fc-surface)', border: '1px solid var(--fc-border-strong, #bfb8ae)', color: 'var(--fc-text-main)' }}
                                 value={permSearch[role.id] || ''}
                                 onChange={(e) => setPermSearch(prev => ({ ...prev, [role.id]: e.target.value }))}
                               />
@@ -390,7 +390,7 @@ export default function AdminPage() {
                             <button
                               type="button"
                               className="btn btn-sm btn-outline"
-                              style={{ fontSize: '0.75rem', padding: '3px 10px', border: '1px solid var(--fc-border-strong, #bfb8ae)', color: 'var(--fc-brand, #a82f2f)', background: '#ffffff', borderRadius: '6px' }}
+                              style={{ fontSize: '0.75rem', padding: '3px 10px', border: '1px solid var(--fc-border-strong, #bfb8ae)', color: 'var(--fc-brand, #a82f2f)', background: 'var(--fc-surface-card)', borderRadius: '6px' }}
                               onClick={() => setEditingPerms(prev => ({ ...prev, [role.id]: true }))}
                             >
                               + Add / Edit Permissions

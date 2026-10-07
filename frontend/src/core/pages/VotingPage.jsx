@@ -84,16 +84,16 @@ export default function VotingPage() {
       {/* Page Header */}
       <div className="fc-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h1 className="fc-page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: '#111827' }}>
+          <h1 className="fc-page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: 'var(--fc-text-main)' }}>
             Audience Choice Voting & Awards
           </h1>
-          <p className="fc-page-subtitle" style={{ color: '#6b7280', marginTop: '4px', fontSize: '0.9rem' }}>
+          <p className="fc-page-subtitle" style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem' }}>
             Auditorium voting window triggers, cinema screen QR projector, and Bayesian statistical scoring
           </p>
         </div>
 
         {/* Tab Switcher */}
-        <div style={{ display: 'flex', background: '#f3f4f6', padding: '4px', borderRadius: '8px' }}>
+        <div style={{ display: 'flex', background: 'var(--fc-surface-hover)', padding: '4px', borderRadius: '8px', border: '1px solid var(--fc-border)' }}>
           <button 
             onClick={() => setActiveTab('controller')}
             style={{
@@ -103,9 +103,9 @@ export default function VotingPage() {
               fontWeight: 600,
               fontSize: '0.85rem',
               cursor: 'pointer',
-              background: activeTab === 'controller' ? '#fff' : 'transparent',
-              color: activeTab === 'controller' ? '#111827' : '#6b7280',
-              boxShadow: activeTab === 'controller' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+              background: activeTab === 'controller' ? 'var(--fc-surface-card)' : 'transparent',
+              color: activeTab === 'controller' ? 'var(--fc-text-main)' : 'var(--fc-text-muted)',
+              boxShadow: activeTab === 'controller' ? 'var(--shadow-sm)' : 'none'
             }}
           >
             🎬 Screening Windows
@@ -119,9 +119,9 @@ export default function VotingPage() {
               fontWeight: 600,
               fontSize: '0.85rem',
               cursor: 'pointer',
-              background: activeTab === 'leaderboard' ? '#fff' : 'transparent',
-              color: activeTab === 'leaderboard' ? '#111827' : '#6b7280',
-              boxShadow: activeTab === 'leaderboard' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+              background: activeTab === 'leaderboard' ? 'var(--fc-surface-card)' : 'transparent',
+              color: activeTab === 'leaderboard' ? 'var(--fc-text-main)' : 'var(--fc-text-muted)',
+              boxShadow: activeTab === 'leaderboard' ? 'var(--shadow-sm)' : 'none'
             }}
           >
             🏆 Live Leaderboard ({leaderboard.length})
@@ -135,9 +135,9 @@ export default function VotingPage() {
               fontWeight: 600,
               fontSize: '0.85rem',
               cursor: 'pointer',
-              background: activeTab === 'fraud' ? '#fff' : 'transparent',
-              color: activeTab === 'fraud' ? '#111827' : '#6b7280',
-              boxShadow: activeTab === 'fraud' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+              background: activeTab === 'fraud' ? 'var(--fc-surface-card)' : 'transparent',
+              color: activeTab === 'fraud' ? 'var(--fc-text-main)' : 'var(--fc-text-muted)',
+              boxShadow: activeTab === 'fraud' ? 'var(--shadow-sm)' : 'none'
             }}
           >
             🛡️ Fraud Audit ({flaggedVotes.length})
@@ -157,11 +157,11 @@ export default function VotingPage() {
                 key={s.id} 
                 className="fc-card" 
                 style={{
-                  background: '#fff',
+                  background: 'var(--fc-surface-card)',
                   borderRadius: '12px',
-                  border: isOpen ? '2px solid #10b981' : '1px solid #e5e7eb',
+                  border: isOpen ? '2px solid #10b981' : '1px solid var(--fc-border)',
                   padding: '20px',
-                  boxShadow: isOpen ? '0 4px 12px rgba(16, 185, 129, 0.15)' : '0 1px 3px rgba(0,0,0,0.05)',
+                  boxShadow: isOpen ? '0 4px 12px rgba(16, 185, 129, 0.15)' : 'var(--shadow-sm)',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between'
@@ -176,46 +176,46 @@ export default function VotingPage() {
                         fontSize: '0.75rem',
                         fontWeight: 800,
                         textTransform: 'uppercase',
-                        background: isOpen ? '#ecfdf5' : isClosed ? '#f3f4f6' : '#eff6ff',
-                        color: isOpen ? '#059669' : isClosed ? '#6b7280' : '#2563eb'
+                        background: isOpen ? 'rgba(16, 185, 129, 0.15)' : isClosed ? 'var(--fc-surface)' : 'rgba(59, 130, 246, 0.15)',
+                        color: isOpen ? '#34d399' : isClosed ? 'var(--fc-text-muted)' : '#60a5fa'
                       }}
                     >
                       {isOpen ? '● VOTING ACTIVE' : isClosed ? 'VOTING CONCLUDED' : 'PENDING SCREENING'}
                     </span>
-                    <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--fc-text-muted)' }}>
                       {s.block_type === 'short_block' ? 'Short Film Package' : 'Feature Film'}
                     </span>
                   </div>
 
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: '8px 0 4px 0', color: '#111827' }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: '8px 0 4px 0', color: 'var(--fc-text-main)' }}>
                     {s.title}
                   </h3>
-                  <div style={{ fontSize: '0.85rem', color: '#4b5563', marginBottom: '12px' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--fc-text-secondary)', marginBottom: '12px' }}>
                     📍 {s.venue_name} · 🕒 {s.start_time} - {s.end_time}
                   </div>
 
                   {/* Films in this Screening */}
-                  <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '0.85rem' }}>
-                    <div style={{ fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                  <div style={{ background: 'var(--fc-surface)', border: '1px solid var(--fc-border)', padding: '10px 14px', borderRadius: '8px', marginBottom: '14px', fontSize: '0.85rem' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
                       Programmed Films ({s.films ? s.films.length : 0}):
                     </div>
                     {s.films && s.films.map(f => (
-                      <div key={f.film_id} style={{ display: 'flex', justifyContent: 'space-between', color: '#475569', fontSize: '0.8rem', padding: '2px 0' }}>
+                      <div key={f.film_id} style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--fc-text-secondary)', fontSize: '0.8rem', padding: '2px 0' }}>
                         <span>• {f.title} ({f.runtime}m)</span>
-                        <span style={{ color: '#94a3b8' }}>{f.director}</span>
+                        <span style={{ color: 'var(--fc-text-muted)' }}>{f.director}</span>
                       </div>
                     ))}
                   </div>
 
                   {/* Operational Metrics */}
-                  <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', color: '#4b5563', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', color: 'var(--fc-text-secondary)', marginBottom: '16px' }}>
                     <div>👥 <strong>{s.checked_in_count || 0}</strong> Checked-In</div>
                     <div>🗳️ <strong>{s.total_votes_cast || 0}</strong> Votes Submitted</div>
                   </div>
                 </div>
 
                 {/* Actions Deck */}
-                <div style={{ display: 'flex', gap: '10px', borderTop: '1px solid #f3f4f6', paddingTop: '14px' }}>
+                <div style={{ display: 'flex', gap: '10px', borderTop: '1px solid var(--fc-border)', paddingTop: '14px' }}>
                   {!isOpen && (
                     <button
                       onClick={() => handleOpenVoting(s.id)}
@@ -280,19 +280,19 @@ export default function VotingPage() {
 
       {/* ── TAB 2: AUDIENCE CHOICE LEADERBOARD ─────────────────────────────── */}
       {activeTab === 'leaderboard' && (
-        <div className="fc-card" style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: '#111827' }}>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, color: 'var(--fc-text-main)' }}>
                 Official Audience Choice Award Standings
               </h2>
-              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
+              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--fc-text-muted)' }}>
                 Ranked by Bayesian Weighted Score (Threshold $m = 25$ votes) to eliminate small-sample bias
               </p>
             </div>
             <button 
               onClick={fetchData} 
-              style={{ background: '#f3f4f6', border: '1px solid #d1d5db', padding: '6px 14px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+              style={{ background: 'var(--fc-surface)', color: 'var(--fc-text-main)', border: '1px solid var(--fc-border)', padding: '6px 14px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
             >
               🔄 Recalculate Now
             </button>
@@ -301,7 +301,7 @@ export default function VotingPage() {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
               <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'left', color: '#475569' }}>
+                <tr style={{ background: 'var(--fc-surface)', borderBottom: '2px solid var(--fc-border)', textAlign: 'left', color: 'var(--fc-text-secondary)' }}>
                   <th style={{ padding: '12px 14px' }}>Rank</th>
                   <th style={{ padding: '12px 14px' }}>Film Title & Director</th>
                   <th style={{ padding: '12px 14px' }}>Category</th>
@@ -315,37 +315,37 @@ export default function VotingPage() {
                 {leaderboard.map((item, idx) => {
                   const isTop3 = idx < 3;
                   return (
-                    <tr key={item.film_id} style={{ borderBottom: '1px solid #f1f5f9', background: idx === 0 ? '#fffbeb' : '#fff' }}>
-                      <td style={{ padding: '12px 14px', fontWeight: 800, fontSize: '1.1rem', color: idx === 0 ? '#b45309' : '#334155' }}>
+                    <tr key={item.film_id} style={{ borderBottom: '1px solid var(--fc-border-subtle, var(--fc-border))', background: idx === 0 ? 'var(--fc-brand-active-bg, rgba(220, 38, 38, 0.12))' : 'transparent' }}>
+                      <td style={{ padding: '12px 14px', fontWeight: 800, fontSize: '1.1rem', color: idx === 0 ? '#f59e0b' : 'var(--fc-text-secondary)' }}>
                         {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.95rem' }}>{item.film_title}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Directed by {item.director} · {item.runtime} mins</div>
+                        <div style={{ fontWeight: 700, color: 'var(--fc-text-main)', fontSize: '0.95rem' }}>{item.film_title}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)' }}>Directed by {item.director} · {item.runtime} mins</div>
                       </td>
-                      <td style={{ padding: '12px 14px', color: '#475569' }}>
-                        <span style={{ background: '#f1f5f9', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
+                      <td style={{ padding: '12px 14px', color: 'var(--fc-text-secondary)' }}>
+                        <span style={{ background: 'var(--fc-surface)', border: '1px solid var(--fc-border)', padding: '3px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--fc-text-secondary)' }}>
                           {item.film_category}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 14px', fontWeight: 700, color: '#334155' }}>
+                      <td style={{ padding: '12px 14px', fontWeight: 700, color: 'var(--fc-text-main)' }}>
                         {item.total_votes}
                       </td>
-                      <td style={{ padding: '12px 14px', color: '#64748b' }}>
+                      <td style={{ padding: '12px 14px', color: 'var(--fc-text-muted)' }}>
                         {parseFloat(item.raw_average).toFixed(2)} ★
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        <strong style={{ fontSize: '1.1rem', color: isTop3 ? '#059669' : '#0f172a' }}>
+                        <strong style={{ fontSize: '1.1rem', color: isTop3 ? '#10b981' : 'var(--fc-text-main)' }}>
                           {parseFloat(item.bayesian_score).toFixed(3)}
                         </strong>
                       </td>
                       <td style={{ padding: '12px 14px' }}>
                         {item.has_quorum ? (
-                          <span style={{ color: '#16a34a', fontWeight: 700, fontSize: '0.8rem', background: '#dcfce7', padding: '3px 8px', borderRadius: '4px' }}>
+                          <span style={{ color: '#16a34a', fontWeight: 700, fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)', padding: '3px 8px', borderRadius: '4px' }}>
                             Qualified ✓
                           </span>
                         ) : (
-                          <span style={{ color: '#b45309', fontSize: '0.75rem', background: '#fef3c7', padding: '3px 8px', borderRadius: '4px' }}>
+                          <span style={{ color: '#f59e0b', fontSize: '0.75rem', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '3px 8px', borderRadius: '4px' }}>
                             Needs 25 Votes
                           </span>
                         )}
@@ -361,8 +361,8 @@ export default function VotingPage() {
 
       {/* ── TAB 3: FRAUD AUDIT ──────────────────────────────────────────────── */}
       {activeTab === 'fraud' && (
-        <div className="fc-card" style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '24px' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 16px 0', color: '#111827' }}>
+        <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 16px 0', color: 'var(--fc-text-main)' }}>
             Suspicious & Flagged Votes Audit
           </h2>
           {flaggedVotes.length === 0 ? (
@@ -372,7 +372,7 @@ export default function VotingPage() {
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
-                <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>
+                <tr style={{ background: 'var(--fc-surface)', borderBottom: '1px solid var(--fc-border)', textAlign: 'left', color: 'var(--fc-text-muted)' }}>
                   <th style={{ padding: '10px' }}>Film</th>
                   <th style={{ padding: '10px' }}>Voter</th>
                   <th style={{ padding: '10px' }}>Rating</th>
@@ -383,12 +383,12 @@ export default function VotingPage() {
               </thead>
               <tbody>
                 {flaggedVotes.map(v => (
-                  <tr key={v.vote_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '10px', fontWeight: 600 }}>{v.film_title}</td>
-                    <td style={{ padding: '10px' }}>{v.attendee_name} ({v.attendee_phone})</td>
-                    <td style={{ padding: '10px', fontWeight: 700 }}>{v.rating} ★</td>
+                  <tr key={v.vote_id} style={{ borderBottom: '1px solid var(--fc-border-subtle, var(--fc-border))' }}>
+                    <td style={{ padding: '10px', fontWeight: 600, color: 'var(--fc-text-main)' }}>{v.film_title}</td>
+                    <td style={{ padding: '10px', color: 'var(--fc-text-secondary)' }}>{v.attendee_name} ({v.attendee_phone})</td>
+                    <td style={{ padding: '10px', fontWeight: 700, color: '#f59e0b' }}>{v.rating} ★</td>
                     <td style={{ padding: '10px', color: '#ef4444' }}>{v.status}</td>
-                    <td style={{ padding: '10px', color: '#6b7280', fontSize: '0.75rem' }}>{v.ip_address}</td>
+                    <td style={{ padding: '10px', color: 'var(--fc-text-muted)', fontSize: '0.75rem' }}>{v.ip_address}</td>
                     <td style={{ padding: '10px' }}>
                       <button 
                         onClick={() => handleVoidVote(v.vote_id)}

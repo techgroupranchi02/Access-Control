@@ -15,6 +15,7 @@ const { authLimiter } = require('../middleware/rateLimiter.middleware');
 // Public routes (rate limited)
 router.post('/register', authLimiter, authController.register);
 router.post('/login', authLimiter, authController.login);
+router.post('/google', authLimiter, authController.googleLogin);
 
 // Protected routes
 router.post('/logout', authenticate, authController.logout);

@@ -71,10 +71,11 @@ async function getPipeline(req, res) {
 
     // All assignments for this event
     const assignments = await query(`
-      SELECT sa.id, sa.film_id, sa.round_number, sa.judge_user_id, sa.status,
+      SELECT sa.id, sa.film_id, sa.round_number, sa.jury_user_id, sa.status,
+             COALESCE(i.name, o.name, u.email) as jury_name,
              COALESCE(i.name, o.name, u.email) as judge_name
       FROM screening_assignments sa
-      JOIN users u ON u.id = sa.judge_user_id
+      JOIN users u ON u.id = sa.jury_user_id
       LEFT JOIN individuals i ON i.user_id = u.id
       LEFT JOIN organizations o ON o.user_id = u.id
       WHERE sa.event_id = ?
@@ -82,11 +83,12 @@ async function getPipeline(req, res) {
 
     // All reviews for this event
     const reviews = await query(`
-      SELECT sr.id, sr.assignment_id, sr.film_id, sr.judge_user_id, sr.round_number,
+      SELECT sr.id, sr.assignment_id, sr.film_id, sr.jury_user_id, sr.round_number,
              sr.criteria_scores, sr.overall_rating, sr.notes, sr.submitted_at,
+             COALESCE(i.name, o.name, u.email) as jury_name,
              COALESCE(i.name, o.name, u.email) as judge_name
       FROM screening_reviews sr
-      JOIN users u ON u.id = sr.judge_user_id
+      JOIN users u ON u.id = sr.jury_user_id
       LEFT JOIN individuals i ON i.user_id = u.id
       LEFT JOIN organizations o ON o.user_id = u.id
       WHERE sr.event_id = ?
@@ -175,12 +177,14 @@ async function getPipeline(req, res) {
       });
 
       const mergedReviews = filmAssigns.map(a => {
-        const rev = filmRevs.find(r => (r.assignment_id && r.assignment_id === a.id) || (r.judge_user_id === a.judge_user_id));
+        const rev = filmRevs.find(r => (r.assignment_id && r.assignment_id === a.id) || (r.jury_user_id === a.jury_user_id));
         return {
           assignment_id: a.id,
-          judge_id: a.judge_user_id,
+          jury_id: a.jury_user_id,
+          judge_id: a.jury_user_id,
+          jury_name: a.jury_name,
           judge_name: a.judge_name,
-          name: a.judge_name,
+          name: a.jury_name,
           round_number: a.round_number || roundNumber,
           status: rev ? 'completed' : a.status,
           overall_rating: rev ? rev.overall_rating : null,
@@ -191,12 +195,14 @@ async function getPipeline(req, res) {
       });
 
       filmRevs.forEach(r => {
-        if (!mergedReviews.some(m => (r.assignment_id && m.assignment_id === r.assignment_id) || m.judge_id === r.judge_user_id)) {
+        if (!mergedReviews.some(m => (r.assignment_id && m.assignment_id === r.assignment_id) || m.jury_id === r.jury_user_id)) {
           mergedReviews.push({
             assignment_id: r.assignment_id,
-            judge_id: r.judge_user_id,
+            jury_id: r.jury_user_id,
+            judge_id: r.jury_user_id,
+            jury_name: r.jury_name,
             judge_name: r.judge_name,
-            name: r.judge_name,
+            name: r.jury_name,
             round_number: r.round_number || roundNumber,
             status: 'completed',
             overall_rating: r.overall_rating,
@@ -209,7 +215,9 @@ async function getPipeline(req, res) {
 
       return {
         ...f,
-        assigned_judge_ids: filmAssigns.map(a => a.judge_user_id),
+        assigned_jury_ids: filmAssigns.map(a => a.jury_user_id),
+        assigned_judge_ids: filmAssigns.map(a => a.jury_user_id),
+        assigned_jury: mergedReviews,
         assigned_judges: mergedReviews,
         reviews_count: filmRevs.length,
         reviews: mergedReviews,
@@ -241,7 +249,7 @@ async function listAssignments(req, res) {
     const userId = req.user.id;
     const roundNumber = parseInt(req.query.round, 10) || 1;
 
-    // Check if user is Judge
+    // Check if user is Jury or Admin
     const groupRows = await query(`
       SELECT g.group_key 
       FROM user_event_groups ueg
@@ -249,11 +257,11 @@ async function listAssignments(req, res) {
       WHERE ueg.user_id = ? AND ueg.event_id = ?
     `, [userId, eventId]);
 
-    const isJudge = groupRows.some(g => g.group_key === 'judge');
+    const isJury = groupRows.some(g => g.group_key === 'jury' || g.group_key === 'judge');
     const isAdmin = groupRows.some(g => g.group_key === 'admin') || Boolean(req.user.isSuperAdmin);
 
-    // If Judge and not explicitly requesting admin view:
-    const forceJudge = isJudge && (!isAdmin || req.query.view === 'judge');
+    // If Jury and not explicitly requesting admin view:
+    const forceJury = isJury && (!isAdmin || req.query.view === 'jury' || req.query.view === 'judge');
 
     let sql = `
       SELECT 
@@ -276,12 +284,14 @@ async function listAssignments(req, res) {
         sr.overall_rating,
         sr.notes,
         sr.submitted_at,
+        COALESCE(i.name, o.name, u.email) as jury_name,
         COALESCE(i.name, o.name, u.email) as judge_name,
+        u.id as jury_id,
         u.id as judge_id
       FROM screening_assignments sa
       JOIN submissions s ON s.id = sa.film_id
       LEFT JOIN submission_flags sf ON sf.id = s.flag_id
-      JOIN users u ON u.id = sa.judge_user_id
+      JOIN users u ON u.id = sa.jury_user_id
       LEFT JOIN individuals i ON i.user_id = u.id
       LEFT JOIN organizations o ON o.user_id = u.id
       LEFT JOIN screening_reviews sr ON sr.assignment_id = sa.id
@@ -289,8 +299,8 @@ async function listAssignments(req, res) {
     `;
     const params = [eventId];
 
-    if (forceJudge) {
-      sql += ' AND sa.judge_user_id = ?';
+    if (forceJury) {
+      sql += ' AND sa.jury_user_id = ?';
       params.push(userId);
     }
     if (req.query.round) {
@@ -303,7 +313,8 @@ async function listAssignments(req, res) {
     const rows = await query(sql, params);
 
     res.json({
-      isJudge: forceJudge,
+      isJury: forceJury,
+      isJudge: forceJury,
       data: rows.map(a => {
         let scores = null;
         if (a.criteria_scores) {
@@ -325,15 +336,15 @@ async function listAssignments(req, res) {
 }
 
 /**
- * GET /api/reviews/judges
- * Returns all judges available for assignment for this event.
+ * GET /api/reviews/jury & GET /api/reviews/judges
+ * Returns all jury members available for assignment for this event.
  */
-async function listJudges(req, res) {
+async function listJury(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
 
-    // Fetch users with group 'judge' or 'reviewer' or assigned as judge
-    let judges = await query(`
+    // Fetch users with group 'jury' or 'judge' assigned as jury for this festival
+    let jury = await query(`
       SELECT DISTINCT 
         u.id, 
         u.email, 
@@ -344,13 +355,13 @@ async function listJudges(req, res) {
       LEFT JOIN organizations o ON o.user_id = u.id
       JOIN user_event_groups ueg ON ueg.user_id = u.id
       JOIN \`groups\` g ON g.id = ueg.group_id
-      WHERE ueg.event_id = ? AND g.group_key IN ('judge', 'reviewer', 'volunteer')
+      WHERE ueg.event_id = ? AND g.group_key IN ('jury', 'judge')
       ORDER BY name ASC
     `, [eventId]);
 
-    // Fallback if no specific user_event_groups: return all users who have group 'judge'
-    if (judges.length === 0) {
-      judges = await query(`
+    // Fallback if no specific user_event_groups: return all users who have group 'jury' or 'judge'
+    if (jury.length === 0) {
+      jury = await query(`
         SELECT DISTINCT 
           u.id, 
           u.email, 
@@ -361,65 +372,68 @@ async function listJudges(req, res) {
         LEFT JOIN organizations o ON o.user_id = u.id
         JOIN user_event_groups ueg ON ueg.user_id = u.id
         JOIN \`groups\` g ON g.id = ueg.group_id
-        WHERE g.group_key = 'judge'
+        WHERE g.group_key IN ('jury', 'judge')
         ORDER BY name ASC
       `);
     }
 
-    res.json({ data: judges });
+    res.json({ data: jury });
   } catch (error) {
-    console.error('[ReviewController] listJudges error:', error);
-    res.status(500).json({ error: 'Failed to retrieve judges.' });
+    console.error('[ReviewController] listJury error:', error);
+    res.status(500).json({ error: 'Failed to retrieve jury members.' });
   }
 }
 
+const listJudges = listJury;
+
 /**
  * POST /api/reviews/assign
- * Body: { film_id, round_number = 1, judge_ids = [] }
+ * Body: { film_id, round_number = 1, jury_ids = [], judge_ids = [] }
  */
-async function assignJudges(req, res) {
+async function assignJury(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
-    const { film_id, round_number = 1, judge_ids = [] } = req.body;
+    const { film_id, round_number = 1, jury_ids, judge_ids = [] } = req.body;
 
     if (!film_id) {
       return res.status(400).json({ error: 'film_id is required.' });
     }
 
     const round = parseInt(round_number, 10) || 1;
-    const targetJudgeIds = Array.isArray(judge_ids) ? judge_ids.map(id => parseInt(id, 10)).filter(Boolean) : [];
+    const rawIds = jury_ids || judge_ids || [];
+    const targetJuryIds = Array.isArray(rawIds) ? rawIds.map(id => parseInt(id, 10)).filter(Boolean) : [];
 
     // Existing assignments for this film & round
     const existing = await query(`
-      SELECT id, judge_user_id FROM screening_assignments 
+      SELECT id, jury_user_id FROM screening_assignments 
       WHERE film_id = ? AND round_number = ? AND event_id = ?
     `, [film_id, round, eventId]);
 
-    const existingJudgeIds = existing.map(e => e.judge_user_id);
+    const existingJuryIds = existing.map(e => e.jury_user_id);
 
-    // Judges to remove
-    const toRemove = existing.filter(e => !targetJudgeIds.includes(e.judge_user_id));
+    // Jury members to remove
+    const toRemove = existing.filter(e => !targetJuryIds.includes(e.jury_user_id));
     for (const rem of toRemove) {
       await query(`DELETE FROM screening_assignments WHERE id = ?`, [rem.id]);
     }
 
-    // Judges to add
-    const toAdd = targetJudgeIds.filter(id => !existingJudgeIds.includes(id));
+    // Jury members to add
+    const toAdd = targetJuryIds.filter(id => !existingJuryIds.includes(id));
     for (const jid of toAdd) {
       await query(`
-        INSERT INTO screening_assignments (event_id, film_id, judge_user_id, round_number, status)
+        INSERT INTO screening_assignments (event_id, film_id, jury_user_id, round_number, status)
         VALUES (?, ?, ?, ?, 'in_progress')
       `, [eventId, film_id, jid, round]);
     }
 
     // Automatically transition submission status based on assignment
-    if (targetJudgeIds.length > 0) {
+    if (targetJuryIds.length > 0) {
       if (round === 1) {
         const revs = await query(
           'SELECT id FROM screening_reviews WHERE film_id = ? AND round_number = 1 AND event_id = ?',
           [film_id, eventId]
         );
-        const allCompleted = revs.length >= targetJudgeIds.length;
+        const allCompleted = revs.length >= targetJuryIds.length;
         const newStatus = allCompleted ? 'Admin Review' : 'Round 1 Screening';
         await query(
           "UPDATE submissions SET status = ?, updated_at = NOW() WHERE id = ? AND event_id = ? AND status IN ('Submitted', 'Round 1 Screening', 'In Review', 'Admin Review')",
@@ -430,7 +444,7 @@ async function assignJudges(req, res) {
           'SELECT id FROM screening_reviews WHERE film_id = ? AND round_number = 2 AND event_id = ?',
           [film_id, eventId]
         );
-        const allCompleted = revs.length >= targetJudgeIds.length;
+        const allCompleted = revs.length >= targetJuryIds.length;
         const newStatus = allCompleted ? 'Admin Review' : 'Round 2 Screening';
         await query(
           "UPDATE submissions SET status = ?, updated_at = NOW() WHERE id = ? AND event_id = ? AND status IN ('Admin Review', 'Submitted', 'Round 1 Screening', 'Round 2 Screening')",
@@ -451,17 +465,20 @@ async function assignJudges(req, res) {
     }
 
     res.json({
-      message: 'Judge assignments updated successfully.',
+      message: 'Jury assignments updated successfully.',
       film_id,
       round_number: round,
-      assigned_count: targetJudgeIds.length,
-      judge_ids: targetJudgeIds,
+      assigned_count: targetJuryIds.length,
+      jury_ids: targetJuryIds,
+      judge_ids: targetJuryIds,
     });
   } catch (error) {
-    console.error('[ReviewController] assignJudges error:', error);
-    res.status(500).json({ error: 'Failed to assign judges.' });
+    console.error('[ReviewController] assignJury error:', error);
+    res.status(500).json({ error: 'Failed to assign jury.' });
   }
 }
+
+const assignJudges = assignJury;
 
 /**
  * POST /api/reviews/scorecard
@@ -488,26 +505,26 @@ async function submitScorecard(req, res) {
 
     // Find or create assignment
     let assignId = assignment_id ? parseInt(assignment_id, 10) : null;
-    let targetJudgeUserId = req.user.id;
+    let targetJuryUserId = req.user.id;
 
     if (assignId) {
-      const assignRow = await query('SELECT judge_user_id FROM screening_assignments WHERE id = ?', [assignId]);
-      if (assignRow.length > 0 && assignRow[0].judge_user_id) {
-        targetJudgeUserId = assignRow[0].judge_user_id;
+      const assignRow = await query('SELECT jury_user_id FROM screening_assignments WHERE id = ?', [assignId]);
+      if (assignRow.length > 0 && assignRow[0].jury_user_id) {
+        targetJuryUserId = assignRow[0].jury_user_id;
       }
     } else {
       const existingAssign = await query(`
-        SELECT id, judge_user_id FROM screening_assignments 
-        WHERE film_id = ? AND judge_user_id = ? AND round_number = ? AND event_id = ?
+        SELECT id, jury_user_id FROM screening_assignments 
+        WHERE film_id = ? AND jury_user_id = ? AND round_number = ? AND event_id = ?
         LIMIT 1
       `, [film_id, req.user.id, round, eventId]);
 
       if (existingAssign.length > 0) {
         assignId = existingAssign[0].id;
-        targetJudgeUserId = existingAssign[0].judge_user_id;
+        targetJuryUserId = existingAssign[0].jury_user_id;
       } else {
         const ins = await query(`
-          INSERT INTO screening_assignments (event_id, film_id, judge_user_id, round_number, status)
+          INSERT INTO screening_assignments (event_id, film_id, jury_user_id, round_number, status)
           VALUES (?, ?, ?, ?, 'completed')
         `, [eventId, film_id, req.user.id, round]);
         assignId = ins.insertId;
@@ -518,21 +535,21 @@ async function submitScorecard(req, res) {
     const existingReview = await query(`
       SELECT id FROM screening_reviews 
       WHERE (assignment_id IS NOT NULL AND assignment_id = ?) 
-         OR (film_id = ? AND judge_user_id = ? AND round_number = ? AND event_id = ?)
+         OR (film_id = ? AND jury_user_id = ? AND round_number = ? AND event_id = ?)
       LIMIT 1
-    `, [assignId, film_id, targetJudgeUserId, round, eventId]);
+    `, [assignId, film_id, targetJuryUserId, round, eventId]);
 
     if (existingReview.length > 0) {
       await query(`
         UPDATE screening_reviews 
-        SET criteria_scores = ?, overall_rating = ?, notes = ?, submitted_at = NOW(), judge_user_id = ?, assignment_id = ?
+        SET criteria_scores = ?, overall_rating = ?, notes = ?, submitted_at = NOW(), jury_user_id = ?, assignment_id = ?
         WHERE id = ?
-      `, [scoresJson, overallRating, notes || '', targetJudgeUserId, assignId, existingReview[0].id]);
+      `, [scoresJson, overallRating, notes || '', targetJuryUserId, assignId, existingReview[0].id]);
     } else {
       await query(`
-        INSERT INTO screening_reviews (assignment_id, event_id, film_id, judge_user_id, round_number, criteria_scores, overall_rating, notes)
+        INSERT INTO screening_reviews (assignment_id, event_id, film_id, jury_user_id, round_number, criteria_scores, overall_rating, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `, [assignId, eventId, film_id, targetJudgeUserId, round, scoresJson, overallRating, notes || '']);
+      `, [assignId, eventId, film_id, targetJuryUserId, round, scoresJson, overallRating, notes || '']);
     }
 
     if (assignId) {
@@ -547,13 +564,13 @@ async function submitScorecard(req, res) {
       await query('UPDATE submissions SET overall_average_rating = ? WHERE id = ?', [avgRes[0].avg_score, film_id]);
     }
 
-    // Only transition status to 'Admin Review' when ALL assigned judges for this round have submitted reviews
+    // Only transition status to 'Admin Review' when ALL assigned jury members for this round have submitted reviews
     const roundAssignments = await query(`
-      SELECT sa.id, sa.judge_user_id, sr.id as review_id
+      SELECT sa.id, sa.jury_user_id, sr.id as review_id
       FROM screening_assignments sa
       LEFT JOIN screening_reviews sr ON (
         sr.assignment_id = sa.id 
-        OR (sr.film_id = sa.film_id AND sr.judge_user_id = sa.judge_user_id AND sr.round_number = sa.round_number)
+        OR (sr.film_id = sa.film_id AND sr.jury_user_id = sa.jury_user_id AND sr.round_number = sa.round_number)
       )
       WHERE sa.film_id = ? AND sa.round_number = ? AND sa.event_id = ?
     `, [film_id, round, eventId]);
@@ -674,7 +691,7 @@ async function submitBallot(req, res) {
     }
 
     await query(`
-      INSERT INTO jury_ballots (event_id, category_id, judge_user_id, ranked_nominees)
+      INSERT INTO jury_ballots (event_id, category_id, jury_user_id, ranked_nominees)
       VALUES (?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE ranked_nominees = VALUES(ranked_nominees), submitted_at = NOW()
     `, [eventId, category_id, req.user.id, JSON.stringify(ranked_nominees)]);
@@ -689,7 +706,9 @@ async function submitBallot(req, res) {
 module.exports = {
   getPipeline,
   listAssignments,
+  listJury,
   listJudges,
+  assignJury,
   assignJudges,
   submitScorecard,
   makeDecision,

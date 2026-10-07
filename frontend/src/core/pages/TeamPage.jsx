@@ -5,7 +5,7 @@
  * - "+ Add User" burgundy button
  * - Real-time individual user search against freecomers individuals directory
  * - Selection verification: only registered users from individuals table can be added
- * - Group filter pills: All, Admin, Judge, Volunteer
+ * - Group filter pills: All, Admin, Jury, Volunteer
  * - Elevated card table: MEMBER, GROUP, PERMISSIONS, ACTIONS
  * - Add/Edit modal with group selection and permissions preview
  */
@@ -14,7 +14,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
-const GROUP_FILTERS = ['All', 'Admin', 'Judge', 'Volunteer'];
+const GROUP_FILTERS = ['All', 'Admin', 'Jury', 'Volunteer'];
 
 const GROUP_PERMISSIONS_MAP = {
   admin: [
@@ -24,6 +24,13 @@ const GROUP_PERMISSIONS_MAP = {
     { key: 'reviews:*', label: 'Review Pipeline' },
     { key: 'tasks:*', label: 'Task Management' },
     { key: 'payouts:*', label: 'Payouts Control' },
+  ],
+  jury: [
+    { key: 'jury:view_panel', label: 'View Jury Panel' },
+    { key: 'jury:score', label: 'Score Submissions' },
+    { key: 'jury:submit_decision', label: 'Submit Ballots' },
+    { key: 'review:evaluate', label: 'Evaluate Reviews' },
+    { key: 'submission:view', label: 'View Submissions' },
   ],
   judge: [
     { key: 'jury:view_panel', label: 'View Jury Panel' },
@@ -72,6 +79,7 @@ const MODULE_ICON_MAP = {
 
 const GROUP_DESCRIPTIONS = {
   admin: 'Full Control — Festival Director & Control Tower governance',
+  jury: 'Jury & Scoring — Screening reviews, scorecards and jury ballots',
   judge: 'Jury & Scoring — Screening reviews, scorecards and jury ballots',
   volunteer: 'Assigned Only — Shift operations, task execution and check-in',
 };
@@ -85,7 +93,7 @@ const getInitials = (name) => {
 
 /**
  * Component: Multi-Group Picker for Team Members
- * Allows selecting multiple groups (Standard: Admin, Judge, Volunteer + Custom Groups).
+ * Allows selecting multiple groups (Standard: Admin, Jury, Volunteer + Custom Groups).
  */
 function MultiGroupPicker({
   selectedGroupKeys,
@@ -103,11 +111,11 @@ function MultiGroupPicker({
       permCount: catalog.reduce((acc, m) => acc + (m.permissions?.length || 0), 0)
     },
     {
-      key: 'judge',
-      label: 'Judge',
+      key: 'jury',
+      label: 'Jury',
       type: 'standard',
-      desc: 'Screening reviews, 5-criteria scorecards and jury ballots',
-      permCount: (groupDefaults['judge'] || []).length
+      desc: 'Screening reviews, scorecards and jury ballots',
+      permCount: (groupDefaults['jury'] || groupDefaults['judge'] || []).length
     },
     {
       key: 'volunteer',
@@ -130,10 +138,19 @@ function MultiGroupPicker({
 
   const toggleGroup = (key) => {
     const next = new Set(selectedGroupKeys);
-    if (next.has(key)) {
-      next.delete(key);
+    if (key === 'jury') {
+      if (next.has('jury') || next.has('judge')) {
+        next.delete('jury');
+        next.delete('judge');
+      } else {
+        next.add('jury');
+      }
     } else {
-      next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
     }
     onChange(next);
   };
@@ -141,7 +158,12 @@ function MultiGroupPicker({
   const removeGroup = (key, e) => {
     e.stopPropagation();
     const next = new Set(selectedGroupKeys);
-    next.delete(key);
+    if (key === 'jury' || key === 'judge') {
+      next.delete('jury');
+      next.delete('judge');
+    } else {
+      next.delete(key);
+    }
     onChange(next);
   };
 
@@ -160,7 +182,8 @@ function MultiGroupPicker({
       {selectedGroupKeys.size > 0 ? (
         <div className="fc-group-chips-row">
           {Array.from(selectedGroupKeys).map((key) => {
-            const g = allGroups.find((item) => item.key === key) || { label: key };
+            const canonicalKey = key === 'judge' ? 'jury' : key;
+            const g = allGroups.find((item) => item.key === canonicalKey) || { label: canonicalKey === 'jury' ? 'Jury' : key };
             return (
               <span key={key} className="fc-group-chip">
                 <span>✓ {g.label}</span>
@@ -185,7 +208,7 @@ function MultiGroupPicker({
       {/* Selectable Cards Grid */}
       <div className="fc-group-cards-grid">
         {allGroups.map((g) => {
-          const isSelected = selectedGroupKeys.has(g.key);
+          const isSelected = selectedGroupKeys.has(g.key) || (g.key === 'jury' && selectedGroupKeys.has('judge'));
           return (
             <div
               key={g.key}
@@ -356,11 +379,11 @@ function PermissionsByModuleSection({
             {permissions.size} / {totalCatalogPermsCount} {readOnly ? 'Granted' : 'Allowed'}
           </span>
           {readOnly ? (
-            <span className="fc-perm-custom-tag" style={{ background: '#f8fafc', color: '#475569', borderColor: '#cbd5e1' }}>
+            <span className="fc-perm-custom-tag" style={{ background: 'var(--fc-surface-hover)', color: 'var(--fc-text-secondary)', borderColor: 'var(--fc-border)' }}>
               🔒 Inherited & Read-Only
             </span>
           ) : isCustomGroupCreation ? (
-            <span className="fc-perm-custom-tag" style={{ background: '#fdf4ff', color: '#86198f', borderColor: '#f0abfc' }}>
+            <span className="fc-perm-custom-tag" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#d8b4fe', borderColor: 'rgba(168, 85, 247, 0.3)' }}>
               Custom Group Config
             </span>
           ) : null}
@@ -481,7 +504,7 @@ function PermissionsByModuleSection({
                   key={group.key}
                   className="fc-tree-domain-branch"
                   style={{
-                    borderBottom: isLast ? 'none' : '1px solid #f1f5f9',
+                    borderBottom: isLast ? 'none' : '1px solid var(--fc-border, #f1f5f9)',
                     paddingBottom: isLast ? 0 : '14px',
                     marginBottom: isLast ? 0 : '14px',
                   }}
@@ -578,7 +601,7 @@ export default function TeamPage() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [catalog, setCatalog] = useState([]);
-  const [groupDefaults, setGroupDefaults] = useState({ admin: [], judge: [], volunteer: [] });
+  const [groupDefaults, setGroupDefaults] = useState({ admin: [], jury: [], judge: [], volunteer: [] });
   const [customGroups, setCustomGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -603,7 +626,7 @@ export default function TeamPage() {
 
   // Add Member Modal states
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addSelectedGroups, setAddSelectedGroups] = useState(new Set(['judge']));
+  const [addSelectedGroups, setAddSelectedGroups] = useState(new Set(['jury']));
   const [addExpandedModules, setAddExpandedModules] = useState(new Set());
   const [addPermSearch, setAddPermSearch] = useState('');
 
@@ -737,7 +760,7 @@ export default function TeamPage() {
   const addSourceMap = useMemo(() => {
     const map = new Map();
     for (const gKey of addSelectedGroups) {
-      let gName = gKey === 'admin' ? 'Admin' : gKey === 'judge' ? 'Judge' : gKey === 'volunteer' ? 'Volunteer' : gKey;
+      let gName = gKey === 'admin' ? 'Admin' : (gKey === 'jury' || gKey === 'judge') ? 'Jury' : gKey === 'volunteer' ? 'Volunteer' : gKey;
       if (gKey.startsWith('custom_')) {
         const cId = parseInt(gKey.replace('custom_', ''), 10);
         const cg = customGroups.find((c) => c.id === cId);
@@ -752,7 +775,7 @@ export default function TeamPage() {
         const cg = customGroups.find((c) => c.id === cId);
         perms = cg?.permissions || [];
       } else {
-        perms = groupDefaults[gKey] || [];
+        perms = groupDefaults[gKey] || (gKey === 'jury' ? groupDefaults['judge'] : []) || [];
       }
 
       for (const pk of perms) {
@@ -776,7 +799,7 @@ export default function TeamPage() {
           cg.permissions.forEach((k) => union.add(k));
         }
       } else {
-        const defs = groupDefaults[gKey] || [];
+        const defs = groupDefaults[gKey] || (gKey === 'jury' ? groupDefaults['judge'] : []) || [];
         defs.forEach((k) => union.add(k));
       }
     }
@@ -787,7 +810,7 @@ export default function TeamPage() {
   const editSourceMap = useMemo(() => {
     const map = new Map();
     for (const gKey of editSelectedGroups) {
-      let gName = gKey === 'admin' ? 'Admin' : gKey === 'judge' ? 'Judge' : gKey === 'volunteer' ? 'Volunteer' : gKey;
+      let gName = gKey === 'admin' ? 'Admin' : (gKey === 'jury' || gKey === 'judge') ? 'Jury' : gKey === 'volunteer' ? 'Volunteer' : gKey;
       if (gKey.startsWith('custom_')) {
         const cId = parseInt(gKey.replace('custom_', ''), 10);
         const cg = customGroups.find((c) => c.id === cId);
@@ -802,7 +825,7 @@ export default function TeamPage() {
         const cg = customGroups.find((c) => c.id === cId);
         perms = cg?.permissions || [];
       } else {
-        perms = groupDefaults[gKey] || [];
+        perms = groupDefaults[gKey] || (gKey === 'jury' ? groupDefaults['judge'] : []) || [];
       }
 
       for (const pk of perms) {
@@ -828,8 +851,8 @@ export default function TeamPage() {
       if (gKey === 'admin') {
         names.push('Admin');
         icon = '🛡️';
-      } else if (gKey === 'judge') {
-        names.push('Judge');
+      } else if (gKey === 'jury' || gKey === 'judge') {
+        names.push('Jury');
         icon = '⚖️';
       } else if (gKey === 'volunteer') {
         names.push('Volunteer');
@@ -843,7 +866,7 @@ export default function TeamPage() {
     }
     return {
       title: names.join(' + ') || 'Assigned Group',
-      subtitle: `${names.length === 1 && names[0] === 'Judge' ? '1 assigned members' : `${addEffectivePermissions.size} permissions granted from ${names.length} group${names.length > 1 ? 's' : ''}`}`,
+      subtitle: `${names.length === 1 && names[0] === 'Jury' ? '1 assigned members' : `${addEffectivePermissions.size} permissions granted from ${names.length} group${names.length > 1 ? 's' : ''}`}`,
       icon: names.length > 1 ? '✨' : icon,
     };
   }, [addSelectedGroups, customGroups, addEffectivePermissions]);
@@ -857,8 +880,8 @@ export default function TeamPage() {
       if (gKey === 'admin') {
         names.push('Admin');
         icon = '🛡️';
-      } else if (gKey === 'judge') {
-        names.push('Judge');
+      } else if (gKey === 'jury' || gKey === 'judge') {
+        names.push('Jury');
         icon = '⚖️';
       } else if (gKey === 'volunteer') {
         names.push('Volunteer');
@@ -881,7 +904,7 @@ export default function TeamPage() {
   const groupCounts = {
     All: users.length,
     Admin: users.filter((u) => u.roleKeys?.includes('admin') || u.role?.toLowerCase().includes('admin')).length,
-    Judge: users.filter((u) => u.roleKeys?.includes('judge') || u.role?.toLowerCase().includes('judge')).length,
+    Jury: users.filter((u) => u.roleKeys?.includes('jury') || u.roleKeys?.includes('judge') || u.role?.toLowerCase().includes('jury') || u.role?.toLowerCase().includes('judge')).length,
     Volunteer: users.filter((u) => u.roleKeys?.includes('volunteer') || u.role?.toLowerCase().includes('volunteer')).length,
   };
   customGroups.forEach((cg) => {
@@ -907,8 +930,8 @@ export default function TeamPage() {
     if (selectedGroup === 'Admin') {
       return u.roleKeys?.includes('admin') || u.role?.toLowerCase().includes('admin');
     }
-    if (selectedGroup === 'Judge') {
-      return u.roleKeys?.includes('judge') || u.role?.toLowerCase().includes('judge');
+    if (selectedGroup === 'Jury' || selectedGroup === 'Judge') {
+      return u.roleKeys?.includes('jury') || u.roleKeys?.includes('judge') || u.role?.toLowerCase().includes('jury') || u.role?.toLowerCase().includes('judge');
     }
     if (selectedGroup === 'Volunteer') {
       return u.roleKeys?.includes('volunteer') || u.role?.toLowerCase().includes('volunteer');
@@ -942,7 +965,7 @@ export default function TeamPage() {
   const handleOpenAdd = () => {
     setSelectedUser(null);
     setUserQuery('');
-    setAddSelectedGroups(new Set(['judge']));
+    setAddSelectedGroups(new Set(['jury']));
     setAddExpandedModules(new Set(ALL_DOMAIN_KEYS.concat(catalog.map((m) => m.key || m.id))));
     setAddPermSearch('');
     setShowAddModal(true);
@@ -1088,7 +1111,7 @@ export default function TeamPage() {
     } else {
       const fallback = (member.roleKey || member.role || 'volunteer').toLowerCase();
       if (fallback.includes('admin')) initialKeys.add('admin');
-      else if (fallback.includes('judge')) initialKeys.add('judge');
+      else if (fallback.includes('jury') || fallback.includes('judge')) initialKeys.add('jury');
       else initialKeys.add('volunteer');
     }
     setEditingUser(member);
@@ -1258,7 +1281,7 @@ export default function TeamPage() {
                         {member.groups && member.groups.length > 0 ? (
                           <div className="fc-member-groups-list">
                             {member.groups.map((g) => {
-                              const badgeClass = g.key === 'admin' ? 'admin' : g.key === 'judge' ? 'judge' : g.key === 'volunteer' ? 'volunteer' : 'custom';
+                              const badgeClass = g.key === 'admin' ? 'admin' : (g.key === 'jury' || g.key === 'judge') ? 'judge' : g.key === 'volunteer' ? 'volunteer' : 'custom';
                               return (
                                 <span key={g.key} className={`fc-group-badge ${badgeClass}`}>
                                   {g.label}
@@ -1355,7 +1378,7 @@ export default function TeamPage() {
                             permissions={new Set((member.permissions || []).map((p) => p.key))}
                             readOnly={true}
                             selectedGroupsSummary={{
-                              icon: (member.groups?.[0]?.key === 'judge' || member.roleKey === 'judge') ? '⚖️' : (member.groups?.[0]?.key === 'admin' || member.roleKey === 'admin') ? '🛡️' : '👥',
+                              icon: (member.groups?.[0]?.key === 'jury' || member.groups?.[0]?.key === 'judge' || member.roleKey === 'jury' || member.roleKey === 'judge') ? '⚖️' : (member.groups?.[0]?.key === 'admin' || member.roleKey === 'admin') ? '🛡️' : '👥',
                               title: member.groups?.map((g) => g.label).join(', ') || member.role || 'Volunteer',
                               subtitle: `${member.name} (${member.email}) · ${member.permissions?.length || 0} granted permissions`
                             }}

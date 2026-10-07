@@ -94,14 +94,15 @@ export default function Sidebar() {
   }, [currentFestival?.id, isModuleEnabled]);
 
   // Determine current active persona / role key
-  const roleKey = user?.current_group || (user?.isSuperAdmin ? 'admin' : 'admin');
+  const rawRoleKey = user?.current_group || (user?.isSuperAdmin ? 'admin' : 'admin');
+  const roleKey = rawRoleKey === 'judge' ? 'jury' : rawRoleKey;
 
   const handleRoleChange = async (e) => {
     const newRole = e.target.value;
     setSwitching(true);
     try {
       await switchPersona(newRole);
-      if (newRole === 'judge') {
+      if (newRole === 'jury' || newRole === 'judge') {
         navigate('/reviews');
       } else if (newRole === 'volunteer') {
         navigate('/tasks');
@@ -123,7 +124,7 @@ export default function Sidebar() {
   };
 
   const displayName = user?.name || user?.email?.split('@')[0] || 'SHASHANK';
-  const displayRole = roleKey === 'judge' ? 'Judge · Jury Member' : roleKey === 'volunteer' ? 'Volunteer · Operations' : 'Admin · Festival Director';
+  const displayRole = (roleKey === 'jury' || roleKey === 'judge') ? 'Jury · Jury Member' : roleKey === 'volunteer' ? 'Volunteer · Operations' : 'Admin · Festival Director';
 
   return (
     <aside className="fc-sidebar">
@@ -149,7 +150,7 @@ export default function Sidebar() {
             disabled={switching}
           >
             <option value="admin">Admin</option>
-            <option value="judge">Judge</option>
+            <option value="jury">Jury</option>
             <option value="volunteer">Volunteer</option>
           </select>
           <span className="fc-select-chevron">▾</span>

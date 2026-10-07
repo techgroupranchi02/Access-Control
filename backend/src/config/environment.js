@@ -64,6 +64,9 @@ const env = {
   jwtSecret: resolveSecret('JWT_SECRET_KEY', 'jwt_secret.txt'),
   jwtExpiresIn: '8h',
 
+  // Google OAuth
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '1078451955198-c4u9hngm78im37rjdc4h89f6ivsce7ug.apps.googleusercontent.com',
+
   // Cookie
   cookieName: '__Host-access-token',
   cookieSecure: process.env.NODE_ENV === 'production',

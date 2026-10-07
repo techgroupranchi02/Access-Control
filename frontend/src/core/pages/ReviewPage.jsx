@@ -1,8 +1,8 @@
 /**
  * ReviewPage Component
  * Role-aware Review Dashboard:
- * - When role is Judge: renders JudgeReviewDashboardShell (13-criteria star rating, queue, completed badges, notes)
- * - When role is Admin: renders AdminReviewDashboardWizard (6-step pipeline stepper, 1. Assign checkboxes, 2. Scores + 10 metric cards + Judge Progress Matrix, 3. Decisions)
+ * - When role is Jury: renders JudgeReviewDashboardShell (13-criteria star rating, queue, completed badges, notes)
+ * - When role is Admin: renders AdminReviewDashboardWizard (6-step pipeline stepper, 1. Assign checkboxes, 2. Scores + 10 metric cards + Jury Progress Matrix, 3. Decisions)
  */
 
 import React, { useState } from 'react';
@@ -15,14 +15,15 @@ export default function ReviewPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const roleKey = user?.current_group || (user?.isSuperAdmin ? 'admin' : 'judge');
-  const isDefaultJudge = roleKey === 'judge' && !user?.isSuperAdmin;
+  const roleKey = user?.current_group || (user?.isSuperAdmin ? 'admin' : 'jury');
+  const isDefaultJury = (roleKey === 'jury' || roleKey === 'judge') && !user?.isSuperAdmin;
 
-  // Allow query param ?view=judge or ?view=admin or local toggle
+  // Allow query param ?view=jury, ?view=judge or ?view=admin or local toggle
   const paramView = searchParams.get('view');
-  const [viewOverride, setViewOverride] = useState(paramView || null);
+  const normalizedParamView = (paramView === 'jury' || paramView === 'judge') ? 'jury' : paramView;
+  const [viewOverride, setViewOverride] = useState(normalizedParamView || null);
 
-  const activeView = viewOverride || (isDefaultJudge ? 'judge' : 'admin');
+  const activeView = viewOverride || (isDefaultJury ? 'jury' : 'admin');
 
   const handleSwitchToAdmin = () => {
     setViewOverride('admin');
@@ -31,19 +32,19 @@ export default function ReviewPage() {
     setSearchParams(next);
   };
 
-  const handleSwitchToJudge = () => {
-    setViewOverride('judge');
+  const handleSwitchToJury = () => {
+    setViewOverride('jury');
     const next = new URLSearchParams(searchParams);
-    next.set('view', 'judge');
+    next.set('view', 'jury');
     setSearchParams(next);
   };
 
   return (
     <div className="fc-review-page-container">
-      {activeView === 'judge' ? (
+      {(activeView === 'jury' || activeView === 'judge') ? (
         <JudgeReviewDashboardShell onSwitchToAdmin={handleSwitchToAdmin} />
       ) : (
-        <AdminReviewDashboardWizard onSwitchToJudge={handleSwitchToJudge} />
+        <AdminReviewDashboardWizard onSwitchToJury={handleSwitchToJury} onSwitchToJudge={handleSwitchToJury} />
       )}
     </div>
   );

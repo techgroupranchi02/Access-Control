@@ -98,9 +98,10 @@ export default function CalendarPage() {
       {/* Critical Conflict Alert (if on Day 1) */}
       {selectedDay === 0 && conflicts.length > 0 && (
         <div 
+          className="fc-dashboard-alert"
           style={{
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fca5a5',
+            backgroundColor: 'var(--fc-alert-bg, #fef2f2)',
+            border: '1px solid var(--fc-alert-border, #fca5a5)',
             borderRadius: '8px',
             padding: '14px 18px',
             marginBottom: '20px',
@@ -111,14 +112,14 @@ export default function CalendarPage() {
         >
           <span style={{ fontSize: '1.25rem' }}>⚠️</span>
           <div>
-            <div style={{ fontWeight: 700, color: '#991b1b', fontSize: '0.875rem' }}>
+            <div style={{ fontWeight: 700, color: 'var(--fc-alert-title, #991b1b)', fontSize: '0.875rem' }}>
               CRITICAL LOGISTICS CONFLICT DETECTED
             </div>
-            <div style={{ color: '#7f1d1d', fontSize: '0.8125rem', marginTop: '2px' }}>
+            <div style={{ color: 'var(--fc-alert-text, #7f1d1d)', fontSize: '0.8125rem', marginTop: '2px' }}>
               Director <strong>Deepa Rao</strong> arrives at 19:00 (Flight AI 302), but her film <strong>"The Long Walk"</strong> is scheduled at 17:30 in Main Auditorium.
             </div>
             <div style={{ marginTop: '8px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#b91c1c', background: '#fee2e2', padding: '2px 8px', borderRadius: '4px' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--fc-alert-title, #b91c1c)', background: 'var(--fc-alert-bg, #fee2e2)', padding: '2px 8px', borderRadius: '4px' }}>
                 Action Required: Reschedule slot to 20:00 or shift to Day 2
               </span>
             </div>
@@ -135,7 +136,7 @@ export default function CalendarPage() {
             <div key={venue.id} className="fc-card" style={{ padding: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--fc-border-subtle)', paddingBottom: '10px' }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1a1a1a' }}>{venue.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--fc-text-main)' }}>{venue.name}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)' }}>Capacity: {venue.capacity} seats</div>
                 </div>
                 <span className="fc-badge fc-badge-subtle">{venueSlots.length} slots</span>
@@ -154,17 +155,17 @@ export default function CalendarPage() {
                       <div 
                         key={slot.id}
                         style={{
-                          backgroundColor: isConflicted ? '#fff5f5' : 'var(--fc-surface)',
-                          border: `1px solid ${isConflicted ? '#fca5a5' : 'var(--fc-border)'}`,
+                          backgroundColor: isConflicted ? 'var(--fc-alert-bg, #fff5f5)' : 'var(--fc-surface)',
+                          border: `1px solid ${isConflicted ? 'var(--fc-alert-border, #fca5a5)' : 'var(--fc-border)'}`,
                           borderRadius: '8px',
                           padding: '12px'
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: isConflicted ? '#b91c1c' : 'var(--fc-text-muted)', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: isConflicted ? '#ef4444' : 'var(--fc-text-muted)', fontWeight: 600 }}>
                           <span>{slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}</span>
                           {isConflicted && <span>⚠️ Conflict</span>}
                         </div>
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1a1a1a', marginTop: '4px' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--fc-text-main)', marginTop: '4px' }}>
                           {slot.film_title}
                         </div>
                         <div style={{ fontSize: '0.775rem', color: 'var(--fc-text-secondary)', marginTop: '2px' }}>

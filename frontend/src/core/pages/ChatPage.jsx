@@ -1,8 +1,8 @@
 /**
  * ChatPage (Communications) Component
  * Role-scoped festival comms:
- * - Admin sees all channels ('Judges', 'Tasks')
- * - Judge sees 'Judges'
+ * - Admin sees all channels ('Jury', 'Tasks')
+ * - Jury sees 'Jury'
  * - Volunteer sees 'Tasks'
  * - Message feeds and live posting
  */
