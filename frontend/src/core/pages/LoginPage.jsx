@@ -25,6 +25,23 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const googleBtnContainerRef = useRef(null);
 
+  const getPostLoginRedirect = () => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const redirect = urlParams.get('redirect');
+      if (redirect && redirect.startsWith('/')) {
+        return redirect;
+      }
+      const festivalParam = urlParams.get('festival') || urlParams.get('edition');
+      if (festivalParam) {
+        return `/dashboard?festival=${festivalParam}`;
+      }
+    } catch (e) {
+      console.warn('Failed to parse redirect param', e);
+    }
+    return '/';
+  };
+
   // Initialize Google Identity Services
   useEffect(() => {
     let intervalId = null;
@@ -40,7 +57,7 @@ export default function LoginPage() {
 
       try {
         await loginWithGoogle(response.credential);
-        navigate('/');
+        navigate(getPostLoginRedirect());
       } catch (err) {
         const status = err.response?.status;
         const msg = err.response?.data?.error || err.message || 'Google sign-in failed.';
@@ -107,7 +124,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      navigate('/');
+      navigate(getPostLoginRedirect());
     } catch (err) {
       const status = err.response?.status;
       const msg = err.response?.data?.error || err.message || 'Login failed. Please check your credentials.';

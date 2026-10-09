@@ -5,6 +5,7 @@
 
 const { query } = require('../../config/database');
 const bcrypt = require('bcrypt');
+const { resolveHighestScope } = require('../services/scoping.service');
 
 const GROUP_PERMISSIONS = {
   admin: [
@@ -89,7 +90,7 @@ async function getMemberPermissions(userId, eventId) {
 
   // 3. Fetch permissions from assigned standard groups
   const stdPerms = await query(`
-    SELECT DISTINCT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order
+    SELECT DISTINCT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order, mgp.scope_key as scopeKey
     FROM user_event_groups ueg
     JOIN module_groups mg ON mg.group_id = ueg.group_id
     JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
@@ -101,7 +102,7 @@ async function getMemberPermissions(userId, eventId) {
 
   // 4. Fetch permissions from assigned custom groups
   const customPerms = await query(`
-    SELECT DISTINCT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order
+    SELECT DISTINCT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order, ecgp.scope_key as scopeKey
     FROM user_event_custom_groups uecg
     JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
     JOIN permissions p ON p.id = ecgp.permission_id
@@ -110,11 +111,16 @@ async function getMemberPermissions(userId, eventId) {
     ORDER BY m.display_order ASC, p.id ASC
   `, [userId, eventId]);
 
-  // Union permissions (deduplicate by key)
+  // Union permissions (deduplicate by key, resolving most permissive scope)
   const permMap = new Map();
   for (const p of [...stdPerms, ...customPerms]) {
+    const sKey = p.scopeKey || 'all';
     if (!permMap.has(p.key)) {
-      permMap.set(p.key, p);
+      permMap.set(p.key, { ...p, scopeKey: sKey });
+    } else {
+      const existing = permMap.get(p.key);
+      const higherScope = resolveHighestScope([existing.scopeKey, sKey]);
+      permMap.set(p.key, { ...existing, scopeKey: higherScope });
     }
   }
   const unionedPerms = Array.from(permMap.values());
@@ -159,13 +165,14 @@ async function list(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
 
-    // Fetch all unique users assigned to this festival edition
+    // Fetch all unique users assigned to this festival edition (both organization and individual accounts)
     const rows = await query(`
       SELECT DISTINCT
         u.id, 
         COALESCE(i.name, o.name, u.email) as name, 
         u.email, 
-        u.status
+        u.status,
+        u.account_type
       FROM users u
       LEFT JOIN individuals i ON i.user_id = u.id
       LEFT JOIN organizations o ON o.user_id = u.id
@@ -174,7 +181,7 @@ async function list(req, res) {
         UNION
         SELECT user_id FROM user_event_custom_groups WHERE event_id = ?
       )
-      ORDER BY u.id ASC
+      ORDER BY (u.account_type = 'organization') DESC, u.email ASC, u.id ASC
     `, [eventId, eventId]);
 
     const catalog = await getPermissionsCatalog();
@@ -191,6 +198,8 @@ async function list(req, res) {
         id: r.id,
         name: r.name,
         email: r.email,
+        accountType: r.account_type || 'individual',
+        accountTypeLabel: r.account_type === 'organization' ? 'Organization Account' : 'Individual Account',
         groups: permData.groups,
         roles: permData.roles,
         roleKeys: permData.roleKeys,
@@ -206,16 +215,18 @@ async function list(req, res) {
     }));
 
     const groupPermRows = await query(`
-      SELECT g.group_key, p.permission_key
+      SELECT g.group_key, p.permission_key, mgp.scope_key
       FROM \`groups\` g
       JOIN module_groups mg ON mg.group_id = g.id
       JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
       JOIN permissions p ON p.id = mgp.permission_id
     `);
     const groupDefaults = { admin: [], jury: [], judge: [], volunteer: [] };
+    const groupScopeDefaults = { admin: {}, jury: {}, judge: {}, volunteer: {} };
     for (const gp of groupPermRows) {
       if (groupDefaults[gp.group_key]) {
         groupDefaults[gp.group_key].push(gp.permission_key);
+        groupScopeDefaults[gp.group_key][gp.permission_key] = gp.scope_key || 'all';
       }
     }
 
@@ -236,7 +247,7 @@ async function list(req, res) {
 
     const customGroups = await Promise.all(customGroupsRows.map(async cg => {
       const perms = await query(`
-        SELECT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order
+        SELECT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order, ecgp.scope_key as scopeKey
         FROM event_custom_group_permissions ecgp
         JOIN permissions p ON p.id = ecgp.permission_id
         JOIN modules m ON m.id = p.module_id
@@ -259,6 +270,7 @@ async function list(req, res) {
       users,
       catalog,
       groupDefaults,
+      groupScopeDefaults,
       customGroups,
       totalCount: users.length,
       seatsAllocated: users.length,
@@ -284,6 +296,7 @@ async function getById(req, res) {
         COALESCE(i.name, o.name, u.email) as name, 
         u.email, 
         u.status,
+        u.account_type,
         g.id as group_id,
         g.group_key as role_key,
         g.label as role
@@ -293,7 +306,7 @@ async function getById(req, res) {
       LEFT JOIN user_event_groups ueg ON ueg.user_id = u.id AND ueg.event_id = ?
       LEFT JOIN \`groups\` g ON g.id = ueg.group_id
       WHERE u.id = ?
-      GROUP BY u.id, i.name, o.name, u.email, u.status, g.id, g.group_key, g.label
+      GROUP BY u.id, i.name, o.name, u.email, u.status, u.account_type, g.id, g.group_key, g.label
     `, [eventId, id]);
 
     if (rows.length === 0) return res.status(404).json({ error: 'Team member not found.' });
@@ -309,6 +322,8 @@ async function getById(req, res) {
       id: r.id,
       name: r.name,
       email: r.email,
+      accountType: r.account_type || 'individual',
+      accountTypeLabel: r.account_type === 'organization' ? 'Organization Account' : 'Individual Account',
       groups: permData.groups,
       roles: permData.roles,
       roleKeys: permData.roleKeys,
@@ -329,7 +344,7 @@ async function getById(req, res) {
 
 /**
  * GET /api/team/search
- * Search registered individual users from the individuals table for adding to team.
+ * Search registered users (both individual filmmakers and organizations) for adding to team.
  */
 async function searchIndividuals(req, res) {
   try {
@@ -346,42 +361,44 @@ async function searchIndividuals(req, res) {
     const rows = await query(`
       SELECT 
         u.id as user_id,
-        i.id as individual_id,
-        i.name,
         u.email,
-        i.username,
-        i.image_name,
+        u.account_type,
+        COALESCE(i.name, o.name, u.email) as name,
+        COALESCE(i.username, o.username, '') as username,
+        COALESCE(i.image_name, o.image_name, '') as image_name,
         EXISTS(
           SELECT 1 FROM user_event_groups ueg 
           WHERE ueg.user_id = u.id AND ueg.event_id = ?
         ) as is_already_member
-      FROM individuals i
-      JOIN users u ON u.id = i.user_id
+      FROM users u
+      LEFT JOIN individuals i ON i.user_id = u.id
+      LEFT JOIN organizations o ON o.user_id = u.id
       WHERE 
         (u.status = 1 OR u.status IS NULL)
-        AND u.account_type = 'individual'
         AND (
-          i.name LIKE ? 
+          COALESCE(i.name, o.name) LIKE ? 
           OR u.email LIKE ? 
-          OR i.username LIKE ?
+          OR COALESCE(i.username, o.username) LIKE ?
         )
       ORDER BY 
         CASE 
-          WHEN i.name LIKE ? THEN 1
+          WHEN COALESCE(i.name, o.name) LIKE ? THEN 1
           WHEN u.email LIKE ? THEN 2
           ELSE 3 
         END,
-        i.name ASC
-      LIMIT 20
+        (u.account_type = 'organization') DESC,
+        u.id ASC
+      LIMIT 30
     `, [eventId, pattern, pattern, pattern, prefix, prefix]);
 
     const users = rows.map(r => ({
       userId: r.user_id,
-      individualId: r.individual_id,
-      name: r.name || 'Unnamed Individual',
+      name: r.name || 'Unnamed User',
       email: r.email,
       username: r.username,
       imageName: r.image_name,
+      accountType: r.account_type || 'individual',
+      accountTypeLabel: r.account_type === 'organization' ? 'Organization Account' : 'Individual Account',
       isAlreadyMember: Boolean(r.is_already_member)
     }));
 
@@ -474,16 +491,26 @@ async function syncUserCustomPermissions(userId, eventId, permissions, targetRol
 
     for (const item of permissions) {
       let pId = null;
+      let scopeKey = 'all';
       if (typeof item === 'number') {
         pId = item;
       } else if (typeof item === 'string') {
         const pRows = await query('SELECT id FROM permissions WHERE permission_key = ? LIMIT 1', [item]);
         if (pRows.length > 0) pId = pRows[0].id;
+      } else if (typeof item === 'object' && item !== null) {
+        if (item.id) pId = item.id;
+        else if (item.key) {
+          const pRows = await query('SELECT id FROM permissions WHERE permission_key = ? LIMIT 1', [item.key]);
+          if (pRows.length > 0) pId = pRows[0].id;
+        }
+        if (item.scopeKey || item.scope_key) {
+          scopeKey = item.scopeKey || item.scope_key;
+        }
       }
       if (pId) {
         await query(
-          'INSERT IGNORE INTO event_custom_group_permissions (custom_group_id, permission_id) VALUES (?, ?)',
-          [customGroupId, pId]
+          'INSERT INTO event_custom_group_permissions (custom_group_id, permission_id, scope_key) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE scope_key = VALUES(scope_key)',
+          [customGroupId, pId, scopeKey]
         );
       }
     }
@@ -492,24 +519,25 @@ async function syncUserCustomPermissions(userId, eventId, permissions, targetRol
 
 /**
  * POST /api/team
- * Adds an existing individual user to the festival edition's team.
+ * Adds an existing user (individual filmmaker or organization) to the festival edition's team.
  */
 async function create(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
-    const { userId, email, role, group, permissions } = req.body;
+    const { userId, email, role, group, permissions, accountType } = req.body;
 
     let targetUserId = userId;
 
-    // If userId was not passed, attempt lookup by email in individuals table
+    // If userId was not passed, attempt lookup by email in users table
     if (!targetUserId && email) {
-      const lookup = await query(`
-        SELECT u.id 
-        FROM users u 
-        JOIN individuals i ON i.user_id = u.id 
-        WHERE u.email = ? AND u.account_type = 'individual'
-        LIMIT 1
-      `, [email.toLowerCase().trim()]);
+      const lookupParams = [email.toLowerCase().trim()];
+      let sql = 'SELECT u.id, u.account_type FROM users u WHERE u.email = ?';
+      if (accountType) {
+        sql += ' AND u.account_type = ?';
+        lookupParams.push(accountType);
+      }
+      sql += ' ORDER BY (u.account_type = "organization") DESC LIMIT 1';
+      const lookup = await query(sql, lookupParams);
 
       if (lookup.length > 0) {
         targetUserId = lookup[0].id;
@@ -518,26 +546,30 @@ async function create(req, res) {
 
     if (!targetUserId) {
       return res.status(400).json({ 
-        error: 'Only registered individual / Filmmaker accounts from Freecomers can be added to a team.' 
+        error: 'Please select a valid user from the Freecomers platform.' 
       });
     }
 
-    // Verify user is an individual in individuals table
-    const indRows = await query(`
-      SELECT u.id, u.email, i.name, i.username, i.image_name 
-      FROM individuals i 
-      JOIN users u ON u.id = i.user_id 
-      WHERE u.id = ? AND u.account_type = 'individual'
+    // Verify user exists in users table (either individual or organization)
+    const userRows = await query(`
+      SELECT u.id, u.email, u.account_type,
+             COALESCE(i.name, o.name, u.email) as name,
+             COALESCE(i.username, o.username, '') as username,
+             COALESCE(i.image_name, o.image_name, '') as image_name
+      FROM users u
+      LEFT JOIN individuals i ON i.user_id = u.id
+      LEFT JOIN organizations o ON o.user_id = u.id
+      WHERE u.id = ?
       LIMIT 1
     `, [targetUserId]);
 
-    if (indRows.length === 0) {
+    if (userRows.length === 0) {
       return res.status(400).json({ 
-        error: 'Selected user is not a registered individual / Filmmaker account. Film Organization accounts cannot be added to a team.' 
+        error: 'Selected user was not found on Freecomers.' 
       });
     }
 
-    const indUser = indRows[0];
+    const targetUser = userRows[0];
 
     // Check if user is already assigned to this festival edition
     const existingMember = await query(
@@ -545,8 +577,9 @@ async function create(req, res) {
       [targetUserId, eventId]
     );
     if (existingMember.length > 0) {
+      const typeLabel = targetUser.account_type === 'organization' ? 'Organization Account' : 'Individual Account';
       return res.status(400).json({ 
-        error: `${indUser.name || indUser.email} is already a member of this festival edition team.` 
+        error: `${targetUser.name || targetUser.email} (${typeLabel}) is already a member of this festival edition team.` 
       });
     }
 
@@ -570,8 +603,10 @@ async function create(req, res) {
       message: 'Team member added successfully.',
       member: {
         id: targetUserId,
-        name: indUser.name || indUser.email,
-        email: indUser.email,
+        name: targetUser.name || targetUser.email,
+        email: targetUser.email,
+        accountType: targetUser.account_type || 'individual',
+        accountTypeLabel: targetUser.account_type === 'organization' ? 'Organization Account' : 'Individual Account',
         groups: permData.groups,
         roles: permData.roles,
         roleKeys: permData.roleKeys,
@@ -706,15 +741,15 @@ async function remove(req, res) {
     const id = parseInt(req.params.id, 10);
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
 
-    // Protection 1: Prevent user from removing themselves
+    // Protection 1: Prevent user from removing their active logged-in account
     if (req.user && req.user.id === id) {
-      return res.status(400).json({ error: 'You cannot remove yourself from the festival team.' });
+      return res.status(400).json({ error: 'You cannot remove your active logged-in account from the festival team.' });
     }
 
     // Protection 2: Prevent removing the festival owner / director
     const ownerRows = await query('SELECT user_id FROM events WHERE event_id = ?', [eventId]);
     if (ownerRows.length > 0 && ownerRows[0].user_id === id) {
-      return res.status(400).json({ error: 'The festival owner/director cannot be removed from the team.' });
+      return res.status(400).json({ error: 'The festival owner organization account cannot be removed from the team.' });
     }
 
     // Clean up custom permissions if any
@@ -765,7 +800,7 @@ async function listCustomGroups(req, res) {
 
     const customGroups = await Promise.all(rows.map(async cg => {
       const perms = await query(`
-        SELECT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order
+        SELECT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order, ecgp.scope_key as scopeKey
         FROM event_custom_group_permissions ecgp
         JOIN permissions p ON p.id = ecgp.permission_id
         JOIN modules m ON m.id = p.module_id
@@ -848,16 +883,26 @@ async function createCustomGroup(req, res) {
     if (Array.isArray(permissions) && permissions.length > 0) {
       for (const item of permissions) {
         let pId = null;
+        let scopeKey = 'all';
         if (typeof item === 'number') {
           pId = item;
         } else if (typeof item === 'string') {
           const pRows = await query('SELECT id FROM permissions WHERE permission_key = ? LIMIT 1', [item]);
           if (pRows.length > 0) pId = pRows[0].id;
+        } else if (typeof item === 'object' && item !== null) {
+          if (item.id) pId = item.id;
+          else if (item.key) {
+            const pRows = await query('SELECT id FROM permissions WHERE permission_key = ? LIMIT 1', [item.key]);
+            if (pRows.length > 0) pId = pRows[0].id;
+          }
+          if (item.scopeKey || item.scope_key) {
+            scopeKey = item.scopeKey || item.scope_key;
+          }
         }
         if (pId) {
           await query(
-            'INSERT IGNORE INTO event_custom_group_permissions (custom_group_id, permission_id) VALUES (?, ?)',
-            [customGroupId, pId]
+            'INSERT INTO event_custom_group_permissions (custom_group_id, permission_id, scope_key) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE scope_key = VALUES(scope_key)',
+            [customGroupId, pId, scopeKey]
           );
         }
       }
@@ -865,7 +910,7 @@ async function createCustomGroup(req, res) {
 
     // Fetch created group with full details
     const perms = await query(`
-      SELECT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order
+      SELECT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order, ecgp.scope_key as scopeKey
       FROM event_custom_group_permissions ecgp
       JOIN permissions p ON p.id = ecgp.permission_id
       JOIN modules m ON m.id = p.module_id

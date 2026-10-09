@@ -4,6 +4,7 @@
  */
 
 const { query } = require('../../config/database');
+const { scopeSubmissionsQuery, canAccessSubmission } = require('../services/scoping.service');
 
 /**
  * Automatically sync real Freecomers submissions from film_festivals_submissions
@@ -161,7 +162,7 @@ async function list(req, res) {
       LEFT JOIN submission_flags sf ON sf.id = s.flag_id
       WHERE s.event_id = ?
     `;
-    const params = [eventId];
+    let params = [eventId];
 
     if (status && status !== 'all') {
       if (status === 'Submitted') {
@@ -194,12 +195,17 @@ async function list(req, res) {
       params.push(term, term, term);
     }
 
+    // Apply row-level permission scoping
+    const scoped = scopeSubmissionsQuery(sql, params, req.permissionScope);
+    sql = scoped.sql;
+    params = scoped.params;
+
     sql += ' ORDER BY s.id ASC';
 
     const submissions = await query(sql, params);
 
-    // Get summary counts across all 9 pipeline statuses
-    const countRows = await query(`
+    // Get summary counts across all 9 pipeline statuses (scoped to visible set)
+    let countSql = `
       SELECT 
         COUNT(*) as total,
         SUM(CASE 
@@ -218,7 +224,10 @@ async function list(req, res) {
         SUM(CASE WHEN s.flag_id IS NOT NULL THEN 1 ELSE 0 END) as flagged
       FROM submissions s
       WHERE s.event_id = ?
-    `, [eventId, eventId, eventId]);
+    `;
+    let countParams = [eventId, eventId, eventId];
+    const scopedCounts = scopeSubmissionsQuery(countSql, countParams, req.permissionScope);
+    const countRows = await query(scopedCounts.sql, scopedCounts.params);
 
     const row = countRows[0] || {};
     const counts = {
@@ -270,6 +279,13 @@ async function getById(req, res) {
     const id = parseInt(req.params.id, 10);
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
     await syncSubmissionsForEvent(eventId);
+
+    if (req.permissionScope && !req.permissionScope.isWildcard && req.permissionScope.scopeKey !== 'all') {
+      const allowed = await canAccessSubmission(id, req.permissionScope);
+      if (!allowed) {
+        return res.status(403).json({ error: 'Access denied: submission is outside your assigned scope.' });
+      }
+    }
 
     const rows = await query(`
       SELECT 

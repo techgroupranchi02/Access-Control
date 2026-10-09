@@ -357,6 +357,11 @@ export default function AdminPage() {
                             {(role.permissions || []).map(p => (
                               <span key={p.id} className="badge badge-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', padding: '3px 8px' }}>
                                 <code>{p.permission_key}</code>
+                                {p.scopeKey && p.scopeKey !== 'all' && (
+                                  <span className={`fc-scope-badge fc-scope-${p.scopeKey}`} style={{ fontSize: '0.6rem', padding: '0 4px' }}>
+                                    {p.scopeKey === 'assigned' ? '🎯 Assigned' : p.scopeKey === 'jury_panel' ? '⚖️ Jury Panel' : p.scopeKey}
+                                  </span>
+                                )}
                                 <button
                                   type="button"
                                   title={`Revoke ${p.permission_key}`}
@@ -594,6 +599,7 @@ export default function AdminPage() {
                   <div className="checkbox-group">
                     {permissions.map(perm => {
                       const isChecked = role.permissions?.some(rp => rp.id === perm.id);
+                      const currentPerm = role.permissions?.find(rp => rp.id === perm.id);
                       return (
                         <label key={perm.id} className={`checkbox-label ${isChecked ? 'checked' : ''}`}>
                           <input
@@ -608,6 +614,11 @@ export default function AdminPage() {
                             }}
                           />
                           {perm.permission_key}
+                          {isChecked && currentPerm?.scopeKey && currentPerm.scopeKey !== 'all' && (
+                            <span className={`fc-scope-badge fc-scope-${currentPerm.scopeKey}`} style={{ marginLeft: '4px', fontSize: '0.6rem' }}>
+                              {currentPerm.scopeKey === 'assigned' ? '🎯 Assigned' : currentPerm.scopeKey === 'jury_panel' ? '⚖️ Jury Panel' : currentPerm.scopeKey}
+                            </span>
+                          )}
                         </label>
                       );
                     })}

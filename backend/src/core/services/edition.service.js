@@ -7,11 +7,52 @@
 const { query } = require('../../config/database');
 
 /**
- * Get all active editions / events.
+ * Get active editions / events accessible to the user.
+ * Freecomers Admins see all festivals.
+ * Festival Admins / Team members see festivals they own or belong to.
+ * Active SaaS festivals (saas_enabled = 1) are always prioritized at the top.
  */
-async function getAllEditions() {
+async function getAllEditions(user) {
+  // If user is SuperAdmin or role 'admin' from Freecomers admins table, return all events
+  if (user && (user.isSuperAdmin || user.role === 'admin')) {
+    return query(
+      `SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at 
+       FROM events 
+       WHERE is_deleted = 0 
+       ORDER BY (saas_enabled = 1) DESC, event_id DESC`
+    );
+  }
+
+  // If user is a platform user (Festival Admin / Team member)
+  if (user && (user.email || user.id)) {
+    let allUserIds = user.userIds || [user.id];
+    if (user.email) {
+      const linkedUsers = await query('SELECT id FROM users WHERE email = ? AND status = 1', [user.email]);
+      if (linkedUsers.length > 0) {
+        allUserIds = linkedUsers.map(u => u.id);
+      }
+    }
+    const placeholders = allUserIds.map(() => '?').join(',');
+
+    return query(
+      `SELECT DISTINCT
+         e.event_id as id, e.event_id, e.user_id, e.name, e.edition, e.description,
+         e.event_type, e.saas_enabled, e.is_deleted, e.created_at
+       FROM events e
+       LEFT JOIN user_event_groups ueg ON ueg.event_id = e.event_id AND ueg.user_id IN (${placeholders})
+       WHERE e.is_deleted = 0
+         AND (e.user_id IN (${placeholders}) OR ueg.user_id IS NOT NULL)
+       ORDER BY (e.saas_enabled = 1) DESC, e.event_id DESC`,
+      [...allUserIds, ...allUserIds]
+    );
+  }
+
+  // Fallback (e.g. unauthenticated)
   return query(
-    'SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at FROM events WHERE is_deleted = 0 ORDER BY event_id ASC'
+    `SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at 
+     FROM events 
+     WHERE is_deleted = 0 
+     ORDER BY (saas_enabled = 1) DESC, event_id DESC`
   );
 }
 

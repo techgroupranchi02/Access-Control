@@ -44,6 +44,7 @@ function authenticate(req, res, next) {
       id: decoded.id,
       email: decoded.email,
       name: decoded.name,
+      userIds: decoded.userIds || [decoded.id],
       role: decoded.role || (decoded.isSuperAdmin ? 'admin' : 'user'),
       isSuperAdmin: Boolean(decoded.isSuperAdmin),
     };

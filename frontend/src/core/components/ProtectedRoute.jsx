@@ -4,11 +4,12 @@
  * Redirects to /login if not authenticated.
  */
 
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
 export default function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -19,7 +20,9 @@ export default function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    const returnPath = location.pathname + location.search;
+    const loginUrl = returnPath && returnPath !== '/' ? `/login?redirect=${encodeURIComponent(returnPath)}` : '/login';
+    return <Navigate to={loginUrl} replace />;
   }
 
   return children;

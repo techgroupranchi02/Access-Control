@@ -30,7 +30,7 @@ async function getAllGroups() {
 
   for (const group of groups) {
     const perms = await query(
-      `SELECT DISTINCT p.id, p.permission_key, p.label, p.label as name, p.module_id, p.page_id, p.actions_match, p.actions_unmatch
+      `SELECT DISTINCT p.id, p.permission_key, p.label, p.label as name, p.module_id, p.page_id, p.actions_match, p.actions_unmatch, mgp.scope_key as scopeKey
        FROM permissions p
        JOIN module_groups_permissions mgp ON mgp.permission_id = p.id
        JOIN module_groups mg ON mg.id = mgp.module_group_id
@@ -61,7 +61,7 @@ async function getGroupById(groupId) {
 
   const group = groups[0];
   const perms = await query(
-    `SELECT DISTINCT p.id, p.permission_key, p.label, p.label as name, p.module_id, p.page_id, p.actions_match, p.actions_unmatch
+    `SELECT DISTINCT p.id, p.permission_key, p.label, p.label as name, p.module_id, p.page_id, p.actions_match, p.actions_unmatch, mgp.scope_key as scopeKey
      FROM permissions p
      JOIN module_groups_permissions mgp ON mgp.permission_id = p.id
      JOIN module_groups mg ON mg.id = mgp.module_group_id
@@ -146,6 +146,7 @@ async function updateGroupPermissions(groupId, permissionAssignments) {
     // Assign new permissions
     for (const assignment of permissionAssignments) {
       const permId = typeof assignment === 'object' ? assignment.permissionId : assignment;
+      const scopeKey = (typeof assignment === 'object' && assignment.scopeKey) ? assignment.scopeKey : 'all';
       if (!permId) continue;
 
       const [pRows] = await conn.execute('SELECT module_id FROM permissions WHERE id = ?', [permId]);
@@ -167,8 +168,8 @@ async function updateGroupPermissions(groupId, permissionAssignments) {
       }
 
       await conn.execute(
-        'INSERT IGNORE INTO module_groups_permissions (module_group_id, permission_id) VALUES (?, ?)',
-        [mgId, permId]
+        'INSERT INTO module_groups_permissions (module_group_id, permission_id, scope_key) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE scope_key = VALUES(scope_key)',
+        [mgId, permId, scopeKey]
       );
     }
 

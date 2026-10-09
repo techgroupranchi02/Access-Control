@@ -42,8 +42,24 @@ export function FestivalProvider({ children }) {
         console.warn('Failed to parse URL query params', e);
       }
 
-      // 2. Auto-select saved edition/festival or first one
+      // 2. Auto-select saved edition/festival IF it is active (saas_enabled)
       const savedId = localStorage.getItem('currentEditionId') || localStorage.getItem('currentFestivalId');
+      if (savedId) {
+        const saved = res.data.find(f => f.id === parseInt(savedId, 10));
+        if (saved && (saved.saas_enabled === 1 || saved.saas_enabled === true)) {
+          selectFestival(saved);
+          return;
+        }
+      }
+
+      // 3. Prioritize first SaaS-active festival (e.g. Delhi Shorts)
+      const activeFest = res.data.find(f => f.saas_enabled === 1 || f.saas_enabled === true);
+      if (activeFest) {
+        selectFestival(activeFest);
+        return;
+      }
+
+      // 4. Fallback: select saved festival (even if inactive) or first available
       if (savedId) {
         const saved = res.data.find(f => f.id === parseInt(savedId, 10));
         if (saved) {
@@ -51,6 +67,7 @@ export function FestivalProvider({ children }) {
           return;
         }
       }
+
       if (res.data.length > 0) {
         selectFestival(res.data[0]);
       }

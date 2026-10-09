@@ -47,22 +47,30 @@ function validatePassword(password) {
 /**
  * Check if a platform user has any active festival roles (Admin, Jury, Volunteer)
  * or owns any festivals.
+/**
+ * Check if a platform user (or any linked user ID for that email) has any active
+ * festival roles (Admin, Jury, Volunteer) or owns any festivals.
  * 
- * @param {number} userId
+ * @param {number|number[]} userIds
  * @returns {Promise<Array<{ event_id: number, group_id: number, group_key: string, role_name: string, event_name: string }>>}
  */
-async function checkFestivalRoles(userId) {
+async function checkFestivalRoles(userIds) {
+  const ids = Array.isArray(userIds) ? userIds : [userIds];
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => '?').join(',');
+
   const roles = await query(
     `SELECT 
        ueg.event_id, 
        g.id as group_id,
        g.group_key, 
        g.label as role_name, 
-       e.name as event_name
+       e.name as event_name,
+       e.saas_enabled
      FROM user_event_groups ueg
      JOIN \`groups\` g ON g.id = ueg.group_id
      JOIN events e ON e.event_id = ueg.event_id AND e.is_deleted = 0
-     WHERE ueg.user_id = ? AND g.group_key IN ('admin', 'volunteer', 'jury')
+     WHERE ueg.user_id IN (${placeholders}) AND g.group_key IN ('admin', 'volunteer', 'jury')
 
      UNION
 
@@ -71,10 +79,12 @@ async function checkFestivalRoles(userId) {
        1 as group_id,
        'admin' as group_key, 
        'Admin' as role_name, 
-       e.name as event_name
+       e.name as event_name,
+       e.saas_enabled
      FROM events e
-     WHERE e.user_id = ? AND e.is_deleted = 0`,
-    [userId, userId]
+     WHERE e.user_id IN (${placeholders}) AND e.is_deleted = 0
+     ORDER BY (saas_enabled = 1) DESC, event_id DESC`,
+    [...ids, ...ids]
   );
 
   return roles;
@@ -178,13 +188,13 @@ async function loginWithGoogle(idToken) {
        u.id, 
        u.email, 
        u.status,
+       u.account_type,
        COALESCE(i.name, o.name, u.email) as name
      FROM users u
      LEFT JOIN individuals i ON i.user_id = u.id
      LEFT JOIN organizations o ON o.user_id = u.id
      WHERE u.email = ? AND u.status = 1
-     ORDER BY u.id ASC
-     LIMIT 1`,
+     ORDER BY (u.account_type = 'organization') DESC, u.id ASC`,
     [normalizedEmail]
   );
 
@@ -194,10 +204,11 @@ async function loginWithGoogle(idToken) {
     throw err;
   }
 
+  const allUserIds = users.map(u => u.id);
   const localUser = users[0];
 
   // ── Step 3: Strict Role Gate (Festival Admin, Jury, Volunteer) ──
-  const roles = await checkFestivalRoles(localUser.id);
+  const roles = await checkFestivalRoles(allUserIds);
   if (roles.length === 0) {
     const err = new Error(
       'Access Denied: You do not have an active Festival Admin, Jury, or Volunteer role assigned. ' +
@@ -207,16 +218,19 @@ async function loginWithGoogle(idToken) {
     throw err;
   }
 
-  // Record/update provider mapping in Freecomers DB
+  // Record/update provider mapping in Freecomers DB for all linked user accounts
   if (googleIdentity.sub) {
-    query(
-      `INSERT INTO user_provider_maps (user_id, provider_name, provider_id, provider_token, updated_at) 
-       VALUES (?, 'google', ?, '', NOW()) 
-       ON DUPLICATE KEY UPDATE provider_id = VALUES(provider_id), updated_at = NOW()`,
-      [localUser.id, googleIdentity.sub]
-    ).catch((err) => {
-      console.warn('[Auth Service] Failed to update user_provider_maps:', err.message);
-    });
+    const tokenVal = (idToken && typeof idToken === 'string') ? idToken.substring(0, 1900) : 'google_oauth';
+    for (const uid of allUserIds) {
+      query(
+        `INSERT INTO user_provider_maps (user_id, provider_name, provider_id, provider_token, created_at, updated_at) 
+         VALUES (?, 'google', ?, ?, NOW(), NOW()) 
+         ON DUPLICATE KEY UPDATE provider_id = VALUES(provider_id), provider_token = VALUES(provider_token), updated_at = NOW()`,
+        [uid, googleIdentity.sub, tokenVal]
+      ).catch((err) => {
+        console.warn('[Auth Service] Failed to update user_provider_maps:', err.message);
+      });
+    }
   }
 
   // ── Step 4: Generate Local JWT ──
@@ -225,6 +239,7 @@ async function loginWithGoogle(idToken) {
       id: localUser.id,
       email: localUser.email,
       name: localUser.name,
+      userIds: allUserIds,
       role: 'user',
       isSuperAdmin: false,
     },
@@ -241,6 +256,7 @@ async function loginWithGoogle(idToken) {
       id: localUser.id,
       name: localUser.name,
       email: localUser.email,
+      userIds: allUserIds,
       role: 'user',
       isSuperAdmin: false,
       roles,
@@ -388,21 +404,25 @@ async function login(email, password) {
        u.id, 
        u.email, 
        u.password,
+       u.account_type,
        u.status,
        COALESCE(i.name, o.name, u.email) as name
      FROM users u
      LEFT JOIN individuals i ON i.user_id = u.id
      LEFT JOIN organizations o ON o.user_id = u.id
      WHERE u.email = ? AND u.status = 1
-     ORDER BY u.id ASC
-     LIMIT 1`,
+     ORDER BY (u.account_type = 'organization') DESC, u.id ASC`,
     [normalizedEmail]
   );
 
-  if (users.length > 0) {
-    localUser = users[0];
-    if (localUser.password) {
-      isUserAuthenticated = await bcrypt.compare(password, localUser.password).catch(() => false);
+  for (const candidate of users) {
+    if (candidate.password) {
+      const match = await bcrypt.compare(password, candidate.password).catch(() => false);
+      if (match) {
+        isUserAuthenticated = true;
+        localUser = candidate;
+        break;
+      }
     }
   }
 
@@ -420,22 +440,8 @@ async function login(email, password) {
   }
 
   if (isUserAuthenticated) {
-    if (!localUser) {
-      const userRows = await query(
-        `SELECT 
-           u.id, 
-           u.email, 
-           u.status,
-           COALESCE(i.name, o.name, u.email) as name
-         FROM users u
-         LEFT JOIN individuals i ON i.user_id = u.id
-         LEFT JOIN organizations o ON o.user_id = u.id
-         WHERE u.email = ? AND u.status = 1
-         ORDER BY u.id ASC
-         LIMIT 1`,
-        [normalizedEmail]
-      );
-      if (userRows.length > 0) localUser = userRows[0];
+    if (!localUser && users.length > 0) {
+      localUser = users[0];
     }
 
     if (!localUser) {
@@ -444,8 +450,10 @@ async function login(email, password) {
       throw err;
     }
 
+    const allUserIds = users.length > 0 ? users.map(u => u.id) : [localUser.id];
+
     // ── Step 3: Strict Role Gate (Festival Admin, Jury, Volunteer) ──
-    const roles = await checkFestivalRoles(localUser.id);
+    const roles = await checkFestivalRoles(allUserIds);
     if (roles.length === 0) {
       const err = new Error(
         'Access Denied: You do not have an active Festival Admin, Jury, or Volunteer role assigned. ' +
@@ -460,6 +468,7 @@ async function login(email, password) {
         id: localUser.id,
         email: localUser.email,
         name: localUser.name,
+        userIds: allUserIds,
         role: 'user',
         isSuperAdmin: false,
       },
@@ -476,6 +485,7 @@ async function login(email, password) {
         id: localUser.id,
         name: localUser.name,
         email: localUser.email,
+        userIds: allUserIds,
         role: 'user',
         isSuperAdmin: false,
         roles,
@@ -614,20 +624,26 @@ async function getProfile(userId, role, editionId) {
 
   const user = users[0];
 
-  // Get user's assigned events and groups (plus festival ownership)
+  // Resolve all linked user IDs for this email to support both individual & organization festival ownership
+  const linkedUsers = await query('SELECT id FROM users WHERE email = ? AND status = 1', [user.email]);
+  const allUserIds = linkedUsers.length > 0 ? linkedUsers.map(u => u.id) : [userId];
+  const userPlaceholders = allUserIds.map(() => '?').join(',');
+
+  // Get user's assigned events and groups (plus festival ownership across all linked accounts)
   const eventGroups = await query(
     `SELECT e.event_id, e.event_id as id, e.name as event_name, e.description,
-            g.id as group_id, g.label as group_name, g.label as name, g.group_key, g.is_system
+            g.id as group_id, g.label as group_name, g.label as name, g.group_key, g.is_system, e.saas_enabled
      FROM user_event_groups ueg
      JOIN events e ON e.event_id = ueg.event_id AND e.is_deleted = 0
      JOIN \`groups\` g ON g.id = ueg.group_id
-     WHERE ueg.user_id = ?
+     WHERE ueg.user_id IN (${userPlaceholders})
      UNION
      SELECT e.event_id, e.event_id as id, e.name as event_name, e.description,
-            1 as group_id, 'Administrator' as group_name, 'Admin' as name, 'admin' as group_key, 1 as is_system
+            1 as group_id, 'Administrator' as group_name, 'Admin' as name, 'admin' as group_key, 1 as is_system, e.saas_enabled
      FROM events e
-     WHERE e.user_id = ? AND e.is_deleted = 0`,
-    [userId, userId]
+     WHERE e.user_id IN (${userPlaceholders}) AND e.is_deleted = 0
+     ORDER BY (saas_enabled = 1) DESC, event_id DESC`,
+    [...allUserIds, ...allUserIds]
   );
 
   let permissionsMap = {};
@@ -636,9 +652,9 @@ async function getProfile(userId, role, editionId) {
 
   if (editionId) {
     if (!activeGroup) {
-      const isPlatformAdmin = (userId === 1 || eventGroups.some(eg => eg.group_key === 'admin'));
+      const isPlatformAdmin = (allUserIds.includes(1) || eventGroups.some(eg => eg.group_key === 'admin'));
       const ownerRows = await query('SELECT user_id FROM events WHERE event_id = ?', [editionId]);
-      const isOwner = ownerRows.length > 0 && ownerRows[0].user_id === userId;
+      const isOwner = ownerRows.length > 0 && allUserIds.includes(ownerRows[0].user_id);
 
       if (isPlatformAdmin || isOwner) {
         await query(
@@ -655,7 +671,7 @@ async function getProfile(userId, role, editionId) {
     }
 
     let rows = await query(
-      `SELECT DISTINCT p.id, p.permission_key, p.label, p.actions_match, p.actions_unmatch
+      `SELECT DISTINCT p.id, p.permission_key, p.label, p.actions_match, p.actions_unmatch, ecgp.scope_key
        FROM user_event_custom_groups uecg
        JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
        JOIN permissions p ON p.id = ecgp.permission_id
@@ -670,7 +686,7 @@ async function getProfile(userId, role, editionId) {
       );
       if (hasCustomConfig.length === 0) {
         rows = await query(
-          `SELECT DISTINCT p.id, p.permission_key, p.label, p.actions_match, p.actions_unmatch
+          `SELECT DISTINCT p.id, p.permission_key, p.label, p.actions_match, p.actions_unmatch, mgp.scope_key
            FROM user_event_groups ueg
            JOIN module_groups mg ON mg.group_id = ueg.group_id
            JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
@@ -688,7 +704,7 @@ async function getProfile(userId, role, editionId) {
     let targetRows = rows;
     if (isAdmin) {
       targetRows = await query(
-        `SELECT id, permission_key, label, actions_match, actions_unmatch
+        `SELECT id, permission_key, label, actions_match, actions_unmatch, 'all' as scope_key
          FROM permissions
          WHERE permission_key != '*'
          ORDER BY id ASC`
@@ -719,6 +735,7 @@ async function getProfile(userId, role, editionId) {
         description: p.label || p.permission_key,
         page: resource,
         elementId,
+        scopeKey: p.scope_key || 'all',
         action: {
           match: p.actions_match || (isViewAction ? 'view' : 'active'),
           unmatch: p.actions_unmatch || (isViewAction ? 'hide' : 'inactive'),

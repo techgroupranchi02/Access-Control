@@ -297,6 +297,9 @@ function PermissionsByModuleSection({
   isCustomGroupCreation = false,
   readOnly = false,
   permissionSourceMap = null,
+  permissionScopeMap = null,
+  customScopes = null,
+  onScopeChange = null,
   selectedGroupsSummary = null,
   defaultFilterMode = null,
 }) {
@@ -572,10 +575,47 @@ function PermissionsByModuleSection({
                             <div className="fc-perm-tree-content">
                               <div className="fc-perm-tree-key-row">
                                 <span className="fc-perm-tree-key">{perm.key}</span>
+                                {isChecked && (
+                                  <span
+                                    className={`fc-scope-badge fc-scope-${(
+                                      (isCustomGroupCreation && customScopes?.[perm.key]) ||
+                                      permissionScopeMap?.get(perm.key) ||
+                                      perm.scopeKey ||
+                                      'all'
+                                    ).toLowerCase()}`}
+                                  >
+                                    {((isCustomGroupCreation && customScopes?.[perm.key]) ||
+                                      permissionScopeMap?.get(perm.key) ||
+                                      perm.scopeKey ||
+                                      'all') === 'assigned' && '🎯 Assigned'}
+                                    {((isCustomGroupCreation && customScopes?.[perm.key]) ||
+                                      permissionScopeMap?.get(perm.key) ||
+                                      perm.scopeKey ||
+                                      'all') === 'jury_panel' && '⚖️ Jury Panel'}
+                                    {((isCustomGroupCreation && customScopes?.[perm.key]) ||
+                                      permissionScopeMap?.get(perm.key) ||
+                                      perm.scopeKey ||
+                                      'all') === 'all' && '🌐 All'}
+                                  </span>
+                                )}
                                 {readOnly && isChecked && permissionSourceMap && permissionSourceMap.has(perm.key) && (
                                   <span className="fc-perm-source-tag">
                                     via {permissionSourceMap.get(perm.key).join(', ')}
                                   </span>
+                                )}
+                                {!readOnly && isCustomGroupCreation && isChecked && onScopeChange && (
+                                  <div className="fc-scope-picker" onClick={(e) => e.stopPropagation()}>
+                                    <label className="fc-scope-picker-label">Scope:</label>
+                                    <select
+                                      className="fc-scope-select"
+                                      value={customScopes?.[perm.key] || 'all'}
+                                      onChange={(e) => onScopeChange(perm.key, e.target.value)}
+                                    >
+                                      <option value="all">All (Global)</option>
+                                      <option value="assigned">Assigned Only</option>
+                                      <option value="jury_panel">Jury Panel</option>
+                                    </select>
+                                  </div>
                                 )}
                               </div>
                               {perm.description && (
@@ -602,6 +642,11 @@ export default function TeamPage() {
   const [users, setUsers] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [groupDefaults, setGroupDefaults] = useState({ admin: [], jury: [], judge: [], volunteer: [] });
+  const [groupScopeDefaults, setGroupScopeDefaults] = useState({});
+  const [cgScopes, setCgScopes] = useState({});
+  const handleCgScopeChange = (key, scope) => {
+    setCgScopes((prev) => ({ ...prev, [key]: scope }));
+  };
   const [customGroups, setCustomGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -666,6 +711,9 @@ export default function TeamPage() {
       }
       if (res.data.groupDefaults) {
         setGroupDefaults(res.data.groupDefaults);
+      }
+      if (res.data.groupScopeDefaults) {
+        setGroupScopeDefaults(res.data.groupScopeDefaults);
       }
       if (res.data.customGroups) {
         setCustomGroups(res.data.customGroups);
@@ -786,6 +834,41 @@ export default function TeamPage() {
     return map;
   }, [addSelectedGroups, catalog, groupDefaults, customGroups]);
 
+  const SCOPE_RANK = { 'all': 100, 'jury_panel': 50, 'assigned': 10 };
+
+  // Scope map for Add Member (resolved highest row-level scope for each permission)
+  const addScopeMap = useMemo(() => {
+    const map = new Map();
+    for (const gKey of addSelectedGroups) {
+      if (gKey === 'admin') {
+        catalog.forEach((m) => (m.permissions || []).forEach((p) => map.set(p.key, 'all')));
+      } else if (gKey.startsWith('custom_')) {
+        const cId = parseInt(gKey.replace('custom_', ''), 10);
+        const cg = customGroups.find((c) => c.id === cId);
+        if (cg?.permissionDetails) {
+          cg.permissionDetails.forEach((p) => {
+            const currentScope = map.get(p.key);
+            const thisScope = p.scopeKey || 'all';
+            if (!currentScope || (SCOPE_RANK[thisScope] || 0) > (SCOPE_RANK[currentScope] || 0)) {
+              map.set(p.key, thisScope);
+            }
+          });
+        }
+      } else {
+        const defs = groupDefaults[gKey] || (gKey === 'jury' ? groupDefaults['judge'] : []) || [];
+        const scopeDefs = groupScopeDefaults[gKey] || (gKey === 'jury' ? groupScopeDefaults['judge'] : {}) || {};
+        defs.forEach((k) => {
+          const currentScope = map.get(k);
+          const thisScope = scopeDefs[k] || 'all';
+          if (!currentScope || (SCOPE_RANK[thisScope] || 0) > (SCOPE_RANK[currentScope] || 0)) {
+            map.set(k, thisScope);
+          }
+        });
+      }
+    }
+    return map;
+  }, [addSelectedGroups, catalog, groupDefaults, groupScopeDefaults, customGroups]);
+
   // Effective permissions for Edit Member (union of permissions from editSelectedGroups)
   const editEffectivePermissions = useMemo(() => {
     const union = new Set();
@@ -835,6 +918,39 @@ export default function TeamPage() {
     }
     return map;
   }, [editSelectedGroups, catalog, groupDefaults, customGroups]);
+
+  // Scope map for Edit Member (resolved highest row-level scope for each permission)
+  const editScopeMap = useMemo(() => {
+    const map = new Map();
+    for (const gKey of editSelectedGroups) {
+      if (gKey === 'admin') {
+        catalog.forEach((m) => (m.permissions || []).forEach((p) => map.set(p.key, 'all')));
+      } else if (gKey.startsWith('custom_')) {
+        const cId = parseInt(gKey.replace('custom_', ''), 10);
+        const cg = customGroups.find((c) => c.id === cId);
+        if (cg?.permissionDetails) {
+          cg.permissionDetails.forEach((p) => {
+            const currentScope = map.get(p.key);
+            const thisScope = p.scopeKey || 'all';
+            if (!currentScope || (SCOPE_RANK[thisScope] || 0) > (SCOPE_RANK[currentScope] || 0)) {
+              map.set(p.key, thisScope);
+            }
+          });
+        }
+      } else {
+        const defs = groupDefaults[gKey] || (gKey === 'jury' ? groupDefaults['judge'] : []) || [];
+        const scopeDefs = groupScopeDefaults[gKey] || (gKey === 'jury' ? groupScopeDefaults['judge'] : {}) || {};
+        defs.forEach((k) => {
+          const currentScope = map.get(k);
+          const thisScope = scopeDefs[k] || 'all';
+          if (!currentScope || (SCOPE_RANK[thisScope] || 0) > (SCOPE_RANK[currentScope] || 0)) {
+            map.set(k, thisScope);
+          }
+        });
+      }
+    }
+    return map;
+  }, [editSelectedGroups, catalog, groupDefaults, groupScopeDefaults, customGroups]);
 
   const ALL_DOMAIN_KEYS = [
     'submission', 'review', 'jury', 'team', 'task', 'calendar', 'schedule',
@@ -993,6 +1109,7 @@ export default function TeamPage() {
     setCgName('');
     setCgDescription('');
     setCgPermissions(new Set());
+    setCgScopes({});
     setCgExpandedModules(new Set(ALL_DOMAIN_KEYS.concat(catalog.map((m) => m.key || m.id))));
     setCgPermSearch('');
     setShowCustomGroupModal(true);
@@ -1056,12 +1173,16 @@ export default function TeamPage() {
       const res = await api.post('/team/custom-groups', {
         name: cgName.trim(),
         description: cgDescription.trim(),
-        permissions: Array.from(cgPermissions),
+        permissions: Array.from(cgPermissions).map(k => ({
+          key: k,
+          scopeKey: cgScopes[k] || 'all'
+        })),
       });
       setShowCustomGroupModal(false);
       setCgName('');
       setCgDescription('');
       setCgPermissions(new Set());
+      setCgScopes({});
       await fetchTeam();
       alert(res.data.message || `Custom group "${cgName.trim()}" created successfully.`);
     } catch (err) {
@@ -1161,9 +1282,9 @@ export default function TeamPage() {
 
 
   // Handle Delete Member
-  const handleDelete = async (id, name) => {
-    if (user && (user.id === id || user.email?.toLowerCase() === name?.toLowerCase())) {
-      alert('You cannot remove yourself from the festival team.');
+  const handleDelete = async (id, name, email) => {
+    if (user && user.id === id) {
+      alert('You cannot remove your active logged-in account from the festival team.');
       return;
     }
     if (!window.confirm(`Are you sure you want to remove ${name} from this festival edition?`)) return;
@@ -1252,7 +1373,9 @@ export default function TeamPage() {
             </thead>
             <tbody>
               {filteredUsers.map((member) => {
-                const isCurrentUser = user && (user.id === member.id || user.email?.toLowerCase() === member.email?.toLowerCase());
+                const isCurrentSessionUser = user && user.id === member.id;
+                const isSameEmail = user && user.email?.toLowerCase() === member.email?.toLowerCase();
+                const isNonDeletable = isCurrentSessionUser || (member.accountType === 'organization' && (member.roleKeys?.includes('admin') || member.role?.toLowerCase().includes('admin')));
                 return (
                   <React.Fragment key={member.id}>
                     <tr>
@@ -1263,13 +1386,16 @@ export default function TeamPage() {
                             {getInitials(member.name)}
                           </div>
                           <div className="fc-member-cell">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                               <span className="fc-member-name">{member.name}</span>
-                              {isCurrentUser && (
+                              {isSameEmail && (
                                 <span className="fc-selected-verified-tag" style={{ fontSize: '0.62rem', padding: '1px 5px', borderRadius: '6px' }}>
                                   You
                                 </span>
                               )}
+                              <span className={`fc-account-type-badge ${member.accountType === 'organization' ? 'org' : 'ind'}`}>
+                                {member.accountType === 'organization' ? '🏢 Organization' : '👤 Individual'}
+                              </span>
                             </div>
                             <span className="fc-member-email">{member.email}</span>
                           </div>
@@ -1336,11 +1462,11 @@ export default function TeamPage() {
                           >
                             Edit
                           </button>
-                          {isCurrentUser ? (
+                          {isNonDeletable ? (
                             <button
                               className="fc-action-btn"
                               disabled
-                              title="You cannot remove yourself from the festival team"
+                              title={isCurrentSessionUser ? "You cannot remove your active logged-in account" : "The festival owner organization account cannot be removed from the team"}
                               style={{ opacity: 0.45, cursor: 'not-allowed' }}
                             >
                               Delete
@@ -1348,7 +1474,7 @@ export default function TeamPage() {
                           ) : (
                             <button
                               className="fc-action-btn fc-action-delete"
-                              onClick={() => handleDelete(member.id, member.name)}
+                              onClick={() => handleDelete(member.id, member.name, member.email)}
                             >
                               Delete
                             </button>
@@ -1377,6 +1503,7 @@ export default function TeamPage() {
                             catalog={catalog}
                             permissions={new Set((member.permissions || []).map((p) => p.key))}
                             readOnly={true}
+                            permissionScopeMap={new Map((member.permissions || []).map((p) => [p.key, p.scopeKey || 'all']))}
                             selectedGroupsSummary={{
                               icon: (member.groups?.[0]?.key === 'jury' || member.groups?.[0]?.key === 'judge' || member.roleKey === 'jury' || member.roleKey === 'judge') ? '⚖️' : (member.groups?.[0]?.key === 'admin' || member.roleKey === 'admin') ? '🛡️' : '👥',
                               title: member.groups?.map((g) => g.label).join(', ') || member.role || 'Volunteer',
@@ -1411,7 +1538,7 @@ export default function TeamPage() {
               <div className="fc-modal-body">
                 {/* User Search & Selection */}
                 <div className="fc-form-group" ref={dropdownRef}>
-                  <label>Search Registered Individual User</label>
+                  <label>Search Registered User (Individual or Organization)</label>
                   {!selectedUser ? (
                     <div className="fc-search-user-wrapper">
                       <div className="fc-search-input-box">
@@ -1436,25 +1563,28 @@ export default function TeamPage() {
                           {isSearching ? (
                             <div className="fc-user-search-empty">
                               <div className="fc-spinner" style={{ width: '16px', height: '16px', margin: '0 auto 6px' }}></div>
-                              Searching individuals directory...
+                              Searching directory...
                             </div>
                           ) : searchResults.length > 0 ? (
                             searchResults.map((u) => (
                               <div
-                                key={u.userId}
+                                key={`${u.userId}-${u.accountType}`}
                                 className={`fc-user-search-item ${u.isAlreadyMember ? 'disabled' : ''}`}
                                 onClick={() => handleSelectUser(u)}
-                                title={u.isAlreadyMember ? 'This user is already a team member' : 'Click to select user'}
+                                title={u.isAlreadyMember ? 'This user account is already in the team' : 'Click to select user'}
                               >
                                 <div className="fc-user-search-avatar">
                                   {getInitials(u.name)}
                                 </div>
                                 <div className="fc-user-search-info">
-                                  <div className="fc-user-search-name-row">
+                                  <div className="fc-user-search-name-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                     <span className="fc-user-search-name">{u.name}</span>
                                     {u.username && (
                                       <span className="fc-user-search-handle">@{u.username}</span>
                                     )}
+                                    <span className={`fc-account-type-badge ${u.accountType === 'organization' ? 'org' : 'ind'}`}>
+                                      {u.accountType === 'organization' ? '🏢 Organization' : '👤 Individual'}
+                                    </span>
                                   </div>
                                   <span className="fc-user-search-email">{u.email}</span>
                                 </div>
@@ -1469,8 +1599,8 @@ export default function TeamPage() {
                             ))
                           ) : (
                             <div className="fc-user-search-empty">
-                              No registered individual found matching &ldquo;{userQuery}&rdquo;.
-                              <div style={{ marginTop: '5px', fontSize: '0.72rem', color: '#b91c1c' }}>
+                              No registered user found matching &ldquo;{userQuery}&rdquo;.
+                              <div style={{ marginTop: '5px', fontSize: '0.72rem', color: 'var(--fc-text-muted)' }}>
                                 Team members must be registered users from next.autovertest.com/signin.
                               </div>
                             </div>
@@ -1485,9 +1615,11 @@ export default function TeamPage() {
                           {getInitials(selectedUser.name)}
                         </div>
                         <div className="fc-selected-user-meta">
-                          <div className="fc-selected-user-name">
+                          <div className="fc-selected-user-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             {selectedUser.name}
-                            <span className="fc-selected-verified-tag">✓ Freecomers User</span>
+                            <span className={`fc-account-type-badge ${selectedUser.accountType === 'organization' ? 'org' : 'ind'}`}>
+                              {selectedUser.accountType === 'organization' ? '🏢 Organization Account' : '👤 Individual Account'}
+                            </span>
                           </div>
                           <span className="fc-selected-user-email">{selectedUser.email}</span>
                         </div>
@@ -1531,6 +1663,7 @@ export default function TeamPage() {
                   onSearchChange={setAddPermSearch}
                   readOnly={true}
                   permissionSourceMap={addSourceMap}
+                  permissionScopeMap={addScopeMap}
                   selectedGroupsSummary={addGroupSummary}
                 />
 
@@ -1589,7 +1722,9 @@ export default function TeamPage() {
                         </span>
                       </div>
                     </div>
-                    <span className="fc-selected-verified-tag">✓ Individual Account</span>
+                    <span className={`fc-account-type-badge ${editingUser.accountType === 'organization' ? 'org' : 'ind'}`} style={{ fontSize: '0.72rem', padding: '3px 9px' }}>
+                      {editingUser.accountType === 'organization' ? '🏢 Organization Account' : '👤 Individual Account'}
+                    </span>
                   </div>
                 </div>
 
@@ -1616,6 +1751,7 @@ export default function TeamPage() {
                   onSearchChange={setEditPermSearch}
                   readOnly={true}
                   permissionSourceMap={editSourceMap}
+                  permissionScopeMap={editScopeMap}
                   selectedGroupsSummary={editGroupSummary}
                 />
               </div>
@@ -1687,6 +1823,8 @@ export default function TeamPage() {
                   searchQuery={cgPermSearch}
                   onSearchChange={setCgPermSearch}
                   isCustomGroupCreation={true}
+                  customScopes={cgScopes}
+                  onScopeChange={handleCgScopeChange}
                 />
               </div>
               <div className="fc-modal-footer">

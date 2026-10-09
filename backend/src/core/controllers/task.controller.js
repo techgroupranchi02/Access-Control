@@ -7,6 +7,7 @@
  */
 
 const { query } = require('../../config/database');
+const { scopeTasksQuery } = require('../services/scoping.service');
 
 /**
  * GET /api/tasks
@@ -27,6 +28,14 @@ async function list(req, res) {
     const userRole = groupRows.length > 0 ? groupRows[0].group_key : 'volunteer';
     const isAdmin = userRole === 'admin' || (req.user && req.user.isSuperAdmin);
 
+    const effectiveScope = req.permissionScope || {
+      scopeKey: isAdmin ? 'all' : 'assigned',
+      isWildcard: isAdmin,
+      allUserIds: req.user.userIds || [userId],
+      primaryUserId: userId,
+      editionId: parseInt(eventId, 10)
+    };
+
     let sql = `
       SELECT 
         t.id,
@@ -45,19 +54,23 @@ async function list(req, res) {
       LEFT JOIN organizations o ON o.user_id = u.id
       WHERE t.event_id = ?
     `;
-    const params = [eventId];
+    let params = [eventId];
 
-    // If volunteer and not requesting all as admin, scope to assigned tasks only
-    if (!isAdmin) {
-      sql += ` AND t.id IN (SELECT task_id FROM task_assignees WHERE user_id = ?)`;
-      params.push(userId);
-    } else if (req.query.unassigned === 'true') {
+    if (req.query.unassigned === 'true' && (effectiveScope.isWildcard || effectiveScope.scopeKey === 'all')) {
       sql += ` AND t.id NOT IN (SELECT task_id FROM task_assignees)`;
     }
+
+    // Apply row-level scoping
+    const scoped = scopeTasksQuery(sql, params, effectiveScope);
+    sql = scoped.sql;
+    params = scoped.params;
 
     sql += ` GROUP BY t.id, t.title, t.department, t.priority, t.due_date, t.status, t.created_at ORDER BY t.id ASC`;
 
     const tasks = await query(sql, params);
+
+    const userIds = effectiveScope.allUserIds || [userId];
+    const userPlaceholders = userIds.map(() => '?').join(',');
 
     // Summary counts for filter tabs
     const totalCountRes = await query('SELECT count(*) as count FROM tasks WHERE event_id = ?', [eventId]);
@@ -66,18 +79,20 @@ async function list(req, res) {
       WHERE event_id = ? AND id NOT IN (SELECT task_id FROM task_assignees)
     `, [eventId]);
     const myTasksCountRes = await query(`
-      SELECT count(*) as count FROM task_assignees WHERE user_id = ?
-    `, [userId]);
+      SELECT count(DISTINCT task_id) as count FROM task_assignees WHERE user_id IN (${userPlaceholders})
+    `, [...userIds]);
+
+    const myUserIdStrings = new Set(userIds.map(String));
 
     res.json({
       data: tasks.map(t => ({
         ...t,
         assigneeList: t.assignees ? t.assignees.split(', ') : [],
         assigneeIdList: t.assignee_ids ? t.assignee_ids.split(',').map(Number) : [],
-        isAssignedToMe: t.assignee_ids ? t.assignee_ids.split(',').includes(String(userId)) : false
+        isAssignedToMe: t.assignee_ids ? t.assignee_ids.split(',').some(id => myUserIdStrings.has(id)) : false
       })),
       totalCount: tasks.length,
-      scope: isAdmin ? 'all' : 'assigned',
+      scope: effectiveScope.scopeKey,
       metrics: {
         allTasks: totalCountRes[0].count,
         unassignedTasks: unassignedCountRes[0].count,

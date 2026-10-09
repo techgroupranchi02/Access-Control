@@ -225,7 +225,8 @@ async function getFestivalArchitecture(req, res) {
         mg.group_id, 
         g.group_key, 
         p.id as permission_id, 
-        p.permission_key
+        p.permission_key,
+        mgp.scope_key
       FROM module_groups mg
       JOIN \`groups\` g ON g.id = mg.group_id
       JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
@@ -233,13 +234,17 @@ async function getFestivalArchitecture(req, res) {
     `);
 
     const matrixLookup = {};
+    const matrixScopes = {};
     for (const row of mgpRows) {
       const key = `${row.module_id}_${row.group_key}`;
       if (!matrixLookup[key]) matrixLookup[key] = new Set();
+      if (!matrixScopes[key]) matrixScopes[key] = {};
       const shortKey = row.permission_key.includes(':') ? row.permission_key.split(':')[1] : 
                        row.permission_key.includes('.') ? row.permission_key.split('.')[1] : row.permission_key;
       matrixLookup[key].add(row.permission_key);
       matrixLookup[key].add(shortKey);
+      matrixScopes[key][row.permission_key] = row.scope_key || 'all';
+      matrixScopes[key][shortKey] = row.scope_key || 'all';
     }
 
     // Assemble the complete tree
@@ -250,10 +255,12 @@ async function getFestivalArchitecture(req, res) {
 
       // Group Access Matrix for this module
       const groupAccessMatrix = {};
+      const groupAccessMatrixScopes = {};
       for (const grp of groups) {
         // Administrator always has full access or whatever is mapped
         const enabledKeys = matrixLookup[`${m.id}_${grp.key}`] || new Set();
         groupAccessMatrix[grp.key] = Array.from(enabledKeys);
+        groupAccessMatrixScopes[grp.key] = matrixScopes[`${m.id}_${grp.key}`] || {};
       }
 
       // If Administrator has no explicit entries, grant all scoped permissions by default
@@ -273,7 +280,8 @@ async function getFestivalArchitecture(req, res) {
         routes,
         pages,
         scopedPermissions: scopedPerms,
-        groupAccessMatrix
+        groupAccessMatrix,
+        groupAccessMatrixScopes
       };
     });
 
@@ -335,7 +343,7 @@ async function updateGroupPermissionMatrix(req, res) {
   try {
     const eventId = parseInt(req.params.eventId, 10);
     const moduleId = parseInt(req.params.moduleId, 10);
-    const { groupKey, permissionShortKeys } = req.body;
+    const { groupKey, permissionShortKeys = [], scopeMap = {}, scopeKey = 'all' } = req.body;
 
     // Find group
     const groups = await query('SELECT id FROM `groups` WHERE group_key = ? LIMIT 1', [groupKey]);
@@ -354,21 +362,22 @@ async function updateGroupPermissionMatrix(req, res) {
 
     // Find permission IDs for this module matching the short keys
     const allPerms = await query('SELECT id, permission_key FROM permissions WHERE module_id = ?', [moduleId]);
-    const targetPermIds = [];
+    const targetPerms = [];
 
     for (const p of allPerms) {
       const shortKey = p.permission_key.includes(':') ? p.permission_key.split(':')[1] : 
                        p.permission_key.includes('.') ? p.permission_key.split('.')[1] : p.permission_key;
       if (permissionShortKeys.includes(shortKey) || permissionShortKeys.includes(p.permission_key)) {
-        targetPermIds.push(p.id);
+        targetPerms.push({ id: p.id, key: p.permission_key, shortKey });
       }
     }
 
     // Clear existing permissions for this module_group and insert target ones
     await query('DELETE FROM module_groups_permissions WHERE module_group_id = ?', [mgId]);
 
-    for (const permId of targetPermIds) {
-      await query('INSERT INTO module_groups_permissions (module_group_id, permission_id) VALUES (?, ?)', [mgId, permId]);
+    for (const p of targetPerms) {
+      const sKey = scopeMap[p.key] || scopeMap[p.shortKey] || scopeKey;
+      await query('INSERT INTO module_groups_permissions (module_group_id, permission_id, scope_key) VALUES (?, ?, ?)', [mgId, p.id, sKey]);
     }
 
     res.json({

@@ -39,7 +39,7 @@ function ChevronIcon({ isOpen }) {
 
 export default function Sidebar() {
   const { user, logout, switchPersona } = useAuth();
-  const { currentFestival, currentEdition, isModuleEnabled, isSaasEnabled, isSuperAdmin } = useFestivalConfig();
+  const { currentFestival, currentEdition, isModuleEnabled, isSaasEnabled, isSuperAdmin, festivals, selectFestival } = useFestivalConfig();
   const { theme, toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -159,9 +159,42 @@ export default function Sidebar() {
 
       {/* Festival Edition Card */}
       <div className="fc-festival-card">
-        <div className="fc-festival-name">
-          {currentFestival?.name || 'Indie Film Festival Bangalore'}
-        </div>
+        {festivals && festivals.length > 1 ? (
+          <div className="fc-festival-select-wrapper" style={{ position: 'relative', marginBottom: '4px' }}>
+            <select
+              className="fc-festival-select"
+              value={currentFestival?.id || ''}
+              onChange={(e) => {
+                const fest = festivals.find(f => f.id === parseInt(e.target.value, 10));
+                if (fest) selectFestival(fest);
+              }}
+              style={{
+                width: '100%',
+                appearance: 'none',
+                background: 'transparent',
+                border: 'none',
+                fontFamily: 'inherit',
+                fontSize: '0.8125rem',
+                fontWeight: 700,
+                color: 'var(--fc-text-main)',
+                cursor: 'pointer',
+                paddingRight: '18px',
+                outline: 'none',
+              }}
+            >
+              {festivals.map(fest => (
+                <option key={fest.id} value={fest.id}>
+                  {fest.name} {fest.saas_enabled ? '· SaaS Active' : '· Inactive'}
+                </option>
+              ))}
+            </select>
+            <span style={{ position: 'absolute', right: 0, top: 0, pointerEvents: 'none', fontSize: '0.75rem', color: 'var(--fc-text-muted)' }}>▾</span>
+          </div>
+        ) : (
+          <div className="fc-festival-name">
+            {currentFestival?.name || 'Indie Film Festival Bangalore'}
+          </div>
+        )}
         <div className="fc-festival-edition">
           {currentFestival?.edition || 'Edition 4 · 2026'}
         </div>

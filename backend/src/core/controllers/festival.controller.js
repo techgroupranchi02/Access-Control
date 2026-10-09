@@ -10,7 +10,7 @@ const festivalService = require('../services/festival.service');
  */
 async function list(req, res) {
   try {
-    const festivals = await festivalService.getAllFestivals();
+    const festivals = await festivalService.getAllFestivals(req.user);
     res.json(festivals);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch festivals.' });
