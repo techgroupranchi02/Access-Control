@@ -1,58 +1,45 @@
 /**
- * SettingsPage Component
- * 100% Dynamic Database-backed Settings matching Mockup:
- * - Sub-navigation tabs: Festival | Billing
- * - Card 1: Film Flags (CRUD, color swatches direct toggle, active switch from submission_flags)
- * - Card 2: Review Rounds:
- *    - Max screening rounds selector (1, 2, 3, 4 rounds) with review lock banner
- *    - Round 1 & Round 2 sections:
- *      - Lock banner if reviews submitted
- *      - Scoring Mode (Star rating / Vote nomination)
- *      - Maximum Rating Points (3, 5, 10 Stars)
- *      - Review Notes (Optional / Required)
- *      - Categories list (CRUD from festival_review_criteria)
+ * SettingsPage Component — Section-Wise Review Pipeline & Festival Settings
+ * 
+ * Features:
+ * - Review Stages & Sequential Pipeline (Section-Wise Architecture):
  */
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import api from '../services/api';
-
-const PRESET_SWATCHES = [
-  '#e0f2fe', '#d1fae5', '#fef3c7', '#ffedd5', '#fee2e2',
-  '#fbcfe8', '#e05252', '#d97706', '#10b981', '#3b82f6', '#8b5cf6'
-];
+import InPageReviewStateBuilder from '../components/settings/InPageReviewStateBuilder';
+import {
+  InboxIcon,
+  LockIcon,
+  CheckCircleIcon,
+  ArrowForwardIcon,
+  FlashOnIcon,
+  PersonIcon,
+  EditIcon,
+  AddIcon,
+  CloseIcon
+} from '../components/common/Icons';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('festival'); // 'festival' | 'billing'
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [loading, setLoading] = useState(true);
   const [notification, setNotification] = useState(null);
 
+  // Review States (Sequential Stages)
+  const [reviewStates, setReviewStates] = useState([]);
+  const [isAddingStage, setIsAddingStage] = useState(false);
+  const [editingStageId, setEditingStageId] = useState(null);
 
-  // Flags State
-  const [flags, setFlags] = useState([]);
-  const [flagModal, setFlagModal] = useState({
-    open: false,
-    mode: 'add',
-    item: null,
-    label: '',
-    color: '#e05252',
-    is_active: true
-  });
-
-  // Review Rounds State
-  const [roundsConfig, setRoundsConfig] = useState({
-    max_screening_rounds: 2,
-    is_rounds_locked: false,
-    lock_message: null,
-    rounds: []
-  });
-  const [categoryModal, setCategoryModal] = useState({
-    open: false,
-    mode: 'add',
-    roundNumber: 1,
-    item: null,
-    label: '',
-    key: ''
-  });
+  // Flash message notification from redirects
+  useEffect(() => {
+    if (location.state?.msg) {
+      showNotification(location.state.msg);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   // Show transient alert message
   const showNotification = (msg, type = 'success') => {
@@ -62,21 +49,16 @@ export default function SettingsPage() {
     }, 4000);
   };
 
-  const loadAllSettings = async () => {
+  const loadAllSettings = async (silent = false) => {
     try {
-      setLoading(true);
-      const [flagRes, roundsRes] = await Promise.all([
-        api.get('/settings/flags'),
-        api.get('/settings/review-rounds')
-      ]);
-
-      setFlags(flagRes.data.data || []);
-      setRoundsConfig(roundsRes.data || { max_screening_rounds: 2, rounds: [] });
+      if (!silent) setLoading(true);
+      const statesRes = await api.get('/settings/review-states');
+      setReviewStates(statesRes.data?.data || []);
     } catch (err) {
       console.error('Failed to load settings:', err);
       showNotification('Failed to load settings. Please try again.', 'error');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -84,745 +66,543 @@ export default function SettingsPage() {
     loadAllSettings();
   }, []);
 
-
-
   // ───────────────────────────────────────────────────────────────────────────
-  // FLAGS HANDLERS
+  // NAVIGATION & STAGES HANDLERS (Section-Wise Review Architecture)
   // ───────────────────────────────────────────────────────────────────────────
 
-  const handleOpenAddFlag = () => {
-    setFlagModal({
-      open: true,
-      mode: 'add',
-      item: null,
-      label: '',
-      color: '#e05252',
-      is_active: true
-    });
+  const handleGoToCreateStage = () => {
+    navigate('/settings/review-stage/create');
   };
 
-  const handleOpenEditFlag = (flag) => {
-    setFlagModal({
-      open: true,
-      mode: 'edit',
-      item: flag,
-      label: flag.label,
-      color: flag.color,
-      is_active: Boolean(flag.is_active)
-    });
+  const handleGoToEditStage = (stageId) => {
+    navigate(`/settings/review-stage/edit/${stageId}`);
   };
 
-  const handleSaveFlag = async (e) => {
-    e.preventDefault();
-    if (!flagModal.label.trim()) return;
+  const handleToggleAddStage = () => {
+    handleGoToCreateStage();
+  };
 
+  const handleToggleEditStage = (stageId) => {
+    handleGoToEditStage(stageId);
+  };
+
+  const handleToggleStageStatus = async (stage) => {
+    const newStatus = stage.status === 'inactive' ? 'active' : 'inactive';
     try {
-      if (flagModal.mode === 'add') {
-        const res = await api.post('/settings/flags', {
-          label: flagModal.label.trim(),
-          color: flagModal.color,
-          is_active: flagModal.is_active
-        });
-        setFlags(prev => [...prev, res.data.data]);
-        showNotification(`Flag "${res.data.data.label}" created successfully.`);
-      } else {
-        const res = await api.put(`/settings/flags/${flagModal.item.id}`, {
-          label: flagModal.label.trim(),
-          color: flagModal.color,
-          is_active: flagModal.is_active
-        });
-        setFlags(prev => prev.map(f => f.id === flagModal.item.id ? res.data.data : f));
-        showNotification(`Flag "${res.data.data.label}" updated.`);
-      }
-      setFlagModal({ open: false, mode: 'add', item: null, label: '', color: '#e05252', is_active: true });
+      setReviewStates(prev => prev.map(s => s.id === stage.id ? { ...s, status: newStatus } : s));
+      await api.put(`/settings/review-states/${stage.id}`, { status: newStatus });
+      showNotification(`Stage "${stage.unique_name || stage.name}" is now ${newStatus === 'active' ? 'Active' : 'Inactive'}.`);
+      await loadAllSettings(true);
     } catch (err) {
-      console.error('Failed to save flag:', err);
-      showNotification(err.response?.data?.error || 'Failed to save flag.', 'error');
-    }
-  };
-
-  const handleQuickColorChange = async (flag, color) => {
-    try {
-      // Optimistic update
-      setFlags(prev => prev.map(f => f.id === flag.id ? { ...f, color } : f));
-      await api.put(`/settings/flags/${flag.id}`, { color });
-      showNotification(`Flag "${flag.label}" color updated.`);
-    } catch (err) {
-      console.error('Failed to change flag color:', err);
+      console.error('Failed to toggle stage status:', err);
+      showNotification('Failed to update stage status.', 'error');
       loadAllSettings();
-    }
-  };
-
-  const handleToggleFlagActive = async (flag) => {
-    const newStatus = !flag.is_active;
-    try {
-      setFlags(prev => prev.map(f => f.id === flag.id ? { ...f, is_active: newStatus } : f));
-      await api.put(`/settings/flags/${flag.id}`, { is_active: newStatus });
-      showNotification(`Flag "${flag.label}" is now ${newStatus ? 'Active' : 'Inactive'}.`);
-    } catch (err) {
-      console.error('Failed to toggle flag active state:', err);
-      loadAllSettings();
-    }
-  };
-
-  const handleDeleteFlag = async (flag) => {
-    if (!window.confirm(`Are you sure you want to delete the flag "${flag.label}"?`)) return;
-
-    try {
-      await api.delete(`/settings/flags/${flag.id}`);
-      setFlags(prev => prev.filter(f => f.id !== flag.id));
-      showNotification(`Flag "${flag.label}" deleted.`);
-    } catch (err) {
-      console.error('Failed to delete flag:', err);
-      showNotification(err.response?.data?.error || 'Failed to delete flag.', 'error');
-    }
-  };
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // REVIEW ROUNDS HANDLERS
-  // ───────────────────────────────────────────────────────────────────────────
-
-  const handleSelectMaxRounds = async (roundsCount) => {
-    if (roundsConfig.is_rounds_locked) {
-      alert('Round count is locked because one or more round reviews have already been submitted.');
-      return;
-    }
-    try {
-      await api.put('/settings/review-rounds/max-rounds', { max_screening_rounds: roundsCount });
-      showNotification(`Max screening rounds set to ${roundsCount}.`);
-      loadAllSettings();
-    } catch (err) {
-      console.error('Failed to update max rounds:', err);
-      showNotification(err.response?.data?.error || 'Failed to update max rounds.', 'error');
-    }
-  };
-
-  const handleUpdateRoundField = async (roundNumber, field, value) => {
-    const round = roundsConfig.rounds.find(r => r.round_number === roundNumber);
-    if (!round) return;
-
-    if (round.is_locked) {
-      alert('Configuration is locked because reviews have already been submitted for this round.');
-      return;
-    }
-
-    try {
-      const payload = {
-        scoring_mode: field === 'scoring_mode' ? value : round.scoring_mode,
-        max_rating_points: field === 'max_rating_points' ? value : round.max_rating_points,
-        notes_required: field === 'notes_required' ? value : round.notes_required
-      };
-
-      // Optimistic update
-      setRoundsConfig(prev => ({
-        ...prev,
-        rounds: prev.rounds.map(r => r.round_number === roundNumber ? { ...r, [field]: value } : r)
-      }));
-
-      await api.put(`/settings/review-rounds/${roundNumber}`, payload);
-      showNotification(`Round ${roundNumber} configuration saved.`);
-    } catch (err) {
-      console.error('Failed to update round config:', err);
-      showNotification(err.response?.data?.error || 'Failed to update round config.', 'error');
-      loadAllSettings();
-    }
-  };
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // CRITERIA CATEGORIES HANDLERS
-  // ───────────────────────────────────────────────────────────────────────────
-
-  const handleOpenAddCategory = (roundNumber) => {
-    const round = roundsConfig.rounds.find(r => r.round_number === roundNumber);
-    if (round && round.is_locked) {
-      alert('Configuration is locked because reviews have already been submitted for this round.');
-      return;
-    }
-    setCategoryModal({
-      open: true,
-      mode: 'add',
-      roundNumber,
-      item: null,
-      label: '',
-      key: ''
-    });
-  };
-
-  const handleOpenEditCategory = (roundNumber, category) => {
-    const round = roundsConfig.rounds.find(r => r.round_number === roundNumber);
-    if (round && round.is_locked) {
-      alert('Configuration is locked because reviews have already been submitted for this round.');
-      return;
-    }
-    setCategoryModal({
-      open: true,
-      mode: 'edit',
-      roundNumber,
-      item: category,
-      label: category.label,
-      key: category.criterion_key
-    });
-  };
-
-  const handleSaveCategory = async (e) => {
-    e.preventDefault();
-    if (!categoryModal.label.trim()) return;
-
-    const roundNum = categoryModal.roundNumber;
-    try {
-      if (categoryModal.mode === 'add') {
-        const res = await api.post(`/settings/review-rounds/${roundNum}/categories`, {
-          label: categoryModal.label.trim(),
-          key: categoryModal.key.trim()
-        });
-        setRoundsConfig(prev => ({
-          ...prev,
-          rounds: prev.rounds.map(r =>
-            r.round_number === roundNum
-              ? { ...r, categories: [...(r.categories || []), res.data.data] }
-              : r
-          )
-        }));
-        showNotification(`Category "${res.data.data.label}" added to Round ${roundNum}.`);
-      } else {
-        const res = await api.put(`/settings/review-rounds/${roundNum}/categories/${categoryModal.item.id}`, {
-          label: categoryModal.label.trim(),
-          key: categoryModal.key.trim()
-        });
-        setRoundsConfig(prev => ({
-          ...prev,
-          rounds: prev.rounds.map(r =>
-            r.round_number === roundNum
-              ? {
-                  ...r,
-                  categories: (r.categories || []).map(c =>
-                    c.id === categoryModal.item.id ? { ...c, ...res.data.data } : c
-                  )
-                }
-              : r
-          )
-        }));
-        showNotification(`Category updated.`);
-      }
-      setCategoryModal({ open: false, mode: 'add', roundNumber: 1, item: null, label: '', key: '' });
-    } catch (err) {
-      console.error('Failed to save category:', err);
-      showNotification(err.response?.data?.error || 'Failed to save criteria category.', 'error');
-    }
-  };
-
-  const handleDeleteCategory = async (roundNumber, category) => {
-    const round = roundsConfig.rounds.find(r => r.round_number === roundNumber);
-    if (round && round.is_locked) {
-      alert('Configuration is locked because reviews have already been submitted for this round.');
-      return;
-    }
-
-    if (!window.confirm(`Are you sure you want to delete category "${category.label}" from Round ${roundNumber}?`)) {
-      return;
-    }
-
-    try {
-      await api.delete(`/settings/review-rounds/${roundNumber}/categories/${category.id}`);
-      setRoundsConfig(prev => ({
-        ...prev,
-        rounds: prev.rounds.map(r =>
-          r.round_number === roundNumber
-            ? { ...r, categories: (r.categories || []).filter(c => c.id !== category.id) }
-            : r
-        )
-      }));
-      showNotification(`Category "${category.label}" deleted.`);
-    } catch (err) {
-      console.error('Failed to delete category:', err);
-      showNotification(err.response?.data?.error || 'Failed to delete category.', 'error');
     }
   };
 
   return (
-    <div className="fc-settings-page animate-fade-in">
-      {/* Top Header Matching Screenshot 3 */}
-      <div className="fc-page-header">
-        <h1 className="fc-page-title">Settings</h1>
-        <p className="fc-page-subtitle">Manage festival configuration and account settings.</p>
-      </div>
-
-      {/* Floating Notification */}
+    <div className="fc-settings-page animate-fade-in" style={{ paddingBottom: '80px' }}>
+      {/* Toast Notification */}
       {notification && (
-        <div className={`fc-settings-toast ${notification.type === 'error' ? 'toast-error' : 'toast-success'}`}>
+        <div className={`fc-notification-banner ${notification.type === 'error' ? 'fc-notif-error' : 'fc-notif-success'}`} style={{ marginBottom: '16px', padding: '12px 18px', borderRadius: '8px', background: notification.type === 'error' ? '#fee2e2' : '#dcfce7', color: notification.type === 'error' ? '#b91c1c' : '#15803d', fontWeight: 600 }}>
           {notification.msg}
         </div>
       )}
 
-      {/* Sub-Navigation Tabs: Festival | Billing (Matching Screenshot 3) */}
-      <div className="fc-settings-tabs-bar">
-        <button
-          type="button"
-          className={`fc-settings-tab-btn ${activeTab === 'festival' ? 'active' : ''}`}
-          onClick={() => setActiveTab('festival')}
-        >
-          Festival
-        </button>
-        <button
-          type="button"
-          className={`fc-settings-tab-btn ${activeTab === 'billing' ? 'active' : ''}`}
-          onClick={() => setActiveTab('billing')}
-        >
-          Billing
-        </button>
+      {/* Breadcrumbs Navigation */}
+      <nav style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--fc-text-secondary)', marginBottom: '16px' }}>
+        <Link to="/settings" style={{ color: 'var(--fc-text-secondary)', textDecoration: 'none' }}>
+          Settings
+        </Link>
+        <span>/</span>
+        <span style={{ color: 'var(--fc-brand, #a82f2f)', fontWeight: 700 }}>
+          Review Stage
+        </span>
+      </nav>
+
+      {/* Page Header */}
+      <div className="fc-page-header" style={{ marginBottom: '24px' }}>
+        <h1 className="fc-page-title">Settings & Workflow</h1>
+        <p className="fc-page-subtitle">Configure sequential review stages, automation cutoffs, and film flags.</p>
       </div>
 
       {loading ? (
-        <div className="fc-loading-skeleton-container">
-          <div className="fc-skeleton-card" />
-          <div className="fc-skeleton-card" />
-          <div className="fc-skeleton-card" />
+        <div style={{ padding: '60px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>
+          Loading festival configurations...
         </div>
-      ) : activeTab === 'festival' ? (
-        <div className="fc-settings-content">
-
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+          
           {/* ──────────────────────────────────────────────────────────────── */}
-          {/* CARD 2: FILM FLAGS (Matching Screenshot 3)                      */}
+          {/* SECTION-WISE REVIEW PIPELINE ARCHITECTURE (6 SEQUENTIAL STAGES)  */}
           {/* ──────────────────────────────────────────────────────────────── */}
-          <div className="fc-settings-card">
-            <div className="fc-card-header-row">
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
-                <h2 className="fc-card-title">Film Flags</h2>
-                <p className="fc-card-subtitle">
-                  Configure operational labels staff can assign to films alongside lifecycle status.
+                <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--fc-text-main)', letterSpacing: '-0.3px' }}>
+                  Review Pipeline Architecture
+                </h2>
+                <p style={{ fontSize: '13px', color: 'var(--fc-text-secondary)', marginTop: '2px' }}>
+                  Sequential review stages with scoring configuration and permission scopes.
                 </p>
               </div>
               <button
                 type="button"
-                className="fc-btn-primary-action"
-                onClick={handleOpenAddFlag}
+                className="fc-btn-add-review-state"
+                onClick={handleToggleAddStage}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
-                + Add Flag
+                {isAddingStage ? (
+                  <>
+                    <CloseIcon size={14} />
+                    <span>Close Builder</span>
+                  </>
+                ) : (
+                  <>
+                    <AddIcon size={16} />
+                    <span>Add New Review-State</span>
+                  </>
+                )}
               </button>
             </div>
 
-            <div className="fc-flags-list">
-              {flags.length === 0 ? (
-                <div className="fc-empty-state-text">No film flags configured.</div>
-              ) : (
-                flags.map(flag => (
-                  <div key={flag.id} className="fc-flag-row">
-                    {/* Left: Drag Handle & Label */}
-                    <div className="fc-flag-left-meta">
-                      <span className="fc-drag-handle">⠿</span>
-                      <span className="fc-flag-label-text">{flag.label}</span>
-                      <span
-                        className="fc-flag-badge-pill"
-                        style={{
-                          backgroundColor: `${flag.color}22`,
-                          color: flag.color,
-                          borderColor: `${flag.color}44`
+            <div className="settings-sections-stack">
+              {/* ── STAGE 0: Initial Intake Stage (New Submission) in Disabled Form ── */}
+              <div 
+                className="state-section-card fc-stage-disabled-card"
+                style={{
+                  opacity: 0.9,
+                  border: '1.5px dashed var(--fc-border, #cbd5e1)',
+                  background: 'var(--fc-surface-subtle, rgba(0, 0, 0, 0.02))'
+                }}
+              >
+                {/* Section Header */}
+                <div className="state-section-header" style={{ cursor: 'default' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <span 
+                      className="state-badge-num"
+                      style={{ 
+                        background: 'var(--fc-surface-hover, #64748b)', 
+                        color: '#ffffff',
+                        boxShadow: 'none'
+                      }}
+                    >
+                      0
+                    </span>
+                    <strong style={{ fontSize: '15px', color: 'var(--fc-text-main)' }}>
+                      New Submission
+                    </strong>
+                    <span className="criteria-chip" style={{ background: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0', display: 'inline-flex', alignItems: 'center' }}>
+                      <InboxIcon size={13} style={{ marginRight: '4px' }} /> Initial Intake Stage
+                    </span>
+                    <span className="criteria-chip" style={{ background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', display: 'inline-flex', alignItems: 'center' }}>
+                      <LockIcon size={13} style={{ marginRight: '4px' }} /> System Default (Fixed)
+                    </span>
+                    <span className="criteria-chip" style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}>
+                      Non-Scoring Base
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label
+                      className="fc-toggle-switch"
+                      title="Initial Intake stage is permanently active as the entry point"
+                      style={{ verticalAlign: 'middle', cursor: 'not-allowed', opacity: 0.6 }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        disabled={true}
+                        readOnly={true}
+                      />
+                      <span className="fc-toggle-slider" />
+                    </label>
+                    <button
+                      type="button"
+                      className="fc-stage-status-btn active"
+                      disabled={true}
+                      style={{ cursor: 'not-allowed', opacity: 0.85, display: 'inline-flex', alignItems: 'center' }}
+                      title="System base stage is permanently active"
+                    >
+                      <CheckCircleIcon size={13} style={{ marginRight: '4px' }} /> Active (Default)
+                    </button>
+                    <button
+                      type="button"
+                      className="fc-btn fc-btn-outline fc-btn-sm"
+                      disabled={true}
+                      style={{ cursor: 'not-allowed', opacity: 0.55, display: 'inline-flex', alignItems: 'center' }}
+                      title="Default intake stage configuration is fixed by the system"
+                    >
+                      <LockIcon size={13} style={{ marginRight: '4px' }} /> Default Entry
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section Body */}
+                <div 
+                  className="state-section-body" 
+                  style={{ 
+                    padding: '16px 24px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '32px', 
+                    flexWrap: 'wrap', 
+                    background: 'var(--fc-surface-card, #faf9f7)', 
+                    borderTop: '1px solid var(--fc-border)' 
+                  }}
+                >
+                  <div>
+                    <span className="state-sub-col-title" style={{ marginBottom: '4px' }}>STAGE TYPE</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fc-text-main)' }}>
+                      Film Intake & Verification
+                    </div>
+                  </div>
+
+                  <div style={{ width: '1px', height: '28px', background: 'var(--fc-border)', alignSelf: 'center' }}></div>
+
+                  <div>
+                    <span className="state-sub-col-title" style={{ marginBottom: '4px' }}>EVALUATION CRITERIA</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fc-text-secondary, #64748b)' }}>
+                      Awaiting Assignment to Round 1
+                    </div>
+                  </div>
+
+                  <div style={{ width: '1px', height: '28px', background: 'var(--fc-border)', alignSelf: 'center' }}></div>
+
+                  <div>
+                    <span className="state-sub-col-title" style={{ marginBottom: '4px' }}>REVIEW NOTES</span>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fc-text-secondary, #64748b)' }}>
+                      System Intake Queue
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Flow Connector from Stage 0 to Stage 1 */}
+              <div className="flow-connector-step">
+                <ArrowForwardIcon size={13} style={{ marginRight: '5px' }} />
+                <span>Sequential Promotion to Stage 1: {reviewStates.filter(s => s.status !== 'inactive')[0]?.unique_name || 'Round 1: Screening'}</span>
+              </div>
+
+              {reviewStates.filter(s => s.status !== 'inactive').map((stage, idx, activeStagesList) => {
+                const isEditing = editingStageId === stage.id;
+                const dynamicOrder = idx + 1;
+
+                return (
+                  <React.Fragment key={stage.id || idx}>
+                    {isEditing ? (
+                      <InPageReviewStateBuilder
+                        key={`edit-${stage.id}`}
+                        editStage={stage}
+                        nextStageOrder={dynamicOrder}
+                        allStages={reviewStates}
+                        onClose={() => setEditingStageId(null)}
+                        onSaved={() => {
+                          loadAllSettings();
+                          setEditingStageId(null);
                         }}
-                      >
-                        {flag.label}
-                      </span>
-                    </div>
-
-                    {/* Right: Color Swatches, Active Switch, Edit, Delete */}
-                    <div className="fc-flag-controls-right">
-                      {/* Swatches Palette */}
-                      <div className="fc-swatches-palette">
-                        {PRESET_SWATCHES.map(color => {
-                          const isSelected = flag.color.toLowerCase() === color.toLowerCase();
-                          return (
-                            <button
-                              key={color}
-                              type="button"
-                              className={`fc-color-circle ${isSelected ? 'selected' : ''}`}
-                              style={{ backgroundColor: color }}
-                              onClick={() => handleQuickColorChange(flag, color)}
-                              title={color}
-                            />
-                          );
-                        })}
-                      </div>
-
-                      {/* Active Toggle Switch */}
-                      <label className="fc-toggle-switch">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(flag.is_active)}
-                          onChange={() => handleToggleFlagActive(flag)}
-                        />
-                        <span className="fc-toggle-slider" />
-                      </label>
-
-                      {/* Actions */}
-                      <button
-                        type="button"
-                        className="fc-btn-subtle"
-                        onClick={() => handleOpenEditFlag(flag)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="fc-btn-subtle"
-                        onClick={() => handleDeleteFlag(flag)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* ──────────────────────────────────────────────────────────────── */}
-          {/* CARD 3: REVIEW ROUNDS & CRITERIA (Matching Screenshots 3, 4, 5) */}
-          {/* ──────────────────────────────────────────────────────────────── */}
-          <div className="fc-settings-card">
-            <div className="fc-card-header-row">
-              <div>
-                <h2 className="fc-card-title">Review Rounds</h2>
-                <p className="fc-card-subtitle">
-                  Configure per-round screening criteria, scoring mode, scale, and note requirements.
-                </p>
-              </div>
-            </div>
-
-            {/* Max Screening Rounds Control */}
-            <div className="fc-max-rounds-block">
-              <div className="fc-control-label-row">
-                <span className="fc-control-label">Max screening rounds</span>
-                <div className="fc-pill-group">
-                  {[1, 2, 3, 4].map(r => (
-                    <button
-                      key={r}
-                      type="button"
-                      className={`fc-pill-btn ${roundsConfig.max_screening_rounds === r ? 'active' : ''}`}
-                      onClick={() => handleSelectMaxRounds(r)}
-                    >
-                      {r} {r === 1 ? 'round' : 'rounds'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <p className="fc-control-helptext">
-                Sets the edition ceiling for how many screening rounds you can add in the Review Dashboard. Actual rounds grow dynamically as you complete each round.
-              </p>
-
-              {/* Dynamic Round Count Lock Banner */}
-              {roundsConfig.is_rounds_locked && (
-                <div className="fc-lock-notice-banner">
-                  Round count is locked because one or more round reviews have already been submitted.
-                </div>
-              )}
-            </div>
-
-            {/* Round Sections (Round 1, Round 2, etc.) */}
-            {roundsConfig.rounds.map(round => (
-              <div key={round.round_number} className="fc-round-section-block">
-                <div className="fc-round-header">
-                  <h3 className="fc-round-title">{round.round_name}</h3>
-                  <p className="fc-round-description">{round.description}</p>
-                </div>
-
-                {/* Round Configuration Lock Banner */}
-                {round.is_locked && (
-                  <div className="fc-lock-notice-banner">
-                    Configuration is locked because reviews have already been submitted for this round. Existing reviews must be cleared to make changes.
-                  </div>
-                )}
-
-                {/* Scoring Mode */}
-                <div className="fc-setting-field-row">
-                  <span className="fc-setting-field-label">Scoring Mode</span>
-                  <div className="fc-pill-group">
-                    <button
-                      type="button"
-                      className={`fc-pill-btn ${round.scoring_mode === 'star_rating' ? 'active' : ''}`}
-                      onClick={() => handleUpdateRoundField(round.round_number, 'scoring_mode', 'star_rating')}
-                    >
-                      Star rating
-                    </button>
-                    <button
-                      type="button"
-                      className={`fc-pill-btn ${round.scoring_mode === 'vote_nomination' ? 'active' : ''}`}
-                      onClick={() => handleUpdateRoundField(round.round_number, 'scoring_mode', 'vote_nomination')}
-                    >
-                      Vote / nomination
-                    </button>
-                  </div>
-                </div>
-
-                {/* Maximum Rating Points */}
-                <div className="fc-setting-field-row">
-                  <span className="fc-setting-field-label">Maximum Rating Points</span>
-                  <div className="fc-pill-group">
-                    {[3, 5, 10].map(pts => (
-                      <button
-                        key={pts}
-                        type="button"
-                        className={`fc-pill-btn ${round.max_rating_points === pts ? 'active' : ''}`}
-                        onClick={() => handleUpdateRoundField(round.round_number, 'max_rating_points', pts)}
-                      >
-                        {pts} Stars
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Review Notes */}
-                <div className="fc-setting-field-row">
-                  <span className="fc-setting-field-label">Review Notes</span>
-                  <div className="fc-pill-group">
-                    <button
-                      type="button"
-                      className={`fc-pill-btn ${round.notes_required === 'optional' ? 'active' : ''}`}
-                      onClick={() => handleUpdateRoundField(round.round_number, 'notes_required', 'optional')}
-                    >
-                      Optional
-                    </button>
-                    <button
-                      type="button"
-                      className={`fc-pill-btn ${round.notes_required === 'required' ? 'active' : ''}`}
-                      onClick={() => handleUpdateRoundField(round.round_number, 'notes_required', 'required')}
-                    >
-                      Required
-                    </button>
-                  </div>
-                </div>
-
-                {/* Categories Subsection */}
-                <div className="fc-categories-subsection">
-                  <div className="fc-categories-header-row">
-                    <h4 className="fc-subsection-title">Categories</h4>
-                    <button
-                      type="button"
-                      className="fc-btn-primary-action"
-                      onClick={() => handleOpenAddCategory(round.round_number)}
-                    >
-                      + Add Category
-                    </button>
-                  </div>
-
-                  <div className="fc-categories-list">
-                    {(round.categories || []).length === 0 ? (
-                      <div className="fc-empty-state-text">No review categories configured for this round.</div>
+                        showNotification={showNotification}
+                      />
                     ) : (
-                      (round.categories || []).map(cat => (
-                        <div key={cat.id} className="fc-category-row">
-                          <div className="fc-category-meta">
-                            <span className="fc-category-label">{cat.label}</span>
-                            <span className="fc-category-key">Key: {cat.criterion_key}</span>
+                      <div className="state-section-card">
+                        {/* Section Header */}
+                        <div className="state-section-header">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                            <span className="state-badge-num">
+                              {dynamicOrder}
+                            </span>
+                            <strong style={{ fontSize: '15px', color: 'var(--fc-text-main)' }}>
+                              {stage.unique_name || stage.name}
+                            </strong>
+                            <span className="criteria-chip" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd', display: 'inline-flex', alignItems: 'center' }}>
+                              {stage.jury_assignment_mode === 'manual' ? (
+                                <>
+                                  <PersonIcon size={13} style={{ marginRight: '4px' }} />
+                                  <span>Manual Jury Assignment</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FlashOnIcon size={13} style={{ marginRight: '4px' }} />
+                                  <span>{stage.jury_auto_rule === 'n_jury' ? `Auto: ${stage.jury_count_per_film || 1} Jurors / Film` : 'Auto: All Jurors'}</span>
+                                </>
+                              )}
+                            </span>
+                            <span className="criteria-chip" style={{ background: '#f5f3ff', color: '#7c3aed', borderColor: '#ddd6fe' }}>
+                              {stage.review_type === 'pass_fail' || (stage.review_type === 'vote_based' && stage.vote_mode === 'single')
+                                ? 'Pass / Fail'
+                                : (stage.review_type === 'vote_nomination' || stage.review_type === 'vote_based'
+                                    ? 'Vote / Nomination'
+                                    : `${stage.star_scale || 5}-Star Rating`)}
+                            </span>
+                            <span className="criteria-chip" style={{ background: (stage.notes_requirement === 'required' || stage.notes_required === 'required') ? '#fef3c7' : '#f1f5f9', color: (stage.notes_requirement === 'required' || stage.notes_required === 'required') ? '#b45309' : '#475569', borderColor: (stage.notes_requirement === 'required' || stage.notes_required === 'required') ? '#fde68a' : '#cbd5e1' }}>
+                              Notes: {(stage.notes_requirement === 'required' || stage.notes_required === 'required') ? 'Mandatory Critique' : 'Optional Notes'}
+                            </span>
                           </div>
-                          <div className="fc-row-actions">
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <label
+                              className="fc-toggle-switch"
+                              title="Click to mark stage as Inactive"
+                              style={{ verticalAlign: 'middle', cursor: 'pointer' }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={true}
+                                onChange={() => handleToggleStageStatus(stage)}
+                              />
+                              <span className="fc-toggle-slider" />
+                            </label>
                             <button
                               type="button"
-                              className="fc-btn-subtle"
-                              onClick={() => handleOpenEditCategory(round.round_number, cat)}
+                              className="fc-stage-status-btn active"
+                              onClick={() => handleToggleStageStatus(stage)}
+                              title="Click to deactivate stage"
+                              style={{ display: 'inline-flex', alignItems: 'center' }}
                             >
-                              Edit
+                              <CheckCircleIcon size={13} style={{ marginRight: '4px' }} />
+                              <span>Active</span>
                             </button>
                             <button
                               type="button"
-                              className="fc-btn-subtle"
-                              onClick={() => handleDeleteCategory(round.round_number, cat)}
+                              className="fc-btn fc-btn-outline fc-btn-sm"
+                              onClick={() => handleToggleEditStage(stage.id)}
+                              style={{ display: 'inline-flex', alignItems: 'center' }}
                             >
-                              Delete
+                              <EditIcon size={13} style={{ marginRight: '4px' }} />
+                              <span>Edit Stage</span>
                             </button>
                           </div>
                         </div>
-                      ))
+
+                        {/* Section Body (Scoring & Scale) */}
+                        <div className="state-section-body" style={{ padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '32px', flexWrap: 'wrap', background: 'var(--fc-surface, #faf9f7)', borderTop: '1px solid var(--fc-border)' }}>
+                          <div>
+                            <span className="state-sub-col-title" style={{ marginBottom: '4px' }}>SCORING MODE</span>
+                            <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fc-text-main)' }}>
+                              {stage.review_type === 'pass_fail' || (stage.review_type === 'vote_based' && stage.vote_mode === 'single')
+                                ? 'Pass / Fail'
+                                : (stage.review_type === 'vote_nomination' || stage.review_type === 'vote_based'
+                                    ? 'Vote / Nomination'
+                                    : 'Star Rating')}
+                            </div>
+                          </div>
+
+                          <div style={{ width: '1px', height: '28px', background: 'var(--fc-border)', alignSelf: 'center' }}></div>
+
+                          <div>
+                            <span className="state-sub-col-title" style={{ marginBottom: '4px' }}>EVALUATION SCALE</span>
+                            <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fc-text-main)' }}>
+                              {stage.review_type === 'pass_fail' || (stage.review_type === 'vote_based' && stage.vote_mode === 'single')
+                                ? 'Binary Gate'
+                                : (stage.review_type === 'vote_nomination' || stage.review_type === 'vote_based'
+                                    ? 'Nominate / Consider'
+                                    : `${stage.star_scale || 5} Stars`)}
+                            </div>
+                          </div>
+
+                          <div style={{ width: '1px', height: '28px', background: 'var(--fc-border)', alignSelf: 'center' }}></div>
+
+                          <div>
+                            <span className="state-sub-col-title" style={{ marginBottom: '4px' }}>REVIEW NOTES</span>
+                            <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--fc-text-main)' }}>
+                              {(stage.notes_requirement === 'required' || stage.notes_required === 'required') ? 'Mandatory Critique' : 'Optional Notes'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        /* ────────────────────────────────────────────────────────────────── */
-        /* BILLING TAB                                                        */
-        /* ────────────────────────────────────────────────────────────────── */
-        <div className="fc-settings-content">
-          <div className="fc-settings-card">
-            <div className="fc-card-header-row">
-              <div>
-                <h2 className="fc-card-title">Edition Subscription & Billing</h2>
-                <p className="fc-card-subtitle">Manage festival edition tier, add-ons, and payment receipts.</p>
-              </div>
-              <span className="fc-billing-badge-active">Plan: Enterprise Active</span>
-            </div>
 
-            <div className="fc-billing-grid">
-              <div className="fc-billing-item">
-                <span className="fc-billing-label">Festival Edition</span>
-                <span className="fc-billing-value">Indie Film Festival Bangalore · Edition 4 (2026)</span>
-              </div>
-              <div className="fc-billing-item">
-                <span className="fc-billing-label">Billing Cycle</span>
-                <span className="fc-billing-value">Annual Multi-Edition License</span>
-              </div>
-              <div className="fc-billing-item">
-                <span className="fc-billing-label">Submissions Quota</span>
-                <span className="fc-billing-value">Unlimited Film Submissions</span>
-              </div>
-              <div className="fc-billing-item">
-                <span className="fc-billing-label">Review Pipeline</span>
-                <span className="fc-billing-value">Multi-Round Screening & Automated Juries</span>
-              </div>
-            </div>
+                    {idx < activeStagesList.length - 1 && (
+                      <div className="flow-connector-step">
+                        <ArrowForwardIcon size={13} style={{ marginRight: '5px' }} />
+                        <span>Sequential Promotion to Stage {dynamicOrder + 1}: {activeStagesList[idx + 1]?.unique_name}</span>
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
 
-            <div className="fc-billing-receipts-section">
-              <h3 className="fc-subsection-title">Recent Invoices</h3>
-              <div className="fc-invoice-row">
-                <span className="fc-invoice-num">INV-2026-0812</span>
-                <span className="fc-invoice-date">Sep 01, 2026</span>
-                <span className="fc-invoice-amount">$1,450.00 USD</span>
-                <span className="fc-invoice-status">Paid</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-
-      {/* ──────────────────────────────────────────────────────────────────── */}
-      {/* MODAL: ADD / EDIT FILM FLAG                                          */}
-      {/* ──────────────────────────────────────────────────────────────────── */}
-      {flagModal.open && (
-        <div className="fc-modal-overlay">
-          <div className="fc-settings-modal-card">
-            <h3 className="fc-modal-title">
-              {flagModal.mode === 'add' ? 'Add Film Flag' : 'Edit Film Flag'}
-            </h3>
-            <form onSubmit={handleSaveFlag}>
-              <div className="fc-form-group">
-                <label className="fc-form-label">Flag Label</label>
-                <input
-                  type="text"
-                  className="fc-form-input"
-                  placeholder="e.g. Needs Review, High Priority"
-                  value={flagModal.label}
-                  onChange={(e) => setFlagModal(prev => ({ ...prev, label: e.target.value }))}
-                  autoFocus
-                  required
-                />
+              {/* Flow Connector to Next Stage */}
+              <div className="flow-connector-step">
+                <ArrowForwardIcon size={13} style={{ marginRight: '5px' }} />
+                <span>Sequential Promotion to Stage {reviewStates.filter(s => s.status !== 'inactive').length + 1}: {isAddingStage ? 'Dynamic Review-State' : 'New Review-State'}</span>
               </div>
 
-              <div className="fc-form-group">
-                <label className="fc-form-label">Color Preset</label>
-                <div className="fc-modal-swatches">
-                  {PRESET_SWATCHES.map(color => (
-                    <button
-                      key={color}
-                      type="button"
-                      className={`fc-color-circle ${flagModal.color === color ? 'selected' : ''}`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setFlagModal(prev => ({ ...prev, color }))}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="fc-form-group">
-                <label className="fc-form-label">Hex Color Code</label>
-                <input
-                  type="text"
-                  className="fc-form-input"
-                  value={flagModal.color}
-                  onChange={(e) => setFlagModal(prev => ({ ...prev, color: e.target.value }))}
-                />
-              </div>
-
-              <div className="fc-form-checkbox-row">
-                <label className="fc-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={flagModal.is_active}
-                    onChange={(e) => setFlagModal(prev => ({ ...prev, is_active: e.target.checked }))}
-                  />
-                  <span>Active (Available for film assignment)</span>
-                </label>
-              </div>
-
-              <div className="fc-modal-actions">
-                <button
-                  type="button"
-                  className="fc-btn-subtle"
-                  onClick={() => setFlagModal({ open: false, mode: 'add', item: null, label: '', color: '#e05252', is_active: true })}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="fc-btn-primary-action">
-                  Save Flag
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ──────────────────────────────────────────────────────────────────── */}
-      {/* MODAL: ADD / EDIT CRITERIA CATEGORY                                  */}
-      {/* ──────────────────────────────────────────────────────────────────── */}
-      {categoryModal.open && (
-        <div className="fc-modal-overlay">
-          <div className="fc-settings-modal-card">
-            <h3 className="fc-modal-title">
-              {categoryModal.mode === 'add'
-                ? `Add Category to Round ${categoryModal.roundNumber}`
-                : `Edit Category (Round ${categoryModal.roundNumber})`}
-            </h3>
-            <form onSubmit={handleSaveCategory}>
-              <div className="fc-form-group">
-                <label className="fc-form-label">Category Label</label>
-                <input
-                  type="text"
-                  className="fc-form-input"
-                  placeholder="e.g. Screenplay, Sound Design, Inspiration"
-                  value={categoryModal.label}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const autoKey = val.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-                    setCategoryModal(prev => ({
-                      ...prev,
-                      label: val,
-                      key: prev.mode === 'add' ? autoKey : prev.key
-                    }));
+              {/* ── INTERACTIVE IN-PAGE STAGE BUILDER ── */}
+              {isAddingStage ? (
+                <InPageReviewStateBuilder
+                  nextStageOrder={reviewStates.filter(s => s.status !== 'inactive').length + 1}
+                  allStages={reviewStates}
+                  onClose={() => setIsAddingStage(false)}
+                  onCreated={() => {
+                    loadAllSettings();
+                    setIsAddingStage(false);
                   }}
-                  autoFocus
-                  required
+                  showNotification={showNotification}
                 />
-              </div>
-
-              <div className="fc-form-group">
-                <label className="fc-form-label">Category Key</label>
-                <input
-                  type="text"
-                  className="fc-form-input"
-                  placeholder="e.g. screenplay, sound_design"
-                  value={categoryModal.key}
-                  onChange={(e) => setCategoryModal(prev => ({ ...prev, key: e.target.value }))}
-                  required
-                />
-                <small className="fc-field-helptext">Identifier used in review scorecards and ratings.</small>
-              </div>
-
-              <div className="fc-modal-actions">
-                <button
-                  type="button"
-                  className="fc-btn-subtle"
-                  onClick={() => setCategoryModal({ open: false, mode: 'add', roundNumber: 1, item: null, label: '', key: '' })}
+              ) : (
+                <div
+                  className="fc-stage-add-dashed-card animate-fade-in"
+                  onClick={handleToggleAddStage}
+                  title="Click to add and configure a new review state in the pipeline"
                 >
-                  Cancel
-                </button>
-                <button type="submit" className="fc-btn-primary-action">
-                  Save Category
-                </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--fc-brand, #a82f2f)', fontWeight: 800, fontSize: '14px' }}>
+                    <span style={{ fontSize: '16px' }}>+</span>
+                    <span>Add Dynamic Review-State (Stage #{reviewStates.filter(s => s.status !== 'inactive').length + 1})</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#78716c' }}>
+                    Configure review scoring, jury assignment, and completion rules directly in the page.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* ── INACTIVE / BYPASSED REVIEW STAGES ── */}
+            {reviewStates.filter(s => s.status === 'inactive').length > 0 && (
+              <div style={{ marginTop: '36px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#64748b', letterSpacing: '-0.2px', margin: 0 }}>
+                      Inactive / Bypassed Review Stages
+                    </h3>
+                    <span style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1', padding: '2px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 700 }}>
+                      {reviewStates.filter(s => s.status === 'inactive').length} {reviewStates.filter(s => s.status === 'inactive').length === 1 ? 'stage' : 'stages'}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
+                    These stages are excluded from the sequential review pipeline. Toggle to reactivate into the pipeline.
+                  </p>
+                </div>
+
+                <div className="settings-sections-stack">
+                  {reviewStates.filter(s => s.status === 'inactive').map((stage) => {
+                    const isEditing = editingStageId === stage.id;
+
+                    return (
+                      <React.Fragment key={stage.id}>
+                        {isEditing ? (
+                          <InPageReviewStateBuilder
+                            key={`edit-${stage.id}`}
+                            editStage={stage}
+                            nextStageOrder={reviewStates.filter(s => s.status !== 'inactive').length + 1}
+                            allStages={reviewStates}
+                            onClose={() => setEditingStageId(null)}
+                            onSaved={() => {
+                              loadAllSettings();
+                              setEditingStageId(null);
+                            }}
+                            showNotification={showNotification}
+                          />
+                        ) : (
+                          <div
+                            className="state-section-card"
+                            style={{ opacity: 0.85, borderColor: '#cbd5e1', background: '#fafaf9', borderStyle: 'dashed' }}
+                          >
+                            {/* Header */}
+                            <div className="state-section-header">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                <span className="state-badge-num" style={{ background: '#94a3b8', color: '#fff' }}>
+                                  —
+                                </span>
+                                <strong style={{ fontSize: '15px', color: '#64748b' }}>
+                                  {stage.unique_name || stage.name}
+                                  <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#94a3b8', marginLeft: '6px' }}>
+                                    (Inactive)
+                                  </span>
+                                </strong>
+                                <span className="criteria-chip" style={{ background: '#f1f5f9', color: '#64748b', borderColor: '#cbd5e1' }}>
+                                  {stage.jury_assignment_mode === 'manual'
+                                    ? '👤 Manual Jury Assignment'
+                                    : (stage.jury_auto_rule === 'n_jury'
+                                        ? `⚡ Auto: ${stage.jury_count_per_film || 1} Jurors / Film`
+                                        : '⚡ Auto: All Jurors')}
+                                </span>
+                                <span className="criteria-chip" style={{ background: '#f1f5f9', color: '#64748b', borderColor: '#cbd5e1' }}>
+                                  {stage.review_type === 'pass_fail' || (stage.review_type === 'vote_based' && stage.vote_mode === 'single')
+                                    ? 'Pass / Fail'
+                                    : (stage.review_type === 'vote_nomination' || stage.review_type === 'vote_based'
+                                        ? 'Vote / Nomination'
+                                        : `${stage.star_scale || 5}-Star Rating`)}
+                                </span>
+                                <span className="criteria-chip" style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}>
+                                  Bypassed in pipeline
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <label
+                                  className="fc-toggle-switch"
+                                  title="Click to reactivate this stage into the pipeline"
+                                  style={{ verticalAlign: 'middle', cursor: 'pointer' }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={false}
+                                    onChange={() => handleToggleStageStatus(stage)}
+                                  />
+                                  <span className="fc-toggle-slider" />
+                                </label>
+                                <button
+                                  type="button"
+                                  className="fc-stage-status-btn inactive"
+                                  onClick={() => handleToggleStageStatus(stage)}
+                                  title="Click to reactivate into pipeline"
+                                >
+                                  ○ Inactive
+                                </button>
+                                <button
+                                  type="button"
+                                  className="fc-btn fc-btn-outline fc-btn-sm"
+                                  onClick={() => handleToggleEditStage(stage.id)}
+                                >
+                                  ✎ Edit Stage
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Body */}
+                            <div className="state-section-body" style={{ padding: '14px 24px', display: 'flex', alignItems: 'center', gap: '32px', flexWrap: 'wrap', background: 'var(--fc-surface, #f8fafc)', borderTop: '1px solid var(--fc-border, #e2e8f0)' }}>
+                              <div>
+                                <span className="state-sub-col-title" style={{ marginBottom: '4px' }}>SCORING MODE</span>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fc-text-secondary, #64748b)' }}>
+                                  {stage.review_type === 'pass_fail' || (stage.review_type === 'vote_based' && stage.vote_mode === 'single')
+                                    ? 'Pass / Fail'
+                                    : (stage.review_type === 'vote_nomination' || stage.review_type === 'vote_based'
+                                        ? 'Vote / Nomination'
+                                        : 'Star Rating')}
+                                </div>
+                              </div>
+                              <div style={{ width: '1px', height: '24px', background: 'var(--fc-border, #e2e8f0)' }}></div>
+                              <div>
+                                <span className="state-sub-col-title" style={{ marginBottom: '4px' }}>EVALUATION SCALE</span>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fc-text-secondary, #64748b)' }}>
+                                  {stage.review_type === 'pass_fail' || (stage.review_type === 'vote_based' && stage.vote_mode === 'single')
+                                    ? 'Binary Gate'
+                                    : (stage.review_type === 'vote_nomination' || stage.review_type === 'vote_based'
+                                        ? 'Nominate / Consider'
+                                        : `${stage.star_scale || 5} Stars`)}
+                                </div>
+                              </div>
+                              <div style={{ width: '1px', height: '24px', background: 'var(--fc-border, #e2e8f0)' }}></div>
+                              <div>
+                                <span className="state-sub-col-title" style={{ marginBottom: '4px' }}>PIPELINE STATUS</span>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--fc-text-muted, #94a3b8)' }}>
+                                  Removed from active workflow
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}
+
     </div>
   );
 }

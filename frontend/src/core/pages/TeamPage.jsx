@@ -13,6 +13,22 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import {
+  SearchIcon,
+  CloseIcon,
+  CheckIcon,
+  LockIcon,
+  GavelIcon,
+  ShieldIcon,
+  PeopleIcon,
+  StarIcon,
+  GroupIcon,
+  BusinessIcon,
+  PersonIcon,
+  ExpandLessIcon,
+  ExpandMoreIcon,
+  AddIcon
+} from '../components/common/Icons';
 
 const GROUP_FILTERS = ['All', 'Admin', 'Jury', 'Volunteer'];
 
@@ -186,14 +202,16 @@ function MultiGroupPicker({
             const g = allGroups.find((item) => item.key === canonicalKey) || { label: canonicalKey === 'jury' ? 'Jury' : key };
             return (
               <span key={key} className="fc-group-chip">
-                <span>✓ {g.label}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <CheckIcon size={12} /> {g.label}
+                </span>
                 <button
                   type="button"
                   className="fc-group-chip-remove"
                   onClick={(e) => removeGroup(key, e)}
                   title={`Remove ${g.label}`}
                 >
-                  ×
+                  <CloseIcon size={10} />
                 </button>
               </span>
             );
@@ -382,8 +400,8 @@ function PermissionsByModuleSection({
             {permissions.size} / {totalCatalogPermsCount} {readOnly ? 'Granted' : 'Allowed'}
           </span>
           {readOnly ? (
-            <span className="fc-perm-custom-tag" style={{ background: 'var(--fc-surface-hover)', color: 'var(--fc-text-secondary)', borderColor: 'var(--fc-border)' }}>
-              🔒 Inherited & Read-Only
+            <span className="fc-perm-custom-tag" style={{ background: 'var(--fc-surface-hover)', color: 'var(--fc-text-secondary)', borderColor: 'var(--fc-border)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <LockIcon size={12} /> Inherited & Read-Only
             </span>
           ) : isCustomGroupCreation ? (
             <span className="fc-perm-custom-tag" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#d8b4fe', borderColor: 'rgba(168, 85, 247, 0.3)' }}>
@@ -395,7 +413,7 @@ function PermissionsByModuleSection({
 
       {readOnly && (
         <div className="fc-perm-readonly-banner">
-          <span>🔒</span>
+          <LockIcon size={15} style={{ flexShrink: 0 }} />
           <div>
             <strong>Inherited Permissions:</strong> Granted according to the assigned groups selected above.
             Permissions are immutable (read-only) and cannot be added or removed here.
@@ -407,13 +425,17 @@ function PermissionsByModuleSection({
       {selectedGroupsSummary && (
         <div className="fc-perm-group-summary-card">
           <div className="fc-perm-group-summary-left">
-            <span className="fc-perm-group-summary-icon">{selectedGroupsSummary.icon || '⚖️'}</span>
+            <span className="fc-perm-group-summary-icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+              {selectedGroupsSummary.icon || <GavelIcon size={18} />}
+            </span>
             <div>
               <div className="fc-perm-group-summary-title">{selectedGroupsSummary.title}</div>
               <div className="fc-perm-group-summary-sub">{selectedGroupsSummary.subtitle}</div>
             </div>
           </div>
-          <span className="fc-perm-group-summary-chevron">^</span>
+          <span className="fc-perm-group-summary-chevron" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <ExpandMoreIcon size={18} />
+          </span>
         </div>
       )}
 
@@ -421,7 +443,7 @@ function PermissionsByModuleSection({
       <div className="fc-perm-toolbar" style={readOnly ? { justifyContent: 'flex-end' } : {}}>
         {!readOnly && (
           <div className="fc-perm-search-box">
-            <span>🔍</span>
+            <SearchIcon size={14} style={{ color: 'var(--fc-text-muted)' }} />
             <input
               type="text"
               placeholder="Search permissions, modules or keys..."
@@ -432,9 +454,9 @@ function PermissionsByModuleSection({
               <button
                 type="button"
                 onClick={() => onSearchChange('')}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--fc-text-muted)', fontSize: '0.8rem' }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--fc-text-muted)', display: 'inline-flex', alignItems: 'center' }}
               >
-                ✕
+                <CloseIcon size={12} />
               </button>
             )}
           </div>
@@ -566,7 +588,9 @@ function PermissionsByModuleSection({
                             {!readOnly && (
                               <div className="fc-perm-tree-box-wrapper">
                                 {isChecked ? (
-                                  <span className="fc-perm-box-checked">✓</span>
+                                  <span className="fc-perm-box-checked" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <CheckIcon size={12} />
+                                  </span>
                                 ) : (
                                   <span className="fc-perm-box-unchecked" />
                                 )}
@@ -587,15 +611,15 @@ function PermissionsByModuleSection({
                                     {((isCustomGroupCreation && customScopes?.[perm.key]) ||
                                       permissionScopeMap?.get(perm.key) ||
                                       perm.scopeKey ||
-                                      'all') === 'assigned' && '🎯 Assigned'}
+                                      'all') === 'assigned' && 'Assigned'}
                                     {((isCustomGroupCreation && customScopes?.[perm.key]) ||
                                       permissionScopeMap?.get(perm.key) ||
                                       perm.scopeKey ||
-                                      'all') === 'jury_panel' && '⚖️ Jury Panel'}
+                                      'all') === 'jury_panel' && 'Jury Panel'}
                                     {((isCustomGroupCreation && customScopes?.[perm.key]) ||
                                       permissionScopeMap?.get(perm.key) ||
                                       perm.scopeKey ||
-                                      'all') === 'all' && '🌐 All'}
+                                      'all') === 'all' && 'All'}
                                   </span>
                                 )}
                                 {readOnly && isChecked && permissionSourceMap && permissionSourceMap.has(perm.key) && (
@@ -666,6 +690,36 @@ export default function TeamPage() {
   const [selectedGroup, setSelectedGroup] = useState('All');
   // Search query in table
   const [search, setSearch] = useState('');
+  const teamSearchRef = useRef(null);
+
+  // Global '/' keyboard shortcut to focus search, and 'Escape' to clear/blur
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === '/' && document.activeElement !== teamSearchRef.current) {
+        const tagName = document.activeElement?.tagName?.toLowerCase();
+        if (tagName !== 'input' && tagName !== 'textarea' && !document.activeElement?.isContentEditable) {
+          e.preventDefault();
+          teamSearchRef.current?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Helper to highlight matching text in table
+  const highlightMatch = (text, query) => {
+    if (!query || !text) return text;
+    const parts = String(text).split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+    return parts.map((part, i) => 
+      part.toLowerCase() === query.toLowerCase() ? (
+        <mark key={i} style={{ background: 'rgba(225, 29, 72, 0.28)', color: 'inherit', padding: '0 2px', borderRadius: '3px' }}>
+          {part}
+        </mark>
+      ) : part
+    );
+  };
+
   // Expanded member sub-row in table for inline preview
   const [expandedMemberId, setExpandedMemberId] = useState(null);
 
@@ -962,28 +1016,28 @@ export default function TeamPage() {
   const addGroupSummary = useMemo(() => {
     if (addSelectedGroups.size === 0) return null;
     const names = [];
-    let icon = '⚖️';
+    let icon = <GavelIcon size={18} />;
     for (const gKey of addSelectedGroups) {
       if (gKey === 'admin') {
         names.push('Admin');
-        icon = '🛡️';
+        icon = <ShieldIcon size={18} />;
       } else if (gKey === 'jury' || gKey === 'judge') {
         names.push('Jury');
-        icon = '⚖️';
+        icon = <GavelIcon size={18} />;
       } else if (gKey === 'volunteer') {
         names.push('Volunteer');
-        icon = '👥';
+        icon = <PeopleIcon size={18} />;
       } else if (gKey.startsWith('custom_')) {
         const cId = parseInt(gKey.replace('custom_', ''), 10);
         const cg = customGroups.find((c) => c.id === cId);
         if (cg) names.push(cg.name);
-        icon = '⭐';
+        icon = <StarIcon size={18} />;
       }
     }
     return {
       title: names.join(' + ') || 'Assigned Group',
       subtitle: `${names.length === 1 && names[0] === 'Jury' ? '1 assigned members' : `${addEffectivePermissions.size} permissions granted from ${names.length} group${names.length > 1 ? 's' : ''}`}`,
-      icon: names.length > 1 ? '✨' : icon,
+      icon: names.length > 1 ? <GroupIcon size={18} /> : icon,
     };
   }, [addSelectedGroups, customGroups, addEffectivePermissions]);
 
@@ -991,28 +1045,28 @@ export default function TeamPage() {
   const editGroupSummary = useMemo(() => {
     if (editSelectedGroups.size === 0) return null;
     const names = [];
-    let icon = '⚖️';
+    let icon = <GavelIcon size={18} />;
     for (const gKey of editSelectedGroups) {
       if (gKey === 'admin') {
         names.push('Admin');
-        icon = '🛡️';
+        icon = <ShieldIcon size={18} />;
       } else if (gKey === 'jury' || gKey === 'judge') {
         names.push('Jury');
-        icon = '⚖️';
+        icon = <GavelIcon size={18} />;
       } else if (gKey === 'volunteer') {
         names.push('Volunteer');
-        icon = '👥';
+        icon = <PeopleIcon size={18} />;
       } else if (gKey.startsWith('custom_')) {
         const cId = parseInt(gKey.replace('custom_', ''), 10);
         const cg = customGroups.find((c) => c.id === cId);
         if (cg) names.push(cg.name);
-        icon = '⭐';
+        icon = <StarIcon size={18} />;
       }
     }
     return {
       title: names.join(' + ') || 'Assigned Group',
       subtitle: `${editingUser?.name || 'Member'} · ${editEffectivePermissions.size} permissions granted from ${names.length} group${names.length > 1 ? 's' : ''}`,
-      icon: names.length > 1 ? '✨' : icon,
+      icon: names.length > 1 ? <GroupIcon size={18} /> : icon,
     };
   }, [editSelectedGroups, customGroups, editEffectivePermissions, editingUser]);
 
@@ -1034,11 +1088,14 @@ export default function TeamPage() {
   // Filtered users based on group & search
   const filteredUsers = users.filter((u) => {
     if (search.trim()) {
-      const q = search.toLowerCase();
+      const q = search.trim().toLowerCase();
       const matchesSearch =
-        u.name.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q);
+        u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
+        u.role?.toLowerCase().includes(q) ||
+        u.accountType?.toLowerCase().includes(q) ||
+        (Array.isArray(u.groups) && u.groups.some((g) => (g.label || g.name || g.key || '').toLowerCase().includes(q))) ||
+        (Array.isArray(u.permissions) && u.permissions.some((p) => (p.label || p.key || p || '').toLowerCase().includes(q)));
       if (!matchesSearch) return false;
     }
 
@@ -1313,39 +1370,146 @@ export default function TeamPage() {
               id="create-custom-group-btn"
               title="Create a custom group with modular permissions (Festival Admin only)"
             >
-              <span>+ Add Custom Group</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <AddIcon size={14} /> Add Custom Group
+              </span>
             </button>
           )}
           <button 
             className="fc-btn-primary" 
             onClick={handleOpenAdd}
             id="add-user-btn"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
           >
-            + Add User
+            <AddIcon size={16} /> Add User
           </button>
         </div>
       </div>
 
       {/* Group Filter Pills */}
-      <div className="fc-dept-pills">
-        {GROUP_FILTERS.map((group) => (
-          <button
-            key={group}
-            className={`fc-dept-pill ${selectedGroup === group ? 'active' : ''}`}
-            onClick={() => setSelectedGroup(group)}
-          >
-            {group} ({groupCounts[group] || 0})
-          </button>
-        ))}
-        {customGroups.map((cg) => (
-          <button
-            key={cg.id}
-            className={`fc-dept-pill ${selectedGroup === cg.name ? 'active' : ''}`}
-            onClick={() => setSelectedGroup(cg.name)}
-          >
-            {cg.name} ({groupCounts[cg.name] || 0})
-          </button>
-        ))}
+      {/* Group Filter Pills & Search Bar Toolbar */}
+      <div
+        className="fc-team-toolbar"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+          marginBottom: '18px',
+          flexWrap: 'wrap'
+        }}
+      >
+        <div className="fc-dept-pills" style={{ marginBottom: 0 }}>
+          {GROUP_FILTERS.map((group) => (
+            <button
+              key={group}
+              className={`fc-dept-pill ${selectedGroup === group ? 'active' : ''}`}
+              onClick={() => setSelectedGroup(group)}
+            >
+              {group} ({groupCounts[group] || 0})
+            </button>
+          ))}
+          {customGroups.map((cg) => (
+            <button
+              key={cg.id}
+              className={`fc-dept-pill ${selectedGroup === cg.name ? 'active' : ''}`}
+              onClick={() => setSelectedGroup(cg.name)}
+            >
+              {cg.name} ({groupCounts[cg.name] || 0})
+            </button>
+          ))}
+        </div>
+
+        {/* Live Search Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1', maxWidth: '340px', minWidth: '220px' }}>
+          <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
+            <span
+              style={{
+                position: 'absolute',
+                left: '12px',
+                color: 'var(--fc-text-muted)',
+                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <SearchIcon size={15} />
+            </span>
+            <input
+              ref={teamSearchRef}
+              type="text"
+              className="fc-input"
+              placeholder="Search member, email, role..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setSearch('');
+                  teamSearchRef.current?.blur();
+                }
+              }}
+              style={{
+                width: '100%',
+                paddingLeft: '34px',
+                paddingRight: search ? '30px' : '44px',
+                borderRadius: '8px',
+                fontSize: '13px'
+              }}
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  teamSearchRef.current?.focus();
+                }}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--fc-text-muted)',
+                  padding: '2px 4px',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="Clear search (Esc)"
+                aria-label="Clear search"
+              >
+                <CloseIcon size={13} />
+              </button>
+            ) : (
+              <span
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  fontSize: '11px',
+                  color: 'var(--fc-text-muted)',
+                  border: '1px solid var(--fc-border)',
+                  padding: '1px 5px',
+                  borderRadius: '4px',
+                  pointerEvents: 'none',
+                  opacity: 0.7
+                }}
+                title="Press / to search"
+              >
+                /
+              </span>
+            )}
+          </div>
+          {search && (
+            <button
+              type="button"
+              className="fc-btn fc-btn-link fc-btn-sm"
+              onClick={() => setSearch('')}
+              style={{ fontSize: '12px', color: 'var(--fc-text-muted)', textDecoration: 'underline', padding: '0 4px', whiteSpace: 'nowrap' }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Table Card */}
@@ -1358,8 +1522,20 @@ export default function TeamPage() {
         ) : error ? (
           <div className="fc-error-state">{error}</div>
         ) : filteredUsers.length === 0 ? (
-          <div className="fc-empty-state">
-            No team members found{selectedGroup !== 'All' ? ` in the "${selectedGroup}" group` : ''}.
+          <div className="fc-empty-state" style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <div style={{ color: 'var(--fc-text-muted)', marginBottom: '8px' }}>
+              <SearchIcon size={28} />
+            </div>
+            <div style={{ fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
+              No team members found
+            </div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--fc-text-muted)' }}>
+              {search.trim() ? (
+                <>No members match "{search}" {selectedGroup !== 'All' ? `in the ${selectedGroup} group` : ''}. <button type="button" onClick={() => setSearch('')} className="fc-btn-link" style={{ cursor: 'pointer', textDecoration: 'underline', border: 'none', background: 'none', color: 'var(--fc-brand)' }}>Clear search</button></>
+              ) : (
+                `No members found in the "${selectedGroup}" group.`
+              )}
+            </div>
           </div>
         ) : (
           <table className="fc-table">
@@ -1382,22 +1558,37 @@ export default function TeamPage() {
                       {/* MEMBER */}
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div className="fc-avatar" style={{ width: '32px', height: '32px', fontSize: '0.75rem', flexShrink: 0 }}>
-                            {getInitials(member.name)}
+                          <div className="fc-avatar" style={{ width: '32px', height: '32px', fontSize: '0.75rem', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+                            {member.thumbnailPic || member.thumbnail || member.thumbnail_pic ? (
+                              <img
+                                src={member.thumbnailPic || member.thumbnail || member.thumbnail_pic}
+                                alt={member.name}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  if (e.currentTarget.nextSibling) {
+                                    e.currentTarget.nextSibling.style.display = 'flex';
+                                  }
+                                }}
+                              />
+                            ) : null}
+                            <span style={{ display: (member.thumbnailPic || member.thumbnail || member.thumbnail_pic) ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                              {getInitials(member.name)}
+                            </span>
                           </div>
                           <div className="fc-member-cell">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                              <span className="fc-member-name">{member.name}</span>
+                              <span className="fc-member-name" style={{ color: 'var(--fc-text-main, #f4f4f5)' }}>{highlightMatch(member.name, search)}</span>
                               {isSameEmail && (
                                 <span className="fc-selected-verified-tag" style={{ fontSize: '0.62rem', padding: '1px 5px', borderRadius: '6px' }}>
-                                  You
+                                   You
                                 </span>
                               )}
                               <span className={`fc-account-type-badge ${member.accountType === 'organization' ? 'org' : 'ind'}`}>
                                 {member.accountType === 'organization' ? '🏢 Organization' : '👤 Individual'}
                               </span>
                             </div>
-                            <span className="fc-member-email">{member.email}</span>
+                            <span className="fc-member-email">{highlightMatch(member.email, search)}</span>
                           </div>
                         </div>
                       </td>
@@ -1410,7 +1601,7 @@ export default function TeamPage() {
                               const badgeClass = g.key === 'admin' ? 'admin' : (g.key === 'jury' || g.key === 'judge') ? 'judge' : g.key === 'volunteer' ? 'volunteer' : 'custom';
                               return (
                                 <span key={g.key} className={`fc-group-badge ${badgeClass}`}>
-                                  {g.label}
+                                  {highlightMatch(g.label, search)}
                                 </span>
                               );
                             })}
@@ -1447,8 +1638,8 @@ export default function TeamPage() {
                               +{member.permissions.length - 3} more
                             </span>
                           )}
-                          <span style={{ fontSize: '0.68rem', color: 'var(--fc-brand)', marginLeft: '4px', fontWeight: 600 }}>
-                            {expandedMemberId === member.id ? '▲ Hide' : '▼ View'}
+                          <span style={{ fontSize: '0.68rem', color: 'var(--fc-brand)', marginLeft: '4px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                            {expandedMemberId === member.id ? <><ExpandLessIcon size={12} /> Hide</> : <><ExpandMoreIcon size={12} /> View</>}
                           </span>
                         </div>
                       </td>
@@ -1495,8 +1686,9 @@ export default function TeamPage() {
                               type="button"
                               className="fc-btn-perm-tool"
                               onClick={() => setExpandedMemberId(null)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             >
-                              Close Preview ✕
+                              Close Preview <CloseIcon size={12} />
                             </button>
                           </div>
                           <PermissionsByModuleSection
@@ -1505,7 +1697,7 @@ export default function TeamPage() {
                             readOnly={true}
                             permissionScopeMap={new Map((member.permissions || []).map((p) => [p.key, p.scopeKey || 'all']))}
                             selectedGroupsSummary={{
-                              icon: (member.groups?.[0]?.key === 'jury' || member.groups?.[0]?.key === 'judge' || member.roleKey === 'jury' || member.roleKey === 'judge') ? '⚖️' : (member.groups?.[0]?.key === 'admin' || member.roleKey === 'admin') ? '🛡️' : '👥',
+                              icon: (member.groups?.[0]?.key === 'jury' || member.groups?.[0]?.key === 'judge' || member.roleKey === 'jury' || member.roleKey === 'judge') ? <GavelIcon size={18} /> : (member.groups?.[0]?.key === 'admin' || member.roleKey === 'admin') ? <ShieldIcon size={18} /> : <PeopleIcon size={18} />,
                               title: member.groups?.map((g) => g.label).join(', ') || member.role || 'Volunteer',
                               subtitle: `${member.name} (${member.email}) · ${member.permissions?.length || 0} granted permissions`
                             }}
@@ -1532,7 +1724,9 @@ export default function TeamPage() {
                   Select from registered users of next.autovertest.com/signin
                 </div>
               </div>
-              <button className="fc-modal-close" onClick={() => setShowAddModal(false)}>✕</button>
+              <button className="fc-modal-close" onClick={() => setShowAddModal(false)}>
+                <CloseIcon size={14} />
+              </button>
             </div>
             <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <div className="fc-modal-body">
@@ -1542,7 +1736,9 @@ export default function TeamPage() {
                   {!selectedUser ? (
                     <div className="fc-search-user-wrapper">
                       <div className="fc-search-input-box">
-                        <span className="fc-search-input-icon">🔍</span>
+                        <span className="fc-search-input-icon" style={{ display: 'flex', alignItems: 'center' }}>
+                          <SearchIcon size={14} />
+                        </span>
                         <input
                           type="text"
                           autoFocus
@@ -1573,8 +1769,23 @@ export default function TeamPage() {
                                 onClick={() => handleSelectUser(u)}
                                 title={u.isAlreadyMember ? 'This user account is already in the team' : 'Click to select user'}
                               >
-                                <div className="fc-user-search-avatar">
-                                  {getInitials(u.name)}
+                                <div className="fc-user-search-avatar" style={{ overflow: 'hidden', position: 'relative' }}>
+                                  {u.thumbnailPic || u.thumbnail || u.thumbnail_pic ? (
+                                    <img
+                                      src={u.thumbnailPic || u.thumbnail || u.thumbnail_pic}
+                                      alt={u.name}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                        if (e.currentTarget.nextSibling) {
+                                          e.currentTarget.nextSibling.style.display = 'flex';
+                                        }
+                                      }}
+                                    />
+                                  ) : null}
+                                  <span style={{ display: (u.thumbnailPic || u.thumbnail || u.thumbnail_pic) ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                                    {getInitials(u.name)}
+                                  </span>
                                 </div>
                                 <div className="fc-user-search-info">
                                   <div className="fc-user-search-name-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -1583,7 +1794,15 @@ export default function TeamPage() {
                                       <span className="fc-user-search-handle">@{u.username}</span>
                                     )}
                                     <span className={`fc-account-type-badge ${u.accountType === 'organization' ? 'org' : 'ind'}`}>
-                                      {u.accountType === 'organization' ? '🏢 Organization' : '👤 Individual'}
+                                      {u.accountType === 'organization' ? (
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                          <BusinessIcon size={12} /> Organization
+                                        </span>
+                                      ) : (
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                          <PersonIcon size={12} /> Individual
+                                        </span>
+                                      )}
                                     </span>
                                   </div>
                                   <span className="fc-user-search-email">{u.email}</span>
@@ -1611,14 +1830,37 @@ export default function TeamPage() {
                   ) : (
                     <div className="fc-selected-user-card">
                       <div className="fc-selected-user-left">
-                        <div className="fc-user-search-avatar" style={{ width: '38px', height: '38px', fontSize: '0.85rem' }}>
-                          {getInitials(selectedUser.name)}
+                        <div className="fc-user-search-avatar" style={{ width: '38px', height: '38px', fontSize: '0.85rem', overflow: 'hidden', position: 'relative' }}>
+                          {selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic ? (
+                            <img
+                              src={selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic}
+                              alt={selectedUser.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                if (e.currentTarget.nextSibling) {
+                                  e.currentTarget.nextSibling.style.display = 'flex';
+                                }
+                              }}
+                            />
+                          ) : null}
+                          <span style={{ display: (selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic) ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                            {getInitials(selectedUser.name)}
+                          </span>
                         </div>
                         <div className="fc-selected-user-meta">
                           <div className="fc-selected-user-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             {selectedUser.name}
                             <span className={`fc-account-type-badge ${selectedUser.accountType === 'organization' ? 'org' : 'ind'}`}>
-                              {selectedUser.accountType === 'organization' ? '🏢 Organization Account' : '👤 Individual Account'}
+                              {selectedUser.accountType === 'organization' ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <BusinessIcon size={12} /> Organization Account
+                                </span>
+                              ) : (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <PersonIcon size={12} /> Individual Account
+                                </span>
+                              )}
                             </span>
                           </div>
                           <span className="fc-selected-user-email">{selectedUser.email}</span>
@@ -1668,7 +1910,9 @@ export default function TeamPage() {
                 />
 
                 <div className="fc-quota-notice">
-                  <span className="fc-quota-notice-icon">👥</span>
+                  <span className="fc-quota-notice-icon" style={{ display: 'flex', alignItems: 'center' }}>
+                    <PeopleIcon size={16} />
+                  </span>
                   <span>Current Allocation: <strong>{users.length} / 25</strong> available seats.</span>
                 </div>
               </div>
@@ -1702,7 +1946,9 @@ export default function TeamPage() {
                   Manage group assignment and granular festival permissions
                 </div>
               </div>
-              <button className="fc-modal-close" onClick={() => setEditingUser(null)}>✕</button>
+              <button className="fc-modal-close" onClick={() => setEditingUser(null)}>
+                <CloseIcon size={14} />
+              </button>
             </div>
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <div className="fc-modal-body">
@@ -1710,8 +1956,23 @@ export default function TeamPage() {
                   <label>User Profile</label>
                   <div className="fc-selected-user-card" style={{ borderColor: 'var(--fc-border)', backgroundColor: 'var(--fc-surface-subtle)' }}>
                     <div className="fc-selected-user-left">
-                      <div className="fc-user-search-avatar" style={{ width: '38px', height: '38px', fontSize: '0.85rem' }}>
-                        {getInitials(editingUser.name)}
+                      <div className="fc-user-search-avatar" style={{ width: '38px', height: '38px', fontSize: '0.85rem', overflow: 'hidden', position: 'relative' }}>
+                        {editingUser.thumbnailPic || editingUser.thumbnail || editingUser.thumbnail_pic ? (
+                          <img
+                            src={editingUser.thumbnailPic || editingUser.thumbnail || editingUser.thumbnail_pic}
+                            alt={editingUser.name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              if (e.currentTarget.nextSibling) {
+                                e.currentTarget.nextSibling.style.display = 'flex';
+                              }
+                            }}
+                          />
+                        ) : null}
+                        <span style={{ display: (editingUser.thumbnailPic || editingUser.thumbnail || editingUser.thumbnail_pic) ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                          {getInitials(editingUser.name)}
+                        </span>
                       </div>
                       <div className="fc-selected-user-meta">
                         <span className="fc-selected-user-name" style={{ color: 'var(--fc-text-main)' }}>
@@ -1723,7 +1984,15 @@ export default function TeamPage() {
                       </div>
                     </div>
                     <span className={`fc-account-type-badge ${editingUser.accountType === 'organization' ? 'org' : 'ind'}`} style={{ fontSize: '0.72rem', padding: '3px 9px' }}>
-                      {editingUser.accountType === 'organization' ? '🏢 Organization Account' : '👤 Individual Account'}
+                      {editingUser.accountType === 'organization' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <BusinessIcon size={12} /> Organization Account
+                        </span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <PersonIcon size={12} /> Individual Account
+                        </span>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1779,7 +2048,9 @@ export default function TeamPage() {
                   Define a reusable festival group with modular permissions (Festival Admin only)
                 </div>
               </div>
-              <button className="fc-modal-close" onClick={() => setShowCustomGroupModal(false)}>✕</button>
+              <button className="fc-modal-close" onClick={() => setShowCustomGroupModal(false)}>
+                <CloseIcon size={14} />
+              </button>
             </div>
             <form onSubmit={handleCreateCustomGroupSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <div className="fc-modal-body">

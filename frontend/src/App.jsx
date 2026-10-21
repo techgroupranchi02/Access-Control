@@ -18,10 +18,13 @@ import Layout from './core/components/Layout';
 import LoginPage from './core/pages/LoginPage';
 import DashboardPage from './core/pages/DashboardPage';
 import SubmissionPage from './core/pages/SubmissionPage';
+import FilmReviewPage from './core/pages/FilmReviewPage';
 import ReviewPage from './core/pages/ReviewPage';
 import TeamPage from './core/pages/TeamPage';
 import PaymentsPage from './core/pages/PaymentsPage';
 import SettingsPage from './core/pages/SettingsPage';
+import ReviewStageCreatePage from './core/pages/ReviewStageCreatePage';
+import ReviewStageEditPage from './core/pages/ReviewStageEditPage';
 import AdminPage from './core/pages/AdminPage';
 
 // Addon Module Pages
@@ -73,22 +76,26 @@ function AccessDenied({ module, feature }) {
   );
 }
 
-// Smart home redirect based on enabled modules
+// Smart home redirect based on enabled modules & permissions
 function HomeRedirect() {
   const festivalCtx = useContext(FestivalContext);
   if (!festivalCtx || festivalCtx.loading) {
     return null;
   }
-  if (festivalCtx.isModuleEnabled('dashboard')) {
+  const { isModuleEnabled, hasPermission, isSuperAdmin, currentUserGroup } = festivalCtx;
+  const isAdminUser = isSuperAdmin || currentUserGroup === 'admin';
+  const canAccess = (perm) => isAdminUser || hasPermission(perm);
+
+  if (isModuleEnabled('dashboard') && (isAdminUser || canAccess('dashboard.view') || canAccess('dashboard:view'))) {
     return <Navigate to="/dashboard" replace />;
   }
-  if (festivalCtx.isModuleEnabled('submissions')) {
+  if (isModuleEnabled('submissions') && (isAdminUser || canAccess('submission.view') || canAccess('submission:view') || canAccess('review.view') || canAccess('review:view'))) {
     return <Navigate to="/submissions" replace />;
   }
-  if (festivalCtx.isModuleEnabled('review_dashboard')) {
-    return <Navigate to="/reviews" replace />;
+  if (isModuleEnabled('review_dashboard')) {
+    return <Navigate to="/submissions" replace />;
   }
-  if (festivalCtx.isModuleEnabled('team_management')) {
+  if (isModuleEnabled('team') && (isAdminUser || canAccess('team.view') || canAccess('team:view'))) {
     return <Navigate to="/team" replace />;
   }
   return <Navigate to="/submissions" replace />;
@@ -122,18 +129,181 @@ function App() {
               path="/dashboard"
               element={
                 <ModuleGate module="dashboard" fallback={<AccessDenied module="dashboard" />}>
-                  <DashboardPage />
+                  <PermissionGate anyPermissions={['dashboard.view', 'dashboard:view', 'dashboard.manage', 'dashboard:manage']} fallback={<AccessDenied />}>
+                    <DashboardPage />
+                  </PermissionGate>
                 </ModuleGate>
               }
             />
 
             {/* Submissions Intake (Core) */}
+            {/* Submissions Intake & Dedicated Views (Core) */}
             <Route
               path="/submissions"
               element={
                 <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
-                  <PermissionGate permission="submission.view" fallback={<AccessDenied />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
                     <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/all"
+              element={<Navigate to="/submissions" replace />}
+            />
+            <Route
+              path="/submissions/new-submissions"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/under-review"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/rejected"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/activity"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/activity-log"
+              element={<Navigate to="/submissions/activity" replace />}
+            />
+
+            {/* Sequential Stage & Board Views */}
+            <Route
+              path="/submissions/stage/:stageId"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/screening"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/consideration"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/official-selection"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/nominations"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/jury-voting"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/finalists"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/finalist"
+              element={<Navigate to="/submissions/finalists" replace />}
+            />
+            <Route
+              path="/submissions/winners"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['submission.view', 'submission:view', 'review.view', 'review:view', 'review.score', 'review:score', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <SubmissionPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/winner"
+              element={<Navigate to="/submissions/winners" replace />}
+            />
+
+            {/* Film Rate & Review Dedicated Page */}
+            <Route
+              path="/submissions/:id/review"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['review.score', 'review:score', 'review.view', 'review:view', 'submission.view', 'submission:view', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <FilmReviewPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/submissions/:id/rate"
+              element={
+                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
+                  <PermissionGate anyPermissions={['review.score', 'review:score', 'review.view', 'review:view', 'submission.view', 'submission:view', 'jury.submit_ballot', 'jury:submit_ballot']} fallback={<AccessDenied />}>
+                    <FilmReviewPage />
                   </PermissionGate>
                 </ModuleGate>
               }
@@ -144,21 +314,15 @@ function App() {
               element={<Navigate to="/submissions" replace />}
             />
 
-            {/* Review Dashboard (Submissions Module Page 2) */}
+            {/* Review Dashboard merged into Master Submissions Hub */}
             <Route
               path="/review-dashboard"
-              element={
-                <ModuleGate module="submissions" fallback={<AccessDenied module="submissions" />}>
-                  <PermissionGate anyPermissions={['review.view', 'review:view', 'submission.view', 'submission:view']} fallback={<AccessDenied />}>
-                    <ReviewPage />
-                  </PermissionGate>
-                </ModuleGate>
-              }
+              element={<Navigate to="/submissions" replace />}
             />
             {/* Legacy route alias */}
             <Route
               path="/reviews"
-              element={<Navigate to="/review-dashboard" replace />}
+              element={<Navigate to="/submissions" replace />}
             />
 
             {/* Team & Access Control (Core) */}
@@ -189,13 +353,83 @@ function App() {
               element={<Navigate to="/payouts" replace />}
             />
 
-            {/* Edition Settings (Core) */}
+            {/* Settings (Module) & Review State (SubModule) */}
             <Route
               path="/settings"
               element={
                 <ModuleGate module="settings" fallback={<AccessDenied module="settings" />}>
                   <PermissionGate anyPermissions={['settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
                     <SettingsPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+
+            {/* Review Stage (/settings/review-stage) */}
+            <Route
+              path="/settings/review-stage"
+              element={
+                <ModuleGate module="settings" fallback={<AccessDenied module="settings" />}>
+                  <PermissionGate anyPermissions={['settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
+                    <SettingsPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route path="/settings/review-state" element={<Navigate to="/settings/review-stage" replace />} />
+            <Route path="/settings/review-states" element={<Navigate to="/settings/review-stage" replace />} />
+            <Route path="/settings/review-stages" element={<Navigate to="/settings/review-stage" replace />} />
+
+            {/* Create Review Stage: /settings/review-stage/create */}
+            <Route
+              path="/settings/review-stage/create"
+              element={
+                <ModuleGate module="settings" fallback={<AccessDenied module="settings" />}>
+                  <PermissionGate anyPermissions={['settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
+                    <ReviewStageCreatePage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route path="/settings/review-state/create" element={<Navigate to="/settings/review-stage/create" replace />} />
+
+            {/* Edit Review Stage: /settings/review-stage/edit/:id and aliases */}
+            <Route
+              path="/settings/review-state/edit/:id"
+              element={
+                <ModuleGate module="settings" fallback={<AccessDenied module="settings" />}>
+                  <PermissionGate anyPermissions={['settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
+                    <ReviewStageEditPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/settings/review-stage/edit/:id"
+              element={
+                <ModuleGate module="settings" fallback={<AccessDenied module="settings" />}>
+                  <PermissionGate anyPermissions={['settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
+                    <ReviewStageEditPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/setting/review-state/edit/:id"
+              element={
+                <ModuleGate module="settings" fallback={<AccessDenied module="settings" />}>
+                  <PermissionGate anyPermissions={['settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
+                    <ReviewStageEditPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/setting/review-stage/edit/:id"
+              element={
+                <ModuleGate module="settings" fallback={<AccessDenied module="settings" />}>
+                  <PermissionGate anyPermissions={['settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
+                    <ReviewStageEditPage />
                   </PermissionGate>
                 </ModuleGate>
               }

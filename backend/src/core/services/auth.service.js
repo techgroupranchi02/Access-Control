@@ -21,6 +21,7 @@ const jwt = require('jsonwebtoken');
 const { query } = require('../../config/database');
 const env = require('../../config/environment');
 const { verifyGoogleToken } = require('./googleAuth.service');
+const { formatThumbnailUrl } = require('../utils/media.utils');
 
 const BCRYPT_ROUNDS = 12;
 const MIN_PASSWORD_LENGTH = 8;
@@ -260,6 +261,7 @@ async function loginWithGoogle(idToken) {
       role: 'user',
       isSuperAdmin: false,
       roles,
+      current_group: roles[0] ? roles[0].group_key : null,
     },
   };
 }
@@ -489,6 +491,7 @@ async function login(email, password) {
         role: 'user',
         isSuperAdmin: false,
         roles,
+        current_group: roles[0] ? roles[0].group_key : null,
       },
     };
   }
@@ -602,7 +605,8 @@ async function getProfile(userId, role, editionId) {
        u.email, 
        u.status,
        (u.status = 1) as is_active, 
-       u.created_at 
+       u.created_at,
+       COALESCE(i.thumbnail_pic, o.thumbnail_pic, i.profile_pic, o.profile_pic) as thumbnail_pic
      FROM users u
      LEFT JOIN individuals i ON i.user_id = u.id
      LEFT JOIN organizations o ON o.user_id = u.id
@@ -629,6 +633,21 @@ async function getProfile(userId, role, editionId) {
   const allUserIds = linkedUsers.length > 0 ? linkedUsers.map(u => u.id) : [userId];
   const userPlaceholders = allUserIds.map(() => '?').join(',');
 
+  // If the user's current account has an org name but there is a linked individual account with team assignment, prefer the individual's name for team displays
+  const assignedTeamMember = await query(
+    `SELECT COALESCE(i.name, o.name) as team_name
+     FROM users u
+     LEFT JOIN individuals i ON i.user_id = u.id
+     LEFT JOIN organizations o ON o.user_id = u.id
+     JOIN user_event_groups ueg ON ueg.user_id = u.id
+     WHERE u.email = ? AND (ueg.event_id = ? OR 1=1) AND i.name IS NOT NULL
+     ORDER BY (ueg.event_id = ?) DESC LIMIT 1`,
+    [user.email, editionId || 0, editionId || 0]
+  );
+  if (assignedTeamMember.length > 0 && assignedTeamMember[0].team_name) {
+    user.name = assignedTeamMember[0].team_name;
+  }
+
   // Get user's assigned events and groups (plus festival ownership across all linked accounts)
   const eventGroups = await query(
     `SELECT e.event_id, e.event_id as id, e.name as event_name, e.description,
@@ -648,21 +667,25 @@ async function getProfile(userId, role, editionId) {
 
   let permissionsMap = {};
   let isSuperAdmin = false;
-  let activeGroup = eventGroups.find(eg => eg.event_id === parseInt(editionId, 10));
+  let activeGroup = editionId
+    ? eventGroups.find(eg => eg.event_id === parseInt(editionId, 10))
+    : (eventGroups.find(eg => eg.saas_enabled === 1 || eg.saas_enabled === true) || eventGroups[0]);
 
-  if (editionId) {
+  const targetEditionId = editionId ? parseInt(editionId, 10) : (activeGroup ? activeGroup.event_id : null);
+
+  if (targetEditionId) {
     if (!activeGroup) {
       const isPlatformAdmin = (allUserIds.includes(1) || eventGroups.some(eg => eg.group_key === 'admin'));
-      const ownerRows = await query('SELECT user_id FROM events WHERE event_id = ?', [editionId]);
+      const ownerRows = await query('SELECT user_id FROM events WHERE event_id = ?', [targetEditionId]);
       const isOwner = ownerRows.length > 0 && allUserIds.includes(ownerRows[0].user_id);
 
       if (isPlatformAdmin || isOwner) {
         await query(
           'INSERT IGNORE INTO user_event_groups (user_id, event_id, group_id) VALUES (?, ?, 1)',
-          [userId, editionId]
+          [userId, targetEditionId]
         );
         activeGroup = {
-          event_id: parseInt(editionId, 10),
+          event_id: parseInt(targetEditionId, 10),
           group_id: 1,
           group_key: 'admin',
           group_name: 'Administrator',
@@ -675,14 +698,14 @@ async function getProfile(userId, role, editionId) {
        FROM user_event_custom_groups uecg
        JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
        JOIN permissions p ON p.id = ecgp.permission_id
-       WHERE uecg.user_id = ? AND uecg.event_id = ?`,
-      [userId, editionId]
+       WHERE uecg.user_id IN (${userPlaceholders}) AND uecg.event_id = ?`,
+      [...allUserIds, targetEditionId]
     );
 
     if (rows.length === 0) {
       const hasCustomConfig = await query(
-        'SELECT 1 FROM user_event_custom_groups WHERE user_id = ? AND event_id = ? LIMIT 1',
-        [userId, editionId]
+        `SELECT 1 FROM user_event_custom_groups WHERE user_id IN (${userPlaceholders}) AND event_id = ? LIMIT 1`,
+        [...allUserIds, targetEditionId]
       );
       if (hasCustomConfig.length === 0) {
         rows = await query(
@@ -691,8 +714,8 @@ async function getProfile(userId, role, editionId) {
            JOIN module_groups mg ON mg.group_id = ueg.group_id
            JOIN module_groups_permissions mgp ON mgp.module_group_id = mg.id
            JOIN permissions p ON p.id = mgp.permission_id
-           WHERE ueg.user_id = ? AND ueg.event_id = ?`,
-          [userId, editionId]
+           WHERE ueg.user_id IN (${userPlaceholders}) AND ueg.event_id = ?`,
+          [...allUserIds, targetEditionId]
         );
       }
     }
@@ -751,8 +774,12 @@ async function getProfile(userId, role, editionId) {
     }
   }
 
+  const formattedThumb = formatThumbnailUrl(user.thumbnail_pic);
   return {
     ...user,
+    thumbnail_pic: formattedThumb,
+    thumbnailPic: formattedThumb,
+    thumbnail: formattedThumb,
     eventGroups,
     current_group: activeGroup ? activeGroup.group_key : null,
     permissions: permissionsMap,

@@ -63,12 +63,16 @@ function scopeSubmissionsQuery(baseSql, baseParams, scope) {
   const placeholders = userIds.map(() => '?').join(',');
 
   if (scope.scopeKey === 'assigned') {
-    // Only films assigned to this juror/reviewer in screening_assignments
+    // Only films assigned to this juror/reviewer in screening_assignments for the film's CURRENT stage/round
     const sql = `
       ${baseSql}
-      AND s.id IN (
-        SELECT film_id FROM screening_assignments 
-        WHERE event_id = ? AND jury_user_id IN (${placeholders})
+      AND EXISTS (
+        SELECT 1 FROM screening_assignments sa
+        JOIN festival_review_states frs ON frs.id = s.review_state_id
+        WHERE sa.event_id = ? 
+          AND sa.film_id = s.id
+          AND sa.jury_user_id IN (${placeholders})
+          AND sa.round_number = frs.stage_order
       )
     `;
     return {
@@ -78,7 +82,7 @@ function scopeSubmissionsQuery(baseSql, baseParams, scope) {
   }
 
   if (scope.scopeKey === 'jury_panel') {
-    // Only films in categories the juror is assigned to via jury_ballots or event category
+    // Only films in categories the juror is assigned to via jury_ballots or event category, or actively assigned in current stage
     const sql = `
       ${baseSql}
       AND (
@@ -87,9 +91,13 @@ function scopeSubmissionsQuery(baseSql, baseParams, scope) {
           JOIN jury_ballots jb ON jb.category_id = c.id
           WHERE jb.event_id = ? AND jb.jury_user_id IN (${placeholders})
         )
-        OR s.id IN (
-          SELECT film_id FROM screening_assignments 
-          WHERE event_id = ? AND jury_user_id IN (${placeholders})
+        OR EXISTS (
+          SELECT 1 FROM screening_assignments sa
+          JOIN festival_review_states frs ON frs.id = s.review_state_id
+          WHERE sa.event_id = ? 
+            AND sa.film_id = s.id
+            AND sa.jury_user_id IN (${placeholders})
+            AND sa.round_number = frs.stage_order
         )
       )
     `;
@@ -121,8 +129,11 @@ async function canAccessSubmission(filmId, scope) {
 
   if (scope.scopeKey === 'assigned') {
     const rows = await query(`
-      SELECT id FROM screening_assignments 
-      WHERE event_id = ? AND film_id = ? AND jury_user_id IN (${placeholders})
+      SELECT sa.id FROM screening_assignments sa
+      JOIN submissions s ON s.id = sa.film_id
+      JOIN festival_review_states frs ON frs.id = s.review_state_id
+      WHERE sa.event_id = ? AND sa.film_id = ? AND sa.jury_user_id IN (${placeholders})
+        AND sa.round_number = frs.stage_order
       LIMIT 1
     `, [scope.editionId, filmId, ...userIds]);
     return rows.length > 0;
@@ -138,9 +149,11 @@ async function canAccessSubmission(filmId, scope) {
             JOIN jury_ballots jb ON jb.category_id = c.id
             WHERE jb.event_id = ? AND jb.jury_user_id IN (${placeholders})
           )
-          OR s.id IN (
-            SELECT film_id FROM screening_assignments 
-            WHERE event_id = ? AND jury_user_id IN (${placeholders})
+          OR EXISTS (
+            SELECT 1 FROM screening_assignments sa
+            JOIN festival_review_states frs ON frs.id = s.review_state_id
+            WHERE sa.event_id = ? AND sa.film_id = s.id AND sa.jury_user_id IN (${placeholders})
+              AND sa.round_number = frs.stage_order
           )
         )
       LIMIT 1

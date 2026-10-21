@@ -111,7 +111,7 @@ export default function TasksPage() {
           <h1 className="fc-page-title">Operational Tasks</h1>
           <p className="fc-page-subtitle">
             {scope === 'all' 
-              ? `Festival Control Tower · Showing all ${tasks.length} tasks (${metrics.unassignedTasks || 3} unassigned)`
+              ? `Festival Control Tower · Showing all ${tasks.length} tasks (${metrics.unassignedTasks ?? 0} unassigned)`
               : `Volunteer Shift View · Showing ${tasks.length} tasks assigned to you`}
           </p>
         </div>
@@ -153,7 +153,7 @@ export default function TasksPage() {
             className={`fc-subtab ${unassignedOnly ? 'active' : ''}`}
             onClick={() => { setUnassignedOnly(true); setStatusFilter('all'); }}
           >
-            Unassigned ({metrics.unassignedTasks || 3})
+            Unassigned ({metrics.unassignedTasks ?? 0})
           </button>
         )}
       </div>

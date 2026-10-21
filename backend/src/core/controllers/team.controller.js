@@ -6,6 +6,7 @@
 const { query } = require('../../config/database');
 const bcrypt = require('bcrypt');
 const { resolveHighestScope } = require('../services/scoping.service');
+const { formatThumbnailUrl } = require('../utils/media.utils');
 
 const GROUP_PERMISSIONS = {
   admin: [
@@ -172,7 +173,8 @@ async function list(req, res) {
         COALESCE(i.name, o.name, u.email) as name, 
         u.email, 
         u.status,
-        u.account_type
+        u.account_type,
+        COALESCE(i.thumbnail_pic, o.thumbnail_pic, i.profile_pic, o.profile_pic) as thumbnail_pic
       FROM users u
       LEFT JOIN individuals i ON i.user_id = u.id
       LEFT JOIN organizations o ON o.user_id = u.id
@@ -210,7 +212,10 @@ async function list(req, res) {
         permissions: permData.permissions,
         hasCustomPermissions: permData.hasCustomPermissions,
         accessTier,
-        isActive: r.status === 1
+        isActive: r.status === 1,
+        thumbnail: formatThumbnailUrl(r.thumbnail_pic),
+        thumbnailPic: formatThumbnailUrl(r.thumbnail_pic),
+        thumbnail_pic: formatThumbnailUrl(r.thumbnail_pic)
       };
     }));
 
@@ -366,6 +371,7 @@ async function searchIndividuals(req, res) {
         COALESCE(i.name, o.name, u.email) as name,
         COALESCE(i.username, o.username, '') as username,
         COALESCE(i.image_name, o.image_name, '') as image_name,
+        COALESCE(i.thumbnail_pic, o.thumbnail_pic, i.profile_pic, o.profile_pic) as thumbnail_pic,
         EXISTS(
           SELECT 1 FROM user_event_groups ueg 
           WHERE ueg.user_id = u.id AND ueg.event_id = ?
@@ -399,7 +405,10 @@ async function searchIndividuals(req, res) {
       imageName: r.image_name,
       accountType: r.account_type || 'individual',
       accountTypeLabel: r.account_type === 'organization' ? 'Organization Account' : 'Individual Account',
-      isAlreadyMember: Boolean(r.is_already_member)
+      isAlreadyMember: Boolean(r.is_already_member),
+      thumbnail: formatThumbnailUrl(r.thumbnail_pic),
+      thumbnailPic: formatThumbnailUrl(r.thumbnail_pic),
+      thumbnail_pic: formatThumbnailUrl(r.thumbnail_pic)
     }));
 
     res.json({ users });
@@ -994,4 +1003,6 @@ module.exports = {
   createCustomGroup,
   deleteCustomGroup
 };
+
+
 

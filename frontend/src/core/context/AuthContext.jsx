@@ -41,7 +41,12 @@ export function AuthProvider({ children }) {
     if (res.data.token) {
       localStorage.setItem('authToken', res.data.token);
     }
-    setUser(res.data.user);
+    try {
+      const meRes = await api.get('/auth/me');
+      setUser(meRes.data);
+    } catch {
+      setUser(res.data.user);
+    }
     return res.data;
   }, []);
 
@@ -50,7 +55,12 @@ export function AuthProvider({ children }) {
     if (res.data.token) {
       localStorage.setItem('authToken', res.data.token);
     }
-    setUser(res.data.user);
+    try {
+      const meRes = await api.get('/auth/me');
+      setUser(meRes.data);
+    } catch {
+      setUser(res.data.user);
+    }
     return res.data;
   }, []);
 

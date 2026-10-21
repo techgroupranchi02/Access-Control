@@ -536,6 +536,675 @@ async function deleteCategory(req, res) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. SEQUENTIAL 6-STAGES REVIEW WORKFLOW SETTINGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function ensureReviewStatesForEvent(eventId) {
+  const existing = await query('SELECT count(*) as cnt FROM festival_review_states WHERE event_id = ?', [eventId]);
+  if (existing[0].cnt > 0) return;
+
+  const standardCriteria = [
+    { key: 'screenplay', label: 'Screenplay', weight: 7.69 },
+    { key: 'dialogues', label: 'Dialogues', weight: 7.69 },
+    { key: 'writing', label: 'Writing', weight: 7.69 },
+    { key: 'structure', label: 'Structure', weight: 7.69 },
+    { key: 'direction', label: 'Direction', weight: 7.69 },
+    { key: 'acting', label: 'Acting', weight: 7.69 },
+    { key: 'cinematography', label: 'Cinematography', weight: 7.69 },
+    { key: 'production_design', label: 'Production design', weight: 7.69 },
+    { key: 'sound', label: 'Sound', weight: 7.69 },
+    { key: 'music', label: 'Music', weight: 7.69 },
+    { key: 'creativity', label: 'Creativity', weight: 7.69 },
+    { key: 'inspire', label: 'Did the film inspire you?', weight: 7.69 },
+    { key: 'message_importance', label: 'Importance of film message', weight: 7.69 },
+  ];
+
+  const defaultStages = [
+    { order: 1, name: 'Round 1: Screening', review_type: 'star_based', star_scale: '5', notes_requirement: 'optional', auto_advance_cutoff: 4.50, auto_reject_cutoff: 3.00, status: 'active',
+      criteria: standardCriteria
+    },
+    { order: 2, name: 'Round 2: Consideration', review_type: 'star_based', star_scale: '10', notes_requirement: 'required', auto_advance_cutoff: 8.50, auto_reject_cutoff: 6.00, status: 'active',
+      criteria: standardCriteria
+    },
+    { order: 3, name: 'Official Selection', review_type: 'vote_based', vote_mode: 'nomination', notes_requirement: 'optional', auto_advance_cutoff: null, auto_reject_cutoff: null, status: 'active', criteria: [] },
+    { order: 4, name: 'Nominations', review_type: 'vote_based', vote_mode: 'nomination', notes_requirement: 'optional', auto_advance_cutoff: null, auto_reject_cutoff: null, status: 'active', criteria: [],
+      award_criteria: ['Best Film', 'Best Direction', 'Best Cinematography', 'Best Debut Film', 'Best Documentary', 'Best Short Film', 'Best Animation']
+    },
+    { order: 5, name: 'Jury & Voting', review_type: 'star_based', star_scale: '10', notes_requirement: 'required', auto_advance_cutoff: 8.50, auto_reject_cutoff: 5.00, status: 'active',
+      criteria: standardCriteria
+    },
+    { order: 6, name: 'Finalist', review_type: 'rank_based', rank_mode: 'borda_count', rank_top_n: 3, notes_requirement: 'optional', auto_advance_cutoff: null, auto_reject_cutoff: null, status: 'active', criteria: [], jury_assignment_mode: 'none' },
+    { order: 7, name: 'Winner', review_type: 'vote_based', vote_mode: 'single', notes_requirement: 'optional', auto_advance_cutoff: null, auto_reject_cutoff: null, status: 'active', criteria: [], jury_assignment_mode: 'none' }
+  ];
+
+  for (const stage of defaultStages) {
+    await query(`
+      INSERT INTO festival_review_states (
+        event_id, unique_name, stage_order, access_group_name, scope_key,
+        review_type, star_scale, vote_mode, rank_mode, rank_top_n,
+        notes_requirement, auto_advance_cutoff, auto_reject_cutoff, status,
+        jury_assignment_mode, jury_auto_rule, jury_count_per_film, award_criteria
+      ) VALUES (?, ?, ?, 'jury', 'assigned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'all_jury', 1, ?)
+      ON DUPLICATE KEY UPDATE unique_name = VALUES(unique_name)
+    `, [
+      eventId, stage.name, stage.order, stage.review_type, stage.star_scale || null, stage.vote_mode || null,
+      stage.rank_mode || null, stage.rank_top_n || null, stage.notes_requirement,
+      stage.auto_advance_cutoff, stage.auto_reject_cutoff, stage.status,
+      stage.jury_assignment_mode || 'auto',
+      stage.award_criteria ? JSON.stringify(stage.award_criteria) : null
+    ]);
+
+    const stateRow = await query('SELECT id FROM festival_review_states WHERE event_id = ? AND stage_order = ?', [eventId, stage.order]);
+    if (stateRow.length > 0) {
+      const stateId = stateRow[0].id;
+      for (let i = 0; i < stage.criteria.length; i++) {
+        const c = stage.criteria[i];
+        await query(`
+          INSERT INTO festival_state_criteria (event_id, state_id, label, criterion_key, weight_percentage, sort_order)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE label = VALUES(label)
+        `, [eventId, stateId, c.label, c.key, c.weight, i + 1]);
+      }
+    }
+  }
+}
+
+async function resequenceReviewStatesForEvent(eventId, movedStateId = null, desiredOrder = null) {
+  // 1. Get all active rows ordered by stage_order ASC, id ASC
+  const activeRows = await query(
+    "SELECT id FROM festival_review_states WHERE event_id = ? AND (status IS NULL OR status != 'inactive') ORDER BY stage_order ASC, id ASC",
+    [eventId]
+  );
+
+  let activeIds = activeRows.map(r => r.id);
+
+  if (movedStateId && desiredOrder != null) {
+    const movedIdNum = parseInt(movedStateId, 10);
+    // Remove movedStateId from activeIds if already present
+    activeIds = activeIds.filter(id => id !== movedIdNum);
+
+    // Check if movedStateId is currently active
+    const stateRow = await query("SELECT status FROM festival_review_states WHERE id = ? AND event_id = ?", [movedIdNum, eventId]);
+    if (stateRow.length > 0 && stateRow[0].status !== 'inactive') {
+      const targetIdx = Math.max(0, Math.min(parseInt(desiredOrder, 10) - 1, activeIds.length));
+      activeIds.splice(targetIdx, 0, movedIdNum);
+    }
+  }
+
+  // Resequence active stages contiguously 1, 2, 3...
+  for (let i = 0; i < activeIds.length; i++) {
+    await query('UPDATE festival_review_states SET stage_order = ? WHERE id = ?', [i + 1, activeIds[i]]);
+  }
+
+  // 2. Resequence inactive stages after active stages (e.g. 101, 102...) so there is never an overlap
+  const inactiveRows = await query(
+    "SELECT id FROM festival_review_states WHERE event_id = ? AND status = 'inactive' ORDER BY stage_order ASC, id ASC",
+    [eventId]
+  );
+  for (let i = 0; i < inactiveRows.length; i++) {
+    await query('UPDATE festival_review_states SET stage_order = ? WHERE id = ?', [100 + i + 1, inactiveRows[i].id]);
+  }
+}
+
+async function getReviewStates(req, res) {
+  try {
+    const eventId = getEventId(req);
+    await ensureReviewStatesForEvent(eventId);
+    await resequenceReviewStatesForEvent(eventId);
+
+    const states = await query(`
+      SELECT 
+        s.*,
+        (SELECT COUNT(*) FROM submissions sub WHERE sub.event_id = s.event_id AND sub.review_state_id = s.id) as film_count
+      FROM festival_review_states s
+      WHERE s.event_id = ?
+      ORDER BY (CASE WHEN s.status = 'inactive' THEN 1 ELSE 0 END) ASC, s.stage_order ASC, s.id ASC
+    `, [eventId]);
+
+    const stateIds = states.map(s => s.id);
+    let criteria = [];
+    if (stateIds.length > 0) {
+      criteria = await query(`
+        SELECT * FROM festival_state_criteria 
+        WHERE event_id = ? AND state_id IN (${stateIds.map(() => '?').join(',')})
+        ORDER BY sort_order ASC
+      `, [eventId, ...stateIds]);
+    }
+
+    const stateCriteriaMap = {};
+    for (const c of criteria) {
+      if (!stateCriteriaMap[c.state_id]) stateCriteriaMap[c.state_id] = [];
+      stateCriteriaMap[c.state_id].push(c);
+    }
+
+    const result = states.map(s => {
+      let parsedAwardCriteria = [];
+      try {
+        parsedAwardCriteria = s.award_criteria
+          ? (typeof s.award_criteria === 'string' ? JSON.parse(s.award_criteria) : s.award_criteria)
+          : [];
+      } catch (e) {
+        parsedAwardCriteria = [];
+      }
+      return {
+        ...s,
+        award_criteria: parsedAwardCriteria,
+        criteria: stateCriteriaMap[s.id] || []
+      };
+    });
+
+    const juryCountRows = await query(`
+      SELECT COUNT(DISTINCT u.id) as total_jury
+      FROM users u
+      JOIN user_event_groups ueg ON ueg.user_id = u.id
+      JOIN \`groups\` g ON g.id = ueg.group_id
+      WHERE ueg.event_id = ? AND g.group_key IN ('jury', 'judge')
+    `, [eventId]);
+    const totalAvailableJury = (juryCountRows[0] && juryCountRows[0].total_jury) || 0;
+
+    res.json({ success: true, data: result, total_available_jury: totalAvailableJury });
+  } catch (err) {
+    console.error('[SettingsController] getReviewStates error:', err);
+    res.status(500).json({ error: 'Failed to fetch review states.' });
+  }
+}
+
+async function getReviewStateById(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const stateId = parseInt(req.params.id, 10);
+    const states = await query('SELECT * FROM festival_review_states WHERE id = ? AND event_id = ?', [stateId, eventId]);
+    if (states.length === 0) {
+      return res.status(404).json({ error: 'Review state not found.' });
+    }
+    const criteria = await query('SELECT * FROM festival_state_criteria WHERE state_id = ? AND event_id = ? ORDER BY sort_order ASC', [stateId, eventId]);
+
+    const juryCountRows = await query(`
+      SELECT COUNT(DISTINCT u.id) as total_jury
+      FROM users u
+      JOIN user_event_groups ueg ON ueg.user_id = u.id
+      JOIN \`groups\` g ON g.id = ueg.group_id
+      WHERE ueg.event_id = ? AND g.group_key IN ('jury', 'judge')
+    `, [eventId]);
+    const totalAvailableJury = (juryCountRows[0] && juryCountRows[0].total_jury) || 0;
+
+    let parsedAwardCriteria = [];
+    try {
+      parsedAwardCriteria = states[0].award_criteria
+        ? (typeof states[0].award_criteria === 'string' ? JSON.parse(states[0].award_criteria) : states[0].award_criteria)
+        : [];
+    } catch (e) {
+      parsedAwardCriteria = [];
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...states[0],
+        award_criteria: parsedAwardCriteria,
+        criteria,
+        total_available_jury: totalAvailableJury
+      }
+    });
+  } catch (err) {
+    console.error('[SettingsController] getReviewStateById error:', err);
+    res.status(500).json({ error: 'Failed to fetch review state.' });
+  }
+}
+
+async function createReviewState(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const {
+      unique_name,
+      stage_order,
+      access_group_name,
+      scope_key,
+      review_type,
+      star_scale,
+      vote_mode,
+      rank_mode,
+      rank_top_n,
+      notes_requirement,
+      completion_logic,
+      auto_advance_cutoff,
+      auto_reject_cutoff,
+      notify_acceptance,
+      acceptance_template,
+      notify_rejection,
+      rejection_template,
+      criteria,
+      action_unreviewed,
+      unreviewed_action
+    } = req.body;
+
+    if (!unique_name || !unique_name.trim()) {
+      return res.status(400).json({ error: 'Stage name is required.' });
+    }
+
+    // Determine order
+    let order = parseInt(stage_order, 10);
+    if (isNaN(order)) {
+      const maxOrder = await query('SELECT MAX(stage_order) as max_o FROM festival_review_states WHERE event_id = ?', [eventId]);
+      order = (maxOrder[0].max_o || 0) + 1;
+    }
+
+    let normReviewType = 'star_based';
+    if (review_type) {
+      const rt = String(review_type).toLowerCase();
+      if (rt.includes('vote') || rt.includes('pass')) normReviewType = 'vote_based';
+      else if (rt.includes('rank')) normReviewType = 'rank_based';
+      else normReviewType = 'star_based';
+    }
+
+    let normStarScale = '5';
+    if (star_scale) {
+      const s = String(star_scale);
+      if (['3', '5', '10'].includes(s)) normStarScale = s;
+      else if (s.includes('10')) normStarScale = '10';
+      else if (s.includes('3')) normStarScale = '3';
+      else normStarScale = '5';
+    } else if (normReviewType !== 'star_based') {
+      normStarScale = null;
+    }
+
+    let normCompletionLogic = 'all_reviews_done';
+    if (completion_logic) {
+      const cl = String(completion_logic).toLowerCase();
+      if (cl.includes('admin') || cl.includes('manual')) normCompletionLogic = 'admin_override';
+      else if (cl.includes('date') || cl.includes('deadline')) normCompletionLogic = 'date_dependent';
+      else normCompletionLogic = 'all_reviews_done';
+    }
+
+    let normUnreviewedAction = 'mark_rejected';
+    if (action_unreviewed || req.body.unreviewed_action) {
+      const ua = String(action_unreviewed || req.body.unreviewed_action).toLowerCase();
+      if (ua.includes('advance')) normUnreviewedAction = 'advance';
+      else if (ua.includes('keep') || ua.includes('pending')) normUnreviewedAction = 'keep_current';
+      else normUnreviewedAction = 'mark_rejected';
+    }
+
+    let normNotesReq = 'optional';
+    if (notes_requirement || req.body.notes_required) {
+      const nr = String(notes_requirement || req.body.notes_required).toLowerCase();
+      if (nr.includes('require')) normNotesReq = 'required';
+    }
+
+    const initialStatus = (req.body.status && String(req.body.status).toLowerCase() === 'inactive') ? 'inactive' : 'active';
+
+    const jury_assignment_mode = ['manual', 'none'].includes(req.body.jury_assignment_mode) ? req.body.jury_assignment_mode : 'auto';
+    const jury_auto_rule = req.body.jury_auto_rule === 'n_jury' ? 'n_jury' : 'all_jury';
+    let jury_count_per_film = req.body.jury_count_per_film !== undefined ? parseInt(req.body.jury_count_per_film, 10) : 1;
+    if (isNaN(jury_count_per_film) || jury_count_per_film < 1) jury_count_per_film = 1;
+
+    // Validate n <= total available jury when auto assign with n_jury rule
+    if (jury_assignment_mode === 'auto' && jury_auto_rule === 'n_jury') {
+      const juryCountRows = await query(`
+        SELECT COUNT(DISTINCT u.id) as total_jury
+        FROM users u
+        JOIN user_event_groups ueg ON ueg.user_id = u.id
+        JOIN \`groups\` g ON g.id = ueg.group_id
+        WHERE ueg.event_id = ? AND g.group_key IN ('jury', 'judge')
+      `, [eventId]);
+      const totalJury = (juryCountRows[0] && juryCountRows[0].total_jury) || 0;
+
+      if (totalJury > 0 && jury_count_per_film > totalJury) {
+        return res.status(400).json({
+          error: `Number of jurors per film (${jury_count_per_film}) cannot be greater than total number of jury (${totalJury}).`
+        });
+      }
+    }
+
+    const award_criteria = req.body.award_criteria
+      ? (Array.isArray(req.body.award_criteria) ? JSON.stringify(req.body.award_criteria) : String(req.body.award_criteria))
+      : null;
+
+    const insertResult = await query(`
+      INSERT INTO festival_review_states (
+        event_id, unique_name, stage_order, access_group_name, scope_key,
+        review_type, star_scale, vote_mode, rank_mode, rank_top_n,
+        notes_requirement, completion_logic, unreviewed_action, auto_advance_cutoff, auto_reject_cutoff,
+        status, notify_acceptance, acceptance_template, notify_rejection, rejection_template,
+        jury_assignment_mode, jury_auto_rule, jury_count_per_film, award_criteria
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      eventId,
+      unique_name.trim(),
+      order,
+      access_group_name || 'jury',
+      scope_key || 'assigned',
+      normReviewType,
+      normStarScale,
+      vote_mode || null,
+      rank_mode || null,
+      rank_top_n ? parseInt(rank_top_n, 10) : null,
+      normNotesReq,
+      normCompletionLogic,
+      normUnreviewedAction,
+      auto_advance_cutoff != null ? parseFloat(auto_advance_cutoff) : null,
+      auto_reject_cutoff != null ? parseFloat(auto_reject_cutoff) : null,
+      initialStatus,
+      notify_acceptance ? 1 : 0,
+      acceptance_template || null,
+      notify_rejection ? 1 : 0,
+      rejection_template || null,
+      jury_assignment_mode,
+      jury_auto_rule,
+      jury_count_per_film,
+      award_criteria
+    ]);
+
+    const stateId = insertResult.insertId;
+
+    // Sync award_criteria to award_categories
+    if (Array.isArray(req.body.award_criteria) && req.body.award_criteria.length > 0) {
+      for (let i = 0; i < req.body.award_criteria.length; i++) {
+        const item = req.body.award_criteria[i];
+        const awardName = typeof item === 'string' ? item.trim() : (item.name || '').trim();
+        if (awardName) {
+          const existingAward = await query('SELECT id FROM award_categories WHERE event_id = ? AND name = ?', [eventId, awardName]);
+          if (existingAward.length === 0) {
+            await query('INSERT INTO award_categories (event_id, name, order_index) VALUES (?, ?, ?)', [eventId, awardName, i + 1]);
+          }
+        }
+      }
+    }
+
+    if (Array.isArray(criteria) && criteria.length > 0) {
+      for (let i = 0; i < criteria.length; i++) {
+        const c = criteria[i];
+        if (c.label && c.label.trim()) {
+          const key = c.criterion_key || c.label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+          const weight = parseFloat(c.weight_percentage) || 25.00;
+          await query(`
+            INSERT INTO festival_state_criteria (event_id, state_id, label, criterion_key, weight_percentage, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [eventId, stateId, c.label.trim(), key, weight, i + 1]);
+        }
+      }
+    }
+
+    const targetOrder = stage_order !== undefined ? parseInt(stage_order, 10) : order;
+    await resequenceReviewStatesForEvent(eventId, stateId, targetOrder);
+
+    res.json({ success: true, message: 'Review state created successfully.', id: stateId });
+  } catch (err) {
+    console.error('[SettingsController] createReviewState error:', err);
+    res.status(500).json({ error: 'Failed to create review state.' });
+  }
+}
+
+async function updateReviewState(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const stateId = parseInt(req.params.id, 10);
+
+    const {
+      unique_name,
+      stage_order,
+      access_group_name,
+      scope_key,
+      review_type,
+      star_scale,
+      vote_mode,
+      rank_mode,
+      rank_top_n,
+      notes_requirement,
+      completion_logic,
+      auto_advance_cutoff,
+      auto_reject_cutoff,
+      notify_acceptance,
+      acceptance_template,
+      notify_rejection,
+      rejection_template,
+      criteria
+    } = req.body;
+
+    const fields = [];
+    const params = [];
+
+    if (unique_name !== undefined) { fields.push('unique_name = ?'); params.push(unique_name.trim()); }
+    if (stage_order !== undefined) { fields.push('stage_order = ?'); params.push(parseInt(stage_order, 10)); }
+    if (access_group_name !== undefined) { fields.push('access_group_name = ?'); params.push(access_group_name); }
+    if (scope_key !== undefined) { fields.push('scope_key = ?'); params.push(scope_key); }
+    if (review_type !== undefined) {
+      let normReviewType = 'star_based';
+      const rt = String(review_type).toLowerCase();
+      if (rt.includes('vote') || rt.includes('pass')) normReviewType = 'vote_based';
+      else if (rt.includes('rank')) normReviewType = 'rank_based';
+      else normReviewType = 'star_based';
+      fields.push('review_type = ?');
+      params.push(normReviewType);
+    }
+    if (star_scale !== undefined) {
+      const s = String(star_scale);
+      const val = ['3', '5', '10'].includes(s) ? s : (s.includes('10') ? '10' : (s.includes('3') ? '3' : '5'));
+      fields.push('star_scale = ?');
+      params.push(val);
+    }
+    if (notes_requirement !== undefined || req.body.notes_required !== undefined) {
+      const nr = String(notes_requirement || req.body.notes_required).toLowerCase().includes('require') ? 'required' : 'optional';
+      fields.push('notes_requirement = ?');
+      params.push(nr);
+    }
+    if (completion_logic !== undefined) {
+      let normCompletionLogic = 'all_reviews_done';
+      const cl = String(completion_logic).toLowerCase();
+      if (cl.includes('admin') || cl.includes('manual')) normCompletionLogic = 'admin_override';
+      else if (cl.includes('date') || cl.includes('deadline')) normCompletionLogic = 'date_dependent';
+      else normCompletionLogic = 'all_reviews_done';
+      fields.push('completion_logic = ?');
+      params.push(normCompletionLogic);
+    }
+    if (auto_advance_cutoff !== undefined) { fields.push('auto_advance_cutoff = ?'); params.push(auto_advance_cutoff != null ? parseFloat(auto_advance_cutoff) : null); }
+    if (auto_reject_cutoff !== undefined) { fields.push('auto_reject_cutoff = ?'); params.push(auto_reject_cutoff != null ? parseFloat(auto_reject_cutoff) : null); }
+    if (notify_acceptance !== undefined) { fields.push('notify_acceptance = ?'); params.push(notify_acceptance ? 1 : 0); }
+    if (acceptance_template !== undefined) { fields.push('acceptance_template = ?'); params.push(acceptance_template); }
+    if (notify_rejection !== undefined) { fields.push('notify_rejection = ?'); params.push(notify_rejection ? 1 : 0); }
+    if (rejection_template !== undefined) { fields.push('rejection_template = ?'); params.push(rejection_template); }
+    const unrev = req.body.action_unreviewed !== undefined ? req.body.action_unreviewed : req.body.unreviewed_action;
+    if (unrev !== undefined) {
+      const ua = String(unrev).toLowerCase();
+      let norm = 'mark_rejected';
+      if (ua.includes('advance')) norm = 'advance';
+      else if (ua.includes('keep') || ua.includes('pending')) norm = 'keep_current';
+      fields.push('unreviewed_action = ?');
+      params.push(norm);
+    }
+    if (req.body.status !== undefined) {
+      const st = String(req.body.status).toLowerCase();
+      const val = (st === 'inactive' || st === 'not_started' || st === '0' || st === 'false') ? 'inactive' : 'active';
+      fields.push('status = ?');
+      params.push(val);
+    }
+
+    if (req.body.jury_assignment_mode !== undefined) {
+      const jam = ['manual', 'none'].includes(req.body.jury_assignment_mode) ? req.body.jury_assignment_mode : 'auto';
+      fields.push('jury_assignment_mode = ?');
+      params.push(jam);
+    }
+    if (req.body.jury_auto_rule !== undefined) {
+      const jar = req.body.jury_auto_rule === 'n_jury' ? 'n_jury' : 'all_jury';
+      fields.push('jury_auto_rule = ?');
+      params.push(jar);
+    }
+    if (req.body.jury_count_per_film !== undefined) {
+      let jcf = parseInt(req.body.jury_count_per_film, 10);
+      if (isNaN(jcf) || jcf < 1) jcf = 1;
+
+      // Validate n <= total available jury if auto and n_jury
+      const currentMode = req.body.jury_assignment_mode !== undefined ? req.body.jury_assignment_mode : 'auto';
+      const currentRule = req.body.jury_auto_rule !== undefined ? req.body.jury_auto_rule : 'all_jury';
+      if (currentMode === 'auto' && currentRule === 'n_jury') {
+        const juryCountRows = await query(`
+          SELECT COUNT(DISTINCT u.id) as total_jury
+          FROM users u
+          JOIN user_event_groups ueg ON ueg.user_id = u.id
+          JOIN \`groups\` g ON g.id = ueg.group_id
+          WHERE ueg.event_id = ? AND g.group_key IN ('jury', 'judge')
+        `, [eventId]);
+        const totalJury = (juryCountRows[0] && juryCountRows[0].total_jury) || 0;
+
+        if (totalJury > 0 && jcf > totalJury) {
+          return res.status(400).json({
+            error: `Number of jurors per film (${jcf}) cannot be greater than total number of jury (${totalJury}).`
+          });
+        }
+      }
+
+      fields.push('jury_count_per_film = ?');
+      params.push(jcf);
+    }
+
+    if (req.body.award_criteria !== undefined) {
+      const acJson = Array.isArray(req.body.award_criteria)
+        ? JSON.stringify(req.body.award_criteria)
+        : (req.body.award_criteria ? String(req.body.award_criteria) : null);
+      fields.push('award_criteria = ?');
+      params.push(acJson);
+
+      // Sync to award_categories
+      if (Array.isArray(req.body.award_criteria) && req.body.award_criteria.length > 0) {
+        for (let i = 0; i < req.body.award_criteria.length; i++) {
+          const item = req.body.award_criteria[i];
+          const awardName = typeof item === 'string' ? item.trim() : (item.name || '').trim();
+          if (awardName) {
+            const existingAward = await query('SELECT id FROM award_categories WHERE event_id = ? AND name = ?', [eventId, awardName]);
+            if (existingAward.length === 0) {
+              await query('INSERT INTO award_categories (event_id, name, order_index) VALUES (?, ?, ?)', [eventId, awardName, i + 1]);
+            }
+          }
+        }
+      }
+    }
+
+    if (fields.length > 0) {
+      params.push(stateId, eventId);
+      await query(`UPDATE festival_review_states SET ${fields.join(', ')} WHERE id = ? AND event_id = ?`, params);
+    }
+
+    // Update criteria if provided
+    if (Array.isArray(criteria)) {
+      await query('DELETE FROM festival_state_criteria WHERE state_id = ? AND event_id = ?', [stateId, eventId]);
+      for (let i = 0; i < criteria.length; i++) {
+        const c = criteria[i];
+        if (c.label && c.label.trim()) {
+          const key = c.criterion_key || c.label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+          const weight = parseFloat(c.weight_percentage) || 25.00;
+          await query(`
+            INSERT INTO festival_state_criteria (event_id, state_id, label, criterion_key, weight_percentage, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [eventId, stateId, c.label.trim(), key, weight, i + 1]);
+        }
+      }
+    }
+
+    const targetOrder = stage_order !== undefined ? parseInt(stage_order, 10) : null;
+    await resequenceReviewStatesForEvent(eventId, stateId, targetOrder);
+
+    res.json({ success: true, message: 'Review state updated successfully.' });
+  } catch (err) {
+    console.error('[SettingsController] updateReviewState error:', err);
+    res.status(500).json({ error: 'Failed to update review state.' });
+  }
+}
+
+async function deleteReviewState(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const stateId = parseInt(req.params.id, 10);
+
+    // Verify if films are active in this state
+    const filmsInState = await query('SELECT count(*) as cnt FROM submissions WHERE review_state_id = ? AND event_id = ?', [stateId, eventId]);
+    if (filmsInState[0].cnt > 0) {
+      return res.status(400).json({
+        error: `Cannot delete stage: ${filmsInState[0].cnt} film(s) are currently in this review state. Move films to another state first.`
+      });
+    }
+
+    await query('DELETE FROM festival_state_criteria WHERE state_id = ? AND event_id = ?', [stateId, eventId]);
+    await query('DELETE FROM festival_review_states WHERE id = ? AND event_id = ?', [stateId, eventId]);
+
+    await resequenceReviewStatesForEvent(eventId);
+
+    res.json({ success: true, message: 'Review state deleted successfully.' });
+  } catch (err) {
+    console.error('[SettingsController] deleteReviewState error:', err);
+    res.status(500).json({ error: 'Failed to delete review state.' });
+  }
+}
+
+async function reorderReviewStates(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const { orderList } = req.body; // array of { id, stage_order }
+
+    if (!Array.isArray(orderList)) {
+      return res.status(400).json({ error: 'orderList must be an array.' });
+    }
+
+    for (const item of orderList) {
+      if (item.id && item.stage_order) {
+        await query('UPDATE festival_review_states SET stage_order = ? WHERE id = ? AND event_id = ?', [
+          parseInt(item.stage_order, 10),
+          parseInt(item.id, 10),
+          eventId
+        ]);
+      }
+    }
+
+    await resequenceReviewStatesForEvent(eventId);
+
+    res.json({ success: true, message: 'Review states reordered successfully.' });
+  } catch (err) {
+    console.error('[SettingsController] reorderReviewStates error:', err);
+    res.status(500).json({ error: 'Failed to reorder review states.' });
+  }
+}
+
+async function addStateCriteria(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const stateId = parseInt(req.params.id, 10);
+    const { label, criterion_key, weight_percentage } = req.body;
+
+    if (!label || !label.trim()) {
+      return res.status(400).json({ error: 'Criteria label is required.' });
+    }
+
+    const key = criterion_key || label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const weight = parseFloat(weight_percentage) || 25.00;
+
+    const maxSort = await query('SELECT MAX(sort_order) as m FROM festival_state_criteria WHERE state_id = ?', [stateId]);
+    const nextSort = (maxSort[0].m || 0) + 1;
+
+    const ins = await query(`
+      INSERT INTO festival_state_criteria (event_id, state_id, label, criterion_key, weight_percentage, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [eventId, stateId, label.trim(), key, weight, nextSort]);
+
+    res.json({ success: true, message: 'Criterion added.', id: ins.insertId });
+  } catch (err) {
+    console.error('[SettingsController] addStateCriteria error:', err);
+    res.status(500).json({ error: 'Failed to add criterion.' });
+  }
+}
+
+async function deleteStateCriteria(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const stateId = parseInt(req.params.id, 10);
+    const critId = parseInt(req.params.critId, 10);
+
+    await query('DELETE FROM festival_state_criteria WHERE id = ? AND state_id = ? AND event_id = ?', [critId, stateId, eventId]);
+    res.json({ success: true, message: 'Criterion deleted.' });
+  } catch (err) {
+    console.error('[SettingsController] deleteStateCriteria error:', err);
+    res.status(500).json({ error: 'Failed to delete criterion.' });
+  }
+}
+
 module.exports = {
   listFlags,
   createFlag,
@@ -546,5 +1215,14 @@ module.exports = {
   updateRoundConfig,
   addCategory,
   updateCategory,
-  deleteCategory
+  deleteCategory,
+  getReviewStates,
+  getReviewStateById,
+  createReviewState,
+  updateReviewState,
+  deleteReviewState,
+  reorderReviewStates,
+  addStateCriteria,
+  deleteStateCriteria
 };
+

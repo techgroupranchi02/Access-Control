@@ -15,6 +15,7 @@ export function FestivalProvider({ children }) {
   const [userPermissions, setUserPermissions] = useState({});
   const [permissionDetails, setPermissionDetails] = useState([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [currentUserGroup, setCurrentUserGroup] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // Load editions/festivals on mount
@@ -100,6 +101,7 @@ export function FestivalProvider({ children }) {
       const perms = meRes.data.permissions || {};
       setUserPermissions(perms);
       setIsSuperAdmin(Boolean((perms && perms['*']) || (Array.isArray(perms) && perms.includes('*')) || meRes.data.isSuperAdmin));
+      setCurrentUserGroup(meRes.data.current_group || null);
     } catch (err) {
       console.error('Failed to load edition config');
     } finally {
@@ -192,6 +194,7 @@ export function FestivalProvider({ children }) {
     currentFestival,
     features,
     userPermissions,
+    currentUserGroup,
     loading,
     selectFestival,
     selectEdition: selectFestival,

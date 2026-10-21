@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import FilmDetailDrawer from '../submissions/FilmDetailDrawer';
+import { CheckIcon } from '../common/Icons';
 
 const PIPELINE_STEPS = [
   { key: 'screening', label: 'Round 1', phase: 'SCREENING', num: 1 },
@@ -13,20 +14,31 @@ const PIPELINE_STEPS = [
 ];
 
 const CRITERIA_KEYS = [
-  { key: 'screenplay', label: 'Screenplay' },
-  { key: 'dialogues', label: 'Dialogues' },
-  { key: 'writing', label: 'Writing' },
-  { key: 'structure', label: 'Structure' },
-  { key: 'direction', label: 'Direction' },
-  { key: 'acting', label: 'Acting' },
-  { key: 'cinematography', label: 'Cinematography' },
-  { key: 'production_design', label: 'Production design' },
-  { key: 'sound', label: 'Sound' },
-  { key: 'music', label: 'Music' },
-  { key: 'creativity', label: 'Creativity' },
-  { key: 'inspire', label: 'Did the film inspire you?' },
-  { key: 'message_importance', label: 'Importance of film message' },
+  { key: 'screenplay', label: 'Screenplay', aliases: ['screenplay', 'story', 'narrative', 'writing'] },
+  { key: 'dialogues', label: 'Dialogues', aliases: ['dialogues'] },
+  { key: 'writing', label: 'Writing', aliases: ['writing'] },
+  { key: 'structure', label: 'Structure', aliases: ['structure'] },
+  { key: 'direction', label: 'Direction', aliases: ['direction', 'directorial_vision'] },
+  { key: 'acting', label: 'Acting', aliases: ['acting', 'performance'] },
+  { key: 'cinematography', label: 'Cinematography', aliases: ['cinematography', 'visuals'] },
+  { key: 'production_design', label: 'Production design', aliases: ['production_design', 'productionDesign'] },
+  { key: 'sound', label: 'Sound', aliases: ['sound', 'sound_music', 'audio'] },
+  { key: 'music', label: 'Music', aliases: ['music'] },
+  { key: 'creativity', label: 'Creativity', aliases: ['creativity', 'originality'] },
+  { key: 'inspire', label: 'Did the film inspire you?', aliases: ['inspire', 'inspiration', 'emotional_impact', 'impact'] },
+  { key: 'message_importance', label: 'Importance of film message', aliases: ['message_importance', 'messageImportance', 'clarity', 'clarity_of_message'] },
 ];
+
+const getCriteriaAverageScore = (averages, crit) => {
+  if (!averages || typeof averages !== 'object') return null;
+  if (averages[crit.key] != null) return averages[crit.key];
+  if (crit.aliases) {
+    for (const a of crit.aliases) {
+      if (averages[a] != null) return averages[a];
+    }
+  }
+  return null;
+};
 
 export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchToJury }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -366,8 +378,8 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
                     <div className="fc-rail-item-title">{film.title}</div>
                     <div className="fc-rail-item-dir">{film.director || 'Filmmaker'}</div>
                     <div className="fc-rail-item-badge-row">
-                      <span className={`fc-status-badge fc-status-${(film.status || 'submitted').toLowerCase().replace(/\s+/g, '-')}`}>
-                        {film.status || 'Submitted'}
+                      <span className={`fc-status-badge fc-status-${((film.status === 'Submitted' ? 'New Submission' : film.status) || 'new-submission').toLowerCase().replace(/\s+/g, '-')}`}>
+                        {film.status === 'Submitted' ? 'New Submission' : (film.status || 'New Submission')}
                       </span>
                       {film.flag_label && (
                         <span
@@ -469,8 +481,8 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
                         >
                           View details
                         </button>
-                        <span className={`fc-status-badge fc-status-${(selectedFilm.status || 'submitted').toLowerCase().replace(/\s+/g, '-')}`}>
-                          {selectedFilm.status || 'Submitted'}
+                        <span className={`fc-status-badge fc-status-${((selectedFilm.status === 'Submitted' ? 'New Submission' : selectedFilm.status) || 'new-submission').toLowerCase().replace(/\s+/g, '-')}`}>
+                          {selectedFilm.status === 'Submitted' ? 'New Submission' : (selectedFilm.status || 'New Submission')}
                         </span>
                       </div>
                     </div>
@@ -480,7 +492,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
                       <div className="fc-round1-summary-heading">ROUND {activeRound} SUMMARY</div>
                       <div className="fc-criteria-2col-grid">
                         {CRITERIA_KEYS.map((crit) => {
-                          const val = selectedFilm.criteria_averages?.[crit.key];
+                          const val = getCriteriaAverageScore(selectedFilm.criteria_averages, crit);
                           return (
                             <div key={crit.key} className="fc-crit-row">
                               <span className="fc-crit-name">{crit.label}</span>
@@ -563,8 +575,8 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
                           >
                             <td style={{ fontWeight: 600 }}>{item.title}</td>
                             <td>
-                              <span className={`fc-status-badge fc-status-${(item.status || 'submitted').toLowerCase().replace(/\s+/g, '-')}`}>
-                                {item.status || 'Submitted'}
+                              <span className={`fc-status-badge fc-status-${((item.status === 'Submitted' ? 'New Submission' : item.status) || 'new-submission').toLowerCase().replace(/\s+/g, '-')}`}>
+                                {item.status === 'Submitted' ? 'New Submission' : (item.status || 'New Submission')}
                               </span>
                             </td>
                             <td>{item.round1_reviews}</td>
@@ -642,8 +654,8 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
                         >
                           View details
                         </button>
-                        <span className={`fc-status-badge fc-status-${(selectedFilm.status || 'submitted').toLowerCase().replace(/\s+/g, '-')}`}>
-                          {selectedFilm.status || 'Submitted'}
+                        <span className={`fc-status-badge fc-status-${((selectedFilm.status === 'Submitted' ? 'New Submission' : selectedFilm.status) || 'new-submission').toLowerCase().replace(/\s+/g, '-')}`}>
+                          {selectedFilm.status === 'Submitted' ? 'New Submission' : (selectedFilm.status || 'New Submission')}
                         </span>
                       </div>
                     </div>
@@ -653,7 +665,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
                       <div className="fc-round1-summary-heading">ROUND {activeRound} SUMMARY</div>
                       <div className="fc-criteria-2col-grid">
                         {CRITERIA_KEYS.map((crit) => {
-                          const val = selectedFilm.criteria_averages?.[crit.key];
+                          const val = getCriteriaAverageScore(selectedFilm.criteria_averages, crit);
                           return (
                             <div key={crit.key} className="fc-crit-row">
                               <span className="fc-crit-name">{crit.label}</span>
@@ -692,7 +704,9 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
                             style={{ background: '#16a34a', borderColor: '#16a34a' }}
                             onClick={() => handleMakeDecision('official_selection')}
                           >
-                            ✓ Mark Official Selection
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <CheckIcon size={14} /> Mark Official Selection
+                            </span>
                           </button>
                         )}
                         <button

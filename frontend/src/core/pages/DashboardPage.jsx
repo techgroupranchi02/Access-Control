@@ -10,6 +10,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import api from '../services/api';
+import { WarningIcon } from '../components/common/Icons';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -18,7 +19,7 @@ export default function DashboardPage() {
     submissions: 23,
     members: 16,
     tasks: 14,
-    unassignedTasks: 3,
+    unassignedTasks: 0,
     guests: 4,
     slots: 6
   });
@@ -35,7 +36,7 @@ export default function DashboardPage() {
           submissions: subRes.data.total || 23,
           members: teamRes.data.totalCount || 16,
           tasks: taskRes.data.totalCount || 14,
-          unassignedTasks: taskRes.data.metrics?.unassignedTasks || 3,
+          unassignedTasks: taskRes.data.metrics?.unassignedTasks ?? 0,
           guests: 4,
           slots: 6
         });
@@ -75,7 +76,7 @@ export default function DashboardPage() {
         }}
       >
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <span style={{ fontSize: '1.5rem' }}>⚠️</span>
+          <WarningIcon size={24} style={{ color: 'var(--fc-alert-title, #991b1b)', flexShrink: 0 }} />
           <div>
             <div style={{ fontWeight: 800, color: 'var(--fc-alert-title, #991b1b)', fontSize: '0.9rem' }}>
               Action Required: 1 Logistics Conflict on Day 1
@@ -118,7 +119,6 @@ export default function DashboardPage() {
             <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--fc-text-muted)', textTransform: 'uppercase' }}>
               Team & Staff
             </span>
-            <span className="fc-badge fc-badge-burgundy">3</span>
           </div>
           <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--fc-text-main)', marginTop: '6px' }}>
             {stats.members}

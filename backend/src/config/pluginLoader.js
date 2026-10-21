@@ -57,6 +57,24 @@ async function loadPlugins(app) {
         const mountPath = `/api/plugins/${plugin.feature_key}`;
         app.use(mountPath, pluginRouter);
         console.log(`[PluginLoader] ✓ Registered plugin '${plugin.feature_key}' at ${mountPath}`);
+
+        // Check for dedicated settings routes file: {plugin_dir}.settings.routes.js
+        const settingsRoutePath = path.resolve(
+          __dirname,
+          '../plugins',
+          plugin.plugin_dir,
+          `${plugin.plugin_dir}.settings.routes.js`
+        );
+        if (fs.existsSync(settingsRoutePath)) {
+          try {
+            const settingsRouter = require(settingsRoutePath);
+            const settingsMountPath = `/api/plugins/${plugin.feature_key}/settings`;
+            app.use(settingsMountPath, settingsRouter);
+            console.log(`[PluginLoader] ✓ Registered plugin settings '${plugin.feature_key}' at ${settingsMountPath}`);
+          } catch (settingsError) {
+            console.error(`[PluginLoader] ✗ Failed to load settings for '${plugin.feature_key}':`, settingsError.message);
+          }
+        }
       } catch (loadError) {
         console.error(`[PluginLoader] ✗ Failed to load plugin '${plugin.feature_key}':`, loadError.message);
       }

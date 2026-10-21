@@ -26,9 +26,13 @@ export function ThemeProvider({ children }) {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark-theme');
       document.body.classList.add('dark-theme');
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.body.setAttribute('data-theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark-theme');
       document.body.classList.remove('dark-theme');
+      document.documentElement.setAttribute('data-theme', 'light');
+      document.body.setAttribute('data-theme', 'light');
     }
   }, [theme]);
 

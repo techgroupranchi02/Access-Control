@@ -6,25 +6,44 @@
  */
 
 const { query } = require('../../config/database');
+const { formatThumbnailUrl } = require('../utils/media.utils');
 
 /**
  * Standard 13 screening review criteria matching Freecomers / FestiPlus spec
  */
 const DEFAULT_CRITERIA_KEYS = [
+  'story',
+  'direction',
+  'cinematography',
+  'sound',
+  'performance',
+  'technical_quality',
+  'emotional_impact',
+  'originality',
+  'clarity',
   'screenplay',
   'dialogues',
   'writing',
   'structure',
-  'direction',
   'acting',
-  'cinematography',
   'production_design',
-  'sound',
   'music',
   'creativity',
   'inspire',
   'message_importance',
 ];
+
+const CRITERIA_ALIASES = {
+  story: ['story', 'screenplay', 'narrative', 'writing'],
+  direction: ['direction', 'directorial_vision'],
+  cinematography: ['cinematography', 'visuals'],
+  sound: ['sound', 'music', 'sound_music', 'audio'],
+  performance: ['performance', 'acting'],
+  technical_quality: ['technical_quality', 'technical', 'structure', 'production_design'],
+  emotional_impact: ['emotional_impact', 'inspire', 'impact'],
+  originality: ['originality', 'creativity'],
+  clarity: ['clarity', 'clarity_of_message', 'message_importance'],
+};
 
 /**
  * GET /api/reviews/pipeline
@@ -62,9 +81,15 @@ async function getPipeline(req, res) {
         s.email,
         s.synopsis,
         s.rejection_reason,
-        s.rejected_at
+        s.rejected_at,
+        COALESCE(p.project_id, ffs.project_id) as project_id,
+        p.watch_link,
+        p.watch_link_password,
+        p.trailer_link
       FROM submissions s
       LEFT JOIN submission_flags sf ON sf.id = s.flag_id
+      LEFT JOIN film_festivals_submissions ffs ON ffs.film_festivals_submission_id = s.id
+      LEFT JOIN projects p ON p.project_id = COALESCE(ffs.project_id, (SELECT p2.project_id FROM projects p2 WHERE p2.title = s.title ORDER BY p2.project_id DESC LIMIT 1))
       WHERE s.event_id = ?
       ORDER BY s.id ASC
     `, [eventId]);
@@ -161,14 +186,27 @@ async function getPipeline(req, res) {
       
       // Calculate criteria score averages across reviews for this film
       const criteriaAverages = {};
+      const getCriteriaScore = (sc, key) => {
+        if (!sc || typeof sc !== 'object') return null;
+        if (sc[key] != null && !isNaN(sc[key])) return parseFloat(sc[key]);
+        const aliases = CRITERIA_ALIASES[key];
+        if (aliases) {
+          for (const alias of aliases) {
+            if (sc[alias] != null && !isNaN(sc[alias])) return parseFloat(sc[alias]);
+          }
+        }
+        return null;
+      };
+
       DEFAULT_CRITERIA_KEYS.forEach(k => {
         let sum = 0;
         let count = 0;
         filmRevs.forEach(r => {
           try {
             const sc = typeof r.criteria_scores === 'string' ? JSON.parse(r.criteria_scores) : r.criteria_scores;
-            if (sc && sc[k] != null && !isNaN(sc[k])) {
-              sum += parseFloat(sc[k]);
+            const scoreVal = getCriteriaScore(sc, k);
+            if (scoreVal != null) {
+              sum += scoreVal;
               count++;
             }
           } catch (e) {}
@@ -302,6 +340,14 @@ async function listAssignments(req, res) {
     if (forceJury) {
       sql += ' AND sa.jury_user_id = ?';
       params.push(userId);
+      if (!req.query.all_rounds && !req.query.round) {
+        sql += `
+          AND EXISTS (
+            SELECT 1 FROM festival_review_states frs
+            WHERE frs.id = s.review_state_id AND frs.stage_order = sa.round_number
+          )
+        `;
+      }
     }
     if (req.query.round) {
       sql += ' AND sa.round_number = ?';
@@ -344,11 +390,12 @@ async function listJury(req, res) {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
 
     // Fetch users with group 'jury' or 'judge' assigned as jury for this festival
-    let jury = await query(`
+    let rawJury = await query(`
       SELECT DISTINCT 
         u.id, 
         u.email, 
         COALESCE(i.name, o.name, u.email) as name,
+        COALESCE(i.thumbnail_pic, o.thumbnail_pic, i.profile_pic, o.profile_pic) as thumbnail_pic,
         g.group_key
       FROM users u
       LEFT JOIN individuals i ON i.user_id = u.id
@@ -359,23 +406,12 @@ async function listJury(req, res) {
       ORDER BY name ASC
     `, [eventId]);
 
-    // Fallback if no specific user_event_groups: return all users who have group 'jury' or 'judge'
-    if (jury.length === 0) {
-      jury = await query(`
-        SELECT DISTINCT 
-          u.id, 
-          u.email, 
-          COALESCE(i.name, o.name, u.email) as name,
-          g.group_key
-        FROM users u
-        LEFT JOIN individuals i ON i.user_id = u.id
-        LEFT JOIN organizations o ON o.user_id = u.id
-        JOIN user_event_groups ueg ON ueg.user_id = u.id
-        JOIN \`groups\` g ON g.id = ueg.group_id
-        WHERE g.group_key IN ('jury', 'judge')
-        ORDER BY name ASC
-      `);
-    }
+    const jury = rawJury.map(j => ({
+      ...j,
+      thumbnail: formatThumbnailUrl(j.thumbnail_pic),
+      thumbnailPic: formatThumbnailUrl(j.thumbnail_pic),
+      thumbnail_pic: formatThumbnailUrl(j.thumbnail_pic)
+    }));
 
     res.json({ data: jury });
   } catch (error) {
@@ -429,16 +465,33 @@ async function assignJury(req, res) {
     // Automatically transition submission status based on assignment
     if (targetJuryIds.length > 0) {
       if (round === 1) {
+        const stage1Rows = await query(
+          'SELECT id, unique_name FROM festival_review_states WHERE event_id = ? AND stage_order = 1 AND (status IS NULL OR status != "inactive") LIMIT 1',
+          [eventId]
+        );
+        const stage1Id = stage1Rows.length > 0 ? stage1Rows[0].id : null;
+        const stage1Name = stage1Rows.length > 0 ? stage1Rows[0].unique_name : 'Round 1: Screening';
+
         const revs = await query(
           'SELECT id FROM screening_reviews WHERE film_id = ? AND round_number = 1 AND event_id = ?',
           [film_id, eventId]
         );
         const allCompleted = revs.length >= targetJuryIds.length;
         const newStatus = allCompleted ? 'Admin Review' : 'Round 1 Screening';
+        const currentSub = await query('SELECT review_state_id, current_stage_name, status FROM submissions WHERE id = ? AND event_id = ?', [film_id, eventId]);
+        const wasSubmitted = currentSub.length > 0 && (!currentSub[0].review_state_id || ['Submitted', 'New Submission'].includes(currentSub[0].status) || ['Submitted', 'New Submission'].includes(currentSub[0].current_stage_name));
+
         await query(
-          "UPDATE submissions SET status = ?, updated_at = NOW() WHERE id = ? AND event_id = ? AND status IN ('Submitted', 'Round 1 Screening', 'In Review', 'Admin Review')",
-          [newStatus, film_id, eventId]
+          "UPDATE submissions SET status = ?, review_state_id = COALESCE(review_state_id, ?), current_stage_name = CASE WHEN review_state_id IS NULL OR current_stage_name IN ('Submitted', 'New Submission') THEN ? ELSE current_stage_name END, updated_at = NOW() WHERE id = ? AND event_id = ? AND status IN ('Submitted', 'New Submission', 'Round 1 Screening', 'In Review', 'Admin Review')",
+          [newStatus, stage1Id, stage1Name, film_id, eventId]
         );
+
+        if (wasSubmitted && req.user && req.user.id) {
+          await query(`
+            INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
+            VALUES (?, 'STAGE_ADVANCE', ?, ?)
+          `, [film_id, `Promoted from New Submission to Stage 1 (${stage1Name}) upon reviewer assignment`, req.user.id]);
+        }
       } else if (round === 2) {
         const revs = await query(
           'SELECT id FROM screening_reviews WHERE film_id = ? AND round_number = 2 AND event_id = ?',
@@ -447,7 +500,7 @@ async function assignJury(req, res) {
         const allCompleted = revs.length >= targetJuryIds.length;
         const newStatus = allCompleted ? 'Admin Review' : 'Round 2 Screening';
         await query(
-          "UPDATE submissions SET status = ?, updated_at = NOW() WHERE id = ? AND event_id = ? AND status IN ('Admin Review', 'Submitted', 'Round 1 Screening', 'Round 2 Screening')",
+          "UPDATE submissions SET status = ?, updated_at = NOW() WHERE id = ? AND event_id = ? AND status IN ('Admin Review', 'Submitted', 'New Submission', 'Round 1 Screening', 'Round 2 Screening')",
           [newStatus, film_id, eventId]
         );
       }
@@ -458,7 +511,7 @@ async function assignJury(req, res) {
       );
       if (revs.length === 0) {
         await query(
-          "UPDATE submissions SET status = 'Submitted', updated_at = NOW() WHERE id = ? AND event_id = ? AND status IN ('Round 1 Screening', 'In Review')",
+          "UPDATE submissions SET status = 'New Submission', current_stage_name = 'New Submission', updated_at = NOW() WHERE id = ? AND event_id = ? AND status IN ('Round 1 Screening', 'In Review')",
           [film_id, eventId]
         );
       }
@@ -503,6 +556,16 @@ async function submitScorecard(req, res) {
 
     const scoresJson = JSON.stringify(scores);
 
+    // Resolve all linked user IDs for this user (supporting individual and organization IDs)
+    let allUserIds = [req.user.id];
+    if (req.user.email) {
+      const linkedUsers = await query('SELECT id FROM users WHERE email = ? AND status = 1', [req.user.email]);
+      if (linkedUsers.length > 0) {
+        allUserIds = linkedUsers.map(u => u.id);
+      }
+    }
+    const userPlaceholders = allUserIds.map(() => '?').join(',');
+
     // Find or create assignment
     let assignId = assignment_id ? parseInt(assignment_id, 10) : null;
     let targetJuryUserId = req.user.id;
@@ -515,9 +578,9 @@ async function submitScorecard(req, res) {
     } else {
       const existingAssign = await query(`
         SELECT id, jury_user_id FROM screening_assignments 
-        WHERE film_id = ? AND jury_user_id = ? AND round_number = ? AND event_id = ?
+        WHERE film_id = ? AND jury_user_id IN (${userPlaceholders}) AND round_number = ? AND event_id = ?
         LIMIT 1
-      `, [film_id, req.user.id, round, eventId]);
+      `, [film_id, ...allUserIds, round, eventId]);
 
       if (existingAssign.length > 0) {
         assignId = existingAssign[0].id;
@@ -556,10 +619,24 @@ async function submitScorecard(req, res) {
       await query(`UPDATE screening_assignments SET status = 'completed', completed_at = NOW() WHERE id = ?`, [assignId]);
     }
 
-    // Update overall rating on submission
+    // Record activity log for the juror review submission
+    try {
+      await query(`
+        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
+        VALUES (?, 'REVIEW_SUBMITTED', ?, ?)
+      `, [
+        film_id,
+        `Submitted scorecard evaluation for Round ${round} with overall score: ${overallRating}${notes ? ` ("${notes.slice(0, 100)}")` : ''}`,
+        req.user.id
+      ]);
+    } catch (logErr) {
+      console.warn('[ReviewController] Failed to record REVIEW_SUBMITTED log:', logErr.message);
+    }
+
+    // Update overall rating on submission strictly for the current round
     const avgRes = await query(`
-      SELECT AVG(overall_rating) as avg_score FROM screening_reviews WHERE film_id = ? AND event_id = ?
-    `, [film_id, eventId]);
+      SELECT AVG(overall_rating) as avg_score FROM screening_reviews WHERE film_id = ? AND event_id = ? AND round_number = ?
+    `, [film_id, eventId, round]);
     if (avgRes.length > 0 && avgRes[0].avg_score) {
       await query('UPDATE submissions SET overall_average_rating = ? WHERE id = ?', [avgRes[0].avg_score, film_id]);
     }
@@ -703,6 +780,107 @@ async function submitBallot(req, res) {
   }
 }
 
+/**
+ * POST /api/reviews/complete-stage
+ * Complete current review stage and advance qualifying films to the next sequential stage.
+ */
+async function completeStage(req, res) {
+  try {
+    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const { stage_order, stage_id } = req.body;
+
+    let currentStage = null;
+    if (stage_id) {
+      const rows = await query('SELECT * FROM festival_review_states WHERE id = ? AND event_id = ?', [stage_id, eventId]);
+      if (rows.length > 0) currentStage = rows[0];
+    } else if (stage_order) {
+      const rows = await query('SELECT * FROM festival_review_states WHERE stage_order = ? AND event_id = ?', [stage_order, eventId]);
+      if (rows.length > 0) currentStage = rows[0];
+    } else {
+      const rows = await query('SELECT * FROM festival_review_states WHERE stage_order = 1 AND event_id = ?', [eventId]);
+      if (rows.length > 0) currentStage = rows[0];
+    }
+
+    if (!currentStage) {
+      return res.status(404).json({ error: 'Review stage not found.' });
+    }
+
+    // Find next stage
+    const nextStageRows = await query(
+      'SELECT * FROM festival_review_states WHERE event_id = ? AND stage_order > ? ORDER BY stage_order ASC LIMIT 1',
+      [eventId, currentStage.stage_order]
+    );
+
+    if (nextStageRows.length === 0) {
+      return res.status(400).json({ error: 'This is already the final review stage. No further advancement stage exists.' });
+    }
+
+    const nextStage = nextStageRows[0];
+    const cutoff = parseFloat(currentStage.auto_advance_cutoff) || 4.5;
+    const rejectCutoff = parseFloat(currentStage.auto_reject_cutoff) || 3.0;
+
+    // Fetch films currently in this stage
+    const filmsInStage = await query(`
+      SELECT id, title, overall_average_rating, composite_score
+      FROM submissions
+      WHERE event_id = ? AND (review_state_id = ? OR current_stage_name = ?)
+    `, [eventId, currentStage.id, currentStage.unique_name]);
+
+    let advancedFilms = [];
+    let rejectedFilms = [];
+    let pendingFilms = [];
+
+    for (const film of filmsInStage) {
+      const score = parseFloat(film.composite_score != null ? film.composite_score : (film.overall_average_rating || 0));
+      if (score >= cutoff) {
+        // Qualified! Advance to next stage
+        await query(`
+          UPDATE submissions 
+          SET review_state_id = ?, current_stage_name = ?, auto_promoted = 1, updated_at = NOW()
+          WHERE id = ? AND event_id = ?
+        `, [nextStage.id, nextStage.unique_name, film.id, eventId]);
+
+        await query(`
+          INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
+          VALUES (?, 'AUTO_ADVANCE', ?, ?)
+        `, [film.id, `Advanced from ${currentStage.unique_name} to ${nextStage.unique_name} (Score: ${score} >= ${cutoff})`, req.user.id]);
+
+        advancedFilms.push({ id: film.id, title: film.title, score });
+      } else if (score > 0 && score < rejectCutoff) {
+        // Below rejection cutoff
+        await query(`
+          UPDATE submissions 
+          SET status = 'Rejected', rejection_reason = ?, rejected_at = NOW(), updated_at = NOW()
+          WHERE id = ? AND event_id = ?
+        `, [`Score (${score}) was below cutoff (${rejectCutoff}) in ${currentStage.unique_name}`, film.id, eventId]);
+
+        rejectedFilms.push({ id: film.id, title: film.title, score });
+      } else {
+        pendingFilms.push({ id: film.id, title: film.title, score });
+      }
+    }
+
+    // Mark current stage as completed, next stage as active
+    await query('UPDATE festival_review_states SET status = "completed" WHERE id = ?', [currentStage.id]);
+    await query('UPDATE festival_review_states SET status = "active" WHERE id = ?', [nextStage.id]);
+
+    res.json({
+      success: true,
+      message: `Completed "${currentStage.unique_name}". Advanced ${advancedFilms.length} film(s) to "${nextStage.unique_name}".`,
+      currentStage: currentStage.unique_name,
+      nextStage: nextStage.unique_name,
+      advancedCount: advancedFilms.length,
+      rejectedCount: rejectedFilms.length,
+      pendingCount: pendingFilms.length,
+      advancedFilms,
+      rejectedFilms
+    });
+  } catch (error) {
+    console.error('[ReviewController] completeStage error:', error);
+    res.status(500).json({ error: 'Failed to complete review stage.' });
+  }
+}
+
 module.exports = {
   getPipeline,
   listAssignments,
@@ -714,4 +892,5 @@ module.exports = {
   makeDecision,
   toggleVoting,
   submitBallot,
+  completeStage,
 };

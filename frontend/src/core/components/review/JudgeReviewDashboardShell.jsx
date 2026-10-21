@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../services/api';
+import { StarIcon, StarBorderIcon } from '../common/Icons';
 
 const DEFAULT_CRITERIA_LIST = [
   { key: 'screenplay', label: 'Screenplay' },
@@ -31,8 +32,9 @@ function StarRating({ value, onChange, disabled }) {
             disabled={disabled}
             onClick={() => onChange && onChange(s)}
             title={`${s} star${s > 1 ? 's' : ''}`}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
           >
-            ★
+            {s <= value ? <StarIcon size={18} /> : <StarBorderIcon size={18} />}
           </button>
         ))}
       </div>
@@ -120,9 +122,54 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
     return roundAssignments.find((a) => a.assignment_id === selectedAssignmentId) || roundAssignments[0] || null;
   }, [roundAssignments, selectedAssignmentId]);
 
+  const roundLabels = {
+    1: 'Round 1: Screening',
+    2: 'Round 2: Consideration',
+    3: 'Official Selection',
+    4: 'Nominations',
+    5: 'Jury & Voting',
+    6: 'Finalist',
+    7: 'Winner'
+  };
+
+  const availableRounds = useMemo(() => {
+    const rounds = [...new Set(assignments.map(a => a.round_number))].filter(Boolean).sort((a, b) => a - b);
+    return rounds.length > 0 ? rounds : [1, 2];
+  }, [assignments]);
+
   // Sync form when selected assignment changes
   useEffect(() => {
-    if (selectedAssignment) {
+    if (!selectedAssignment) return;
+
+    let isMounted = true;
+    async function initAssignment() {
+      if (activeRound === 5 || selectedAssignment.round_number === 5) {
+        try {
+          const res = await api.get(`/submissions/${selectedAssignment.film_id}`);
+          if (isMounted && res.data?.stage_criteria && res.data.stage_criteria.length > 0) {
+            const dynamicCriteria = res.data.stage_criteria.map(c => ({
+              key: c.criterion_key,
+              label: c.label,
+              is_award_category: c.is_award_category
+            }));
+            setCriteriaList(dynamicCriteria);
+
+            if (selectedAssignment.scores) {
+              setScores(selectedAssignment.scores);
+            } else {
+              const initial = {};
+              dynamicCriteria.forEach(c => { initial[c.key] = 4; });
+              setScores(initial);
+            }
+            setNotes(selectedAssignment.notes || '');
+            setSubmitSuccess(false);
+            return;
+          }
+        } catch (e) {
+          console.warn('Failed to fetch film criteria for round 5:', e);
+        }
+      }
+
       if (selectedAssignment.scores) {
         setScores(selectedAssignment.scores);
       } else {
@@ -135,7 +182,10 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
       setNotes(selectedAssignment.notes || '');
       setSubmitSuccess(false);
     }
-  }, [selectedAssignment]);
+
+    initAssignment();
+    return () => { isMounted = false; };
+  }, [selectedAssignment, activeRound]);
 
   const handleScoreChange = (key, val) => {
     if (selectedAssignment?.isCompleted) return;
@@ -184,28 +234,24 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
         )}
       </div>
 
-      {/* Round Tabs */}
+      {/* Dynamic Round Tabs */}
       <div className="fc-judge-round-tabs">
-        <button
-          type="button"
-          className={`fc-judge-round-tab ${activeRound === 1 ? 'active' : ''}`}
-          onClick={() => {
-            setActiveRound(1);
-            setSelectedFilmId(null);
-          }}
-        >
-          Round 1 <span className="fc-judge-tab-badge">1</span>
-        </button>
-        <button
-          type="button"
-          className={`fc-judge-round-tab ${activeRound === 2 ? 'active' : ''}`}
-          onClick={() => {
-            setActiveRound(2);
-            setSelectedFilmId(null);
-          }}
-        >
-          Round 2 <span className="fc-judge-tab-badge">2</span>
-        </button>
+        {availableRounds.map((rnd) => (
+          <button
+            key={rnd}
+            type="button"
+            className={`fc-judge-round-tab ${activeRound === rnd ? 'active' : ''}`}
+            onClick={() => {
+              setActiveRound(rnd);
+              setSelectedAssignmentId(null);
+            }}
+          >
+            {roundLabels[rnd] || `Round ${rnd}`}{' '}
+            <span className="fc-judge-tab-badge">
+              {assignments.filter((a) => a.round_number === rnd).length}
+            </span>
+          </button>
+        ))}
       </div>
 
       {loading ? (
@@ -251,7 +297,7 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
                       {item.isCompleted ? (
                         <span className="fc-badge-completed">Completed</span>
                       ) : (
-                        <span className="fc-badge-in-progress">In Progress</span>
+                        <span className="fc-badge-in-progress">Pending</span>
                       )}
                     </div>
                     <div className="fc-judge-queue-film-meta">
@@ -314,9 +360,12 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
                   </div>
                   <div className="fc-overall-stars-val">
                     <span className="fc-overall-num">{overallRating}</span>
-                    <span className="fc-overall-stars">
-                      {'★'.repeat(Math.round(overallRating))}
-                      {'☆'.repeat(5 - Math.round(overallRating))}
+                    <span className="fc-overall-stars" style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#eab308' }}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        s <= Math.round(overallRating)
+                          ? <StarIcon key={s} size={16} />
+                          : <StarBorderIcon key={s} size={16} />
+                      ))}
                     </span>
                   </div>
                 </div>

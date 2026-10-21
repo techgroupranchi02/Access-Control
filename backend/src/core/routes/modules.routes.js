@@ -60,6 +60,7 @@ reviewRouter.post('/scorecard', reviewController.submitScorecard);
 reviewRouter.post('/decision', reviewController.makeDecision);
 reviewRouter.post('/toggle-voting', reviewController.toggleVoting);
 reviewRouter.post('/ballot', reviewController.submitBallot);
+reviewRouter.post('/complete-stage', reviewController.completeStage);
 // Fallback list
 reviewRouter.get('/', reviewController.listAssignments);
 
@@ -118,6 +119,16 @@ settingsRouter.put('/review-rounds/:roundNumber', settingsController.updateRound
 settingsRouter.post('/review-rounds/:roundNumber/categories', settingsController.addCategory);
 settingsRouter.put('/review-rounds/:roundNumber/categories/:id', settingsController.updateCategory);
 settingsRouter.delete('/review-rounds/:roundNumber/categories/:id', settingsController.deleteCategory);
+
+// Sequential 6-Stages Review Workflow Settings
+settingsRouter.get('/review-states', settingsController.getReviewStates);
+settingsRouter.get('/review-states/:id', settingsController.getReviewStateById);
+settingsRouter.post('/review-states', settingsController.createReviewState);
+settingsRouter.put('/review-states/:id', settingsController.updateReviewState);
+settingsRouter.delete('/review-states/:id', settingsController.deleteReviewState);
+settingsRouter.post('/review-states/reorder', settingsController.reorderReviewStates);
+settingsRouter.post('/review-states/:id/criteria', settingsController.addStateCriteria);
+settingsRouter.delete('/review-states/:id/criteria/:critId', settingsController.deleteStateCriteria);
 
 // ── News & Publications ───────────────────────────────────────────────
 newsRouter.use(requireModule('news'));

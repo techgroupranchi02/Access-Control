@@ -43,6 +43,9 @@ const {
   registrationRouter,
   publicVoteRouter,
 } = require('./core/routes/audience.routes');
+const { authenticate } = require('./core/middleware/auth.middleware');
+const { requirePermission } = require('./core/middleware/permission.middleware');
+const { getModuleSettings, updateModuleSettings } = require('./core/controllers/moduleSettings.controller');
 
 const app = express();
 
@@ -71,6 +74,25 @@ app.use('/api/team', teamRoutes);
 app.use('/api/jury', juryRoutes);
 app.use('/api/admin/saas', saasAdminRoutes);
 app.use('/api/admin', adminRoutes);
+
+// Generic Module Settings Engine (Format B)
+const moduleSettingsRouter = express.Router();
+moduleSettingsRouter.use(authenticate);
+moduleSettingsRouter.get('/:moduleKey/settings', (req, res, next) => {
+  const permKey = `${req.params.moduleKey}:manage`;
+  requirePermission(permKey)(req, res, (err) => {
+    if (err) return next(err);
+    getModuleSettings(req, res);
+  });
+});
+moduleSettingsRouter.put('/:moduleKey/settings', (req, res, next) => {
+  const permKey = `${req.params.moduleKey}:manage`;
+  requirePermission(permKey)(req, res, (err) => {
+    if (err) return next(err);
+    updateModuleSettings(req, res);
+  });
+});
+app.use('/api/modules', moduleSettingsRouter);
 
 // Declarative Module Routes
 app.use('/api/reviews', reviewRouter);
