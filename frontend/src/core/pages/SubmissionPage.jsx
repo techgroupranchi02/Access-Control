@@ -16,6 +16,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
+import { useFestivalConfig } from '../hooks/useFestivalConfig';
 import FilmDetailDrawer from '../components/submissions/FilmDetailDrawer';
 import RejectFilmModal from '../components/submissions/RejectFilmModal';
 import AdvanceFilmModal from '../components/submissions/AdvanceFilmModal';
@@ -168,6 +169,7 @@ const getInitialRouteState = (pathname, stageIdParam) => {
 };
 
 export default function SubmissionPage() {
+  const { currentFestival } = useFestivalConfig();
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -180,7 +182,7 @@ export default function SubmissionPage() {
   const [submissions, setSubmissions] = useState([]);
   const [counts, setCounts] = useState({});
   const [flags, setFlags] = useState([]);
-  const [pipelineStepper, setPipelineStepper] = useState(DEFAULT_STAGES);
+  const [pipelineStepper, setPipelineStepper] = useState([]);
   const [availableJury, setAvailableJury] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -335,7 +337,7 @@ export default function SubmissionPage() {
         setAvailableCountries(res.data.availableCountries);
       }
 
-      if (res.data.pipelineStepper && res.data.pipelineStepper.length > 0) {
+      if (res.data.pipelineStepper) {
         setPipelineStepper(res.data.pipelineStepper);
       }
     } catch (err) {
@@ -383,6 +385,7 @@ export default function SubmissionPage() {
   useEffect(() => {
     fetchSubmissions();
   }, [
+    currentFestival?.id,
     activeScope,
     activeStageId,
     selectedCategory,
@@ -744,7 +747,7 @@ export default function SubmissionPage() {
       </div>
 
       {/* ── 6-STAGE SEQUENTIAL PIPELINE STEPPER (Shifted under Under Review, Hidden for Jury) ── */}
-      {!isJuryUser && (activeScope === 'under_review' || activeStageId) && (
+      {!isJuryUser && (activeScope === 'under_review' || activeStageId) && pipelineStepper && pipelineStepper.length > 0 && (
         <div className="pipeline-stepper" style={{ marginBottom: '16px' }}>
           {pipelineStepper
             .filter(s => s.status !== 'inactive')

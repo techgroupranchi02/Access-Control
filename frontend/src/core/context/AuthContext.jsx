@@ -41,6 +41,11 @@ export function AuthProvider({ children }) {
     if (res.data.token) {
       localStorage.setItem('authToken', res.data.token);
     }
+    // Clear festival session state on fresh login so multi-festival accounts are prompted to choose workspace
+    localStorage.removeItem('currentFestivalId');
+    localStorage.removeItem('currentEditionId');
+    sessionStorage.removeItem('fc_festival_selected');
+
     try {
       const meRes = await api.get('/auth/me');
       setUser(meRes.data);
@@ -55,6 +60,11 @@ export function AuthProvider({ children }) {
     if (res.data.token) {
       localStorage.setItem('authToken', res.data.token);
     }
+    // Clear festival session state on fresh login so multi-festival accounts are prompted to choose workspace
+    localStorage.removeItem('currentFestivalId');
+    localStorage.removeItem('currentEditionId');
+    sessionStorage.removeItem('fc_festival_selected');
+
     try {
       const meRes = await api.get('/auth/me');
       setUser(meRes.data);
@@ -82,6 +92,9 @@ export function AuthProvider({ children }) {
     }
     setUser(null);
     localStorage.removeItem('authToken');
+    localStorage.removeItem('currentFestivalId');
+    localStorage.removeItem('currentEditionId');
+    sessionStorage.removeItem('fc_festival_selected');
     window.location.href = '/login';
   }, []);
 

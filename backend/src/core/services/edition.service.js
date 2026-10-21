@@ -16,7 +16,8 @@ async function getAllEditions(user) {
   // If user is SuperAdmin or role 'admin' from Freecomers admins table, return all events
   if (user && (user.isSuperAdmin || user.role === 'admin')) {
     return query(
-      `SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at 
+      `SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at,
+              1 as is_owner, 'Platform Admin' as role_label
        FROM events 
        WHERE is_deleted = 0 
        ORDER BY (saas_enabled = 1) DESC, event_id DESC`
@@ -26,10 +27,16 @@ async function getAllEditions(user) {
   // If user is a platform user (Festival Admin / Team member)
   if (user && (user.email || user.id)) {
     let allUserIds = user.userIds || [user.id];
+    let userEmail = user.email || '';
     if (user.email) {
       const linkedUsers = await query('SELECT id FROM users WHERE email = ? AND status = 1', [user.email]);
       if (linkedUsers.length > 0) {
         allUserIds = linkedUsers.map(u => u.id);
+      }
+    } else if (user.id) {
+      const userRows = await query('SELECT email FROM users WHERE id = ?', [user.id]);
+      if (userRows.length > 0 && userRows[0].email) {
+        userEmail = userRows[0].email;
       }
     }
     const placeholders = allUserIds.map(() => '?').join(',');
@@ -37,19 +44,47 @@ async function getAllEditions(user) {
     return query(
       `SELECT DISTINCT
          e.event_id as id, e.event_id, e.user_id, e.name, e.edition, e.description,
-         e.event_type, e.saas_enabled, e.is_deleted, e.created_at
+         e.event_type, e.saas_enabled, e.is_deleted, e.created_at,
+         (CASE 
+            WHEN e.user_id IN (${placeholders}) THEN 1 
+            WHEN ffc_approved.event_id IS NOT NULL THEN 1 
+            ELSE 0 
+          END) as is_owner,
+         (CASE 
+            WHEN e.user_id IN (${placeholders}) THEN 'Festival Owner · Admin'
+            WHEN ffc_approved.event_id IS NOT NULL THEN 'Festival Owner · Admin'
+            WHEN g.group_key = 'admin' THEN 'Team Admin'
+            WHEN g.group_key = 'volunteer' THEN 'Volunteer'
+            WHEN g.group_key = 'jury' THEN 'Jury'
+            WHEN g.label IS NOT NULL THEN g.label
+            ELSE 'Team Member'
+          END) as role_label
        FROM events e
+       LEFT JOIN (
+         SELECT DISTINCT ff.event_id 
+         FROM film_festivals ff 
+         JOIN film_festivals_claims ffc ON ffc.film_festival_id = ff.film_festival_id 
+         WHERE (ffc.user_id IN (${placeholders}) OR ffc.email = ?) AND ffc.claim_request_status = 'approved'
+       ) ffc_approved ON ffc_approved.event_id = e.event_id
        LEFT JOIN user_event_groups ueg ON ueg.event_id = e.event_id AND ueg.user_id IN (${placeholders})
+       LEFT JOIN \`groups\` g ON g.id = ueg.group_id
        WHERE e.is_deleted = 0
-         AND (e.user_id IN (${placeholders}) OR ueg.user_id IS NOT NULL)
+         AND (e.user_id IN (${placeholders}) OR ffc_approved.event_id IS NOT NULL OR ueg.user_id IS NOT NULL)
        ORDER BY (e.saas_enabled = 1) DESC, e.event_id DESC`,
-      [...allUserIds, ...allUserIds]
+      [
+        ...allUserIds,
+        ...allUserIds,
+        ...allUserIds, userEmail,
+        ...allUserIds,
+        ...allUserIds
+      ]
     );
   }
 
   // Fallback (e.g. unauthenticated)
   return query(
-    `SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at 
+    `SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at,
+            0 as is_owner, 'Guest' as role_label
      FROM events 
      WHERE is_deleted = 0 
      ORDER BY (saas_enabled = 1) DESC, event_id DESC`

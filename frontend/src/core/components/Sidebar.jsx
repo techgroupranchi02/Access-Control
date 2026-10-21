@@ -51,7 +51,17 @@ function ChevronIcon({ isOpen }) {
 
 export default function Sidebar() {
   const { user, logout, switchPersona } = useAuth();
-  const { currentFestival, currentEdition, isModuleEnabled, isSaasEnabled, isSuperAdmin, festivals, selectFestival, currentUserGroup } = useFestivalConfig();
+  const { 
+    currentFestival, 
+    currentEdition, 
+    isModuleEnabled, 
+    isSaasEnabled, 
+    isSuperAdmin, 
+    festivals, 
+    selectFestival, 
+    currentUserGroup,
+    openFestivalModal 
+  } = useFestivalConfig();
   const { can, canAny } = usePermissions();
   const { theme, toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
@@ -172,7 +182,17 @@ export default function Sidebar() {
   };
 
   const displayName = user?.name || user?.email?.split('@')[0] || 'SHASHANK';
-  const displayRole = (roleKey === 'jury' || roleKey === 'judge') ? 'Jury · Jury Member' : roleKey === 'volunteer' ? 'Volunteer · Operations' : 'Admin · Festival Director';
+  const isFestivalOwner = Boolean(
+    currentFestival?.is_owner || 
+    (currentFestival?.user_id && (user?.id === currentFestival?.user_id || user?.userIds?.includes(currentFestival?.user_id)))
+  );
+  const displayRole = isFestivalOwner 
+    ? 'Festival Owner · Admin' 
+    : (roleKey === 'jury' || roleKey === 'judge') 
+      ? 'Jury · Jury Member' 
+      : roleKey === 'volunteer' 
+        ? 'Volunteer · Operations' 
+        : (currentFestival?.role_label || 'Admin · Team Member');
 
   return (
     <aside className="fc-sidebar">
@@ -188,43 +208,49 @@ export default function Sidebar() {
       </div>
 
       {/* Festival Edition Card */}
-      <div className="fc-festival-card">
-        {festivals && festivals.length > 1 ? (
-          <div className="fc-festival-select-wrapper" style={{ position: 'relative', marginBottom: '4px' }}>
-            <select
-              className="fc-festival-select"
-              value={currentFestival?.id || ''}
-              onChange={(e) => {
-                const fest = festivals.find(f => f.id === parseInt(e.target.value, 10));
-                if (fest) selectFestival(fest);
-              }}
-              style={{
-                width: '100%',
-                appearance: 'none',
-                background: 'transparent',
-                border: 'none',
-                fontFamily: 'inherit',
-                fontSize: '0.8125rem',
-                fontWeight: 700,
-                color: 'var(--fc-text-main)',
-                cursor: 'pointer',
-                paddingRight: '18px',
-                outline: 'none',
-              }}
-            >
-              {festivals.map(fest => (
-                <option key={fest.id} value={fest.id}>
-                  {fest.name} {fest.saas_enabled ? '· SaaS Active' : '· Inactive'}
-                </option>
-              ))}
-            </select>
-            <span style={{ position: 'absolute', right: 0, top: 0, pointerEvents: 'none', fontSize: '0.75rem', color: 'var(--fc-text-muted)' }}>▾</span>
-          </div>
-        ) : (
-          <div className="fc-festival-name">
+      <div 
+        className="fc-festival-card"
+        style={festivals && festivals.length > 1 ? { cursor: 'pointer', transition: 'border-color 0.15s ease' } : {}}
+        onClick={() => {
+          if (festivals && festivals.length > 1 && openFestivalModal) {
+            openFestivalModal();
+          }
+        }}
+        title={festivals && festivals.length > 1 ? "Click to switch festival workspace" : undefined}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '2px' }}>
+          <div className="fc-festival-name" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {currentFestival?.name || 'Indie Film Festival Bangalore'}
           </div>
-        )}
+          {festivals && festivals.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (openFestivalModal) openFestivalModal();
+              }}
+              style={{
+                background: 'rgba(168, 47, 47, 0.08)',
+                color: 'var(--fc-brand, #a82f2f)',
+                border: '1px solid rgba(168, 47, 47, 0.22)',
+                borderRadius: '5px',
+                padding: '2px 7px',
+                fontSize: '0.675rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                flexShrink: 0,
+                lineHeight: 1.2
+              }}
+              title="Switch Festival Workspace"
+            >
+              <span>⇄</span>
+              <span>Switch</span>
+            </button>
+          )}
+        </div>
         <div className="fc-festival-edition">
           {currentFestival?.edition || 'Edition 4 · 2026'}
         </div>

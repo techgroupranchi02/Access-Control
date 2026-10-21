@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import api from '../services/api';
+import { useFestivalConfig } from '../hooks/useFestivalConfig';
 import InPageReviewStateBuilder from '../components/settings/InPageReviewStateBuilder';
 import {
   InboxIcon,
@@ -22,6 +23,7 @@ import {
 } from '../components/common/Icons';
 
 export default function SettingsPage() {
+  const { currentFestival } = useFestivalConfig();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -64,7 +66,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadAllSettings();
-  }, []);
+  }, [currentFestival?.id]);
 
   // ───────────────────────────────────────────────────────────────────────────
   // NAVIGATION & STAGES HANDLERS (Section-Wise Review Architecture)

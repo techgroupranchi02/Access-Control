@@ -650,7 +650,6 @@ async function resequenceReviewStatesForEvent(eventId, movedStateId = null, desi
 async function getReviewStates(req, res) {
   try {
     const eventId = getEventId(req);
-    await ensureReviewStatesForEvent(eventId);
     await resequenceReviewStatesForEvent(eventId);
 
     const states = await query(`

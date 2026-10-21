@@ -649,21 +649,41 @@ async function getProfile(userId, role, editionId) {
   }
 
   // Get user's assigned events and groups (plus festival ownership across all linked accounts)
-  const eventGroups = await query(
+  const eventGroupsRaw = await query(
     `SELECT e.event_id, e.event_id as id, e.name as event_name, e.description,
-            g.id as group_id, g.label as group_name, g.label as name, g.group_key, g.is_system, e.saas_enabled
+            1 as group_id, 'Festival Owner' as group_name, 'Admin' as name, 'admin' as group_key, 1 as is_system, e.saas_enabled,
+            1 as is_owner
+     FROM events e
+     WHERE (
+       e.user_id IN (${userPlaceholders})
+       OR e.event_id IN (
+         SELECT DISTINCT ff.event_id 
+         FROM film_festivals ff 
+         JOIN film_festivals_claims ffc ON ffc.film_festival_id = ff.film_festival_id 
+         WHERE (ffc.user_id IN (${userPlaceholders}) OR ffc.email = ?) AND ffc.claim_request_status = 'approved'
+       )
+     ) AND e.is_deleted = 0
+     UNION
+     SELECT e.event_id, e.event_id as id, e.name as event_name, e.description,
+            g.id as group_id, g.label as group_name, g.label as name, g.group_key, g.is_system, e.saas_enabled,
+            0 as is_owner
      FROM user_event_groups ueg
      JOIN events e ON e.event_id = ueg.event_id AND e.is_deleted = 0
      JOIN \`groups\` g ON g.id = ueg.group_id
      WHERE ueg.user_id IN (${userPlaceholders})
-     UNION
-     SELECT e.event_id, e.event_id as id, e.name as event_name, e.description,
-            1 as group_id, 'Administrator' as group_name, 'Admin' as name, 'admin' as group_key, 1 as is_system, e.saas_enabled
-     FROM events e
-     WHERE e.user_id IN (${userPlaceholders}) AND e.is_deleted = 0
      ORDER BY (saas_enabled = 1) DESC, event_id DESC`,
-    [...allUserIds, ...allUserIds]
+    [...allUserIds, ...allUserIds, user.email || '', ...allUserIds]
   );
+
+  // Deduplicate by event_id, prioritizing owner entry over generic team group entry
+  const seenEventIds = new Set();
+  const eventGroups = [];
+  for (const eg of eventGroupsRaw) {
+    if (!seenEventIds.has(eg.event_id)) {
+      seenEventIds.add(eg.event_id);
+      eventGroups.push(eg);
+    }
+  }
 
   let permissionsMap = {};
   let isSuperAdmin = false;

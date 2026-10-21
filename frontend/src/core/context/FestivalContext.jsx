@@ -5,10 +5,13 @@
 
 import { createContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { useAuth } from '../hooks/useAuth';
+import FestivalSelectionModal from '../components/common/FestivalSelectionModal';
 
 export const FestivalContext = createContext(null);
 
 export function FestivalProvider({ children }) {
+  const { user } = useAuth() || {};
   const [festivals, setFestivals] = useState([]);
   const [currentFestival, setCurrentFestival] = useState(null);
   const [features, setFeatures] = useState([]);
@@ -17,6 +20,10 @@ export function FestivalProvider({ children }) {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [currentUserGroup, setCurrentUserGroup] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isFestivalModalOpen, setIsFestivalModalOpen] = useState(false);
+
+  const openFestivalModal = useCallback(() => setIsFestivalModalOpen(true), []);
+  const closeFestivalModal = useCallback(() => setIsFestivalModalOpen(false), []);
 
   // Load editions/festivals on mount
   useEffect(() => {
@@ -35,7 +42,7 @@ export function FestivalProvider({ children }) {
         if (queryId) {
           const match = res.data.find(f => f.id === parseInt(queryId, 10));
           if (match) {
-            selectFestival(match);
+            selectFestival(match, true);
             return;
           }
         }
@@ -43,45 +50,51 @@ export function FestivalProvider({ children }) {
         console.warn('Failed to parse URL query params', e);
       }
 
-      // 2. Auto-select saved edition/festival IF it is active (saas_enabled)
+      const hasMultipleFestivals = res.data && res.data.length > 1;
+      const alreadyChosenInSession = sessionStorage.getItem('fc_festival_selected') === '1';
+
+      // 2. Saved edition/festival IF it is active (saas_enabled)
       const savedId = localStorage.getItem('currentEditionId') || localStorage.getItem('currentFestivalId');
+      let targetFest = null;
       if (savedId) {
-        const saved = res.data.find(f => f.id === parseInt(savedId, 10));
-        if (saved && (saved.saas_enabled === 1 || saved.saas_enabled === true)) {
-          selectFestival(saved);
-          return;
-        }
+        targetFest = res.data.find(f => f.id === parseInt(savedId, 10));
+      }
+      if (!targetFest) {
+        // Prioritize first SaaS-active festival (e.g. Delhi Shorts, NEZ)
+        targetFest = res.data.find(f => f.saas_enabled === 1 || f.saas_enabled === true) || res.data[0];
       }
 
-      // 3. Prioritize first SaaS-active festival (e.g. Delhi Shorts)
-      const activeFest = res.data.find(f => f.saas_enabled === 1 || f.saas_enabled === true);
-      if (activeFest) {
-        selectFestival(activeFest);
+      // 3. Multi-festival prompt on login:
+      // If the user administers multiple festivals and hasn't explicitly chosen one this session, open modal!
+      if (hasMultipleFestivals && !alreadyChosenInSession) {
+        if (targetFest) {
+          // Pre-select targetFest in background so background layout doesn't crash, but do not mark chosen
+          selectFestival(targetFest, false);
+        }
+        setIsFestivalModalOpen(true);
         return;
       }
 
-      // 4. Fallback: select saved festival (even if inactive) or first available
-      if (savedId) {
-        const saved = res.data.find(f => f.id === parseInt(savedId, 10));
-        if (saved) {
-          selectFestival(saved);
-          return;
-        }
-      }
-
-      if (res.data.length > 0) {
-        selectFestival(res.data[0]);
+      // 4. Single festival or already chosen this session:
+      if (targetFest) {
+        selectFestival(targetFest, true);
       }
     } catch {
       console.error('Failed to load editions/festivals');
     }
   };
 
-  const selectFestival = useCallback(async (festival) => {
+  const selectFestival = useCallback(async (festival, markChosen = true) => {
+    if (!festival) return;
     setLoading(true);
     setCurrentFestival(festival);
     localStorage.setItem('currentFestivalId', festival.id);
     localStorage.setItem('currentEditionId', festival.id);
+
+    if (markChosen) {
+      sessionStorage.setItem('fc_festival_selected', '1');
+      setIsFestivalModalOpen(false);
+    }
 
     try {
       // Load edition config (modules / features)
@@ -203,11 +216,22 @@ export function FestivalProvider({ children }) {
     getEnabledFeatures,
     refreshConfig,
     loadFestivals,
+    isFestivalModalOpen,
+    openFestivalModal,
+    closeFestivalModal,
   };
 
   return (
     <FestivalContext.Provider value={value}>
       {children}
+      <FestivalSelectionModal
+        isOpen={isFestivalModalOpen}
+        onClose={closeFestivalModal}
+        festivals={festivals}
+        currentFestival={sessionStorage.getItem('fc_festival_selected') === '1' ? currentFestival : null}
+        onSelectFestival={(fest) => selectFestival(fest, true)}
+        user={user}
+      />
     </FestivalContext.Provider>
   );
 }
