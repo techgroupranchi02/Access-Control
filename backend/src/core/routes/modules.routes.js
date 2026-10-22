@@ -91,7 +91,8 @@ sponsorsRouter.put('/deliverables/:id/status', sponsorController.updateDeliverab
 
 // ── Payouts ───────────────────────────────────────────────────────────
 payoutsRouter.get('/', payoutController.list);
-payoutsRouter.post('/release', payoutController.requestRelease);
+payoutsRouter.get('/export-csv', payoutController.exportCsv);
+payoutsRouter.get('/:paymentId/receipt', payoutController.getReceipt);
 
 // ── Departments ───────────────────────────────────────────────────────
 departmentsRouter.use(requireModule('departments'));
@@ -99,8 +100,12 @@ departmentsRouter.get('/', requirePermission('department.view'), departmentContr
 
 // ── Payments ──────────────────────────────────────────────────────────
 paymentsRouter.use(requireModule('payments'));
-paymentsRouter.get('/', requirePermission('payment.view'), modulesController.listPayments);
-paymentsRouter.post('/payout', requirePermission('payment.manage_payouts'), modulesController.processPayouts);
+paymentsRouter.get('/', requirePermission('payment.view'), payoutController.list);
+paymentsRouter.get('/export-csv', payoutController.exportCsv);
+paymentsRouter.get('/:paymentId/receipt', payoutController.getReceipt);
+paymentsRouter.get('/payouts', payoutController.list);
+paymentsRouter.get('/payouts/export-csv', payoutController.exportCsv);
+paymentsRouter.get('/payouts/:paymentId/receipt', payoutController.getReceipt);
 
 // ── Edition Settings ──────────────────────────────────────────────────
 settingsRouter.get('/', requirePermission('settings.view'), modulesController.getSettings);

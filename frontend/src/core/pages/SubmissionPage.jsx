@@ -79,38 +79,34 @@ export const resolveStageFromPath = (pathname, stageIdParam, stages) => {
   }
 
   if (path === '/submissions/winners' || path === '/submissions/winner') {
-    return stages.find(s => (s.unique_name || s.name || '').toLowerCase().includes('winner')) ||
-           stages.find(s => s.stage_order === 7) || null;
+    return stages.find(s => (s.unique_name || s.name || '').toLowerCase().includes('winner')) || null;
   }
   if (path === '/submissions/finalists' || path === '/submissions/finalist') {
-    return stages.find(s => (s.unique_name || s.name || '').toLowerCase().includes('finalist')) ||
-           stages.find(s => s.stage_order === 6) || null;
+    return stages.find(s => (s.unique_name || s.name || '').toLowerCase().includes('finalist')) || null;
   }
   if (path === '/submissions/jury-voting') {
     return stages.find(s => {
       const n = (s.unique_name || s.name || '').toLowerCase();
       return (n.includes('voting') || n.includes('jury')) && !n.includes('screening');
-    }) || stages.find(s => s.stage_order === 5) || null;
+    }) || null;
   }
   if (path === '/submissions/nominations') {
-    return stages.find(s => (s.unique_name || s.name || '').toLowerCase().includes('nomination')) ||
-           stages.find(s => s.stage_order === 4) || null;
+    return stages.find(s => (s.unique_name || s.name || '').toLowerCase().includes('nomination')) || null;
   }
   if (path === '/submissions/official-selection') {
-    return stages.find(s => (s.unique_name || s.name || '').toLowerCase().includes('official selection')) ||
-           stages.find(s => s.stage_order === 3) || null;
+    return stages.find(s => (s.unique_name || s.name || '').toLowerCase().includes('official selection')) || null;
   }
   if (path === '/submissions/consideration') {
     return stages.find(s => {
       const n = (s.unique_name || s.name || '').toLowerCase();
       return n.includes('consideration') || n.includes('round 2');
-    }) || stages.find(s => s.stage_order === 2) || null;
+    }) || null;
   }
   if (path === '/submissions/screening') {
     return stages.find(s => {
       const n = (s.unique_name || s.name || '').toLowerCase();
       return n.includes('screening') || n.includes('round 1');
-    }) || stages.find(s => s.stage_order === 1) || null;
+    }) || null;
   }
 
   return null;
@@ -123,25 +119,25 @@ export const getStageUrl = (stage) => {
   if (!stage) return '/submissions/under-review';
   const name = (stage.unique_name || stage.name || '').toLowerCase();
 
-  if (name.includes('winner') || stage.stage_order === 7) {
+  if (name.includes('winner')) {
     return '/submissions/winners';
   }
-  if (name.includes('finalist') || stage.stage_order === 6) {
+  if (name.includes('finalist')) {
     return '/submissions/finalists';
   }
-  if (((name.includes('voting') || name.includes('jury')) && !name.includes('screening')) || stage.stage_order === 5) {
+  if ((name.includes('voting') || name.includes('jury')) && !name.includes('screening')) {
     return '/submissions/jury-voting';
   }
-  if (name.includes('nomination') || stage.stage_order === 4) {
+  if (name.includes('nomination')) {
     return '/submissions/nominations';
   }
-  if (name.includes('official selection') || stage.stage_order === 3) {
+  if (name.includes('official selection')) {
     return '/submissions/official-selection';
   }
-  if (name.includes('consideration') || name.includes('round 2') || stage.stage_order === 2) {
+  if (name.includes('consideration') || name.includes('round 2')) {
     return '/submissions/consideration';
   }
-  if (name.includes('screening') || name.includes('round 1') || stage.stage_order === 1) {
+  if (name.includes('screening') || name.includes('round 1')) {
     return '/submissions/screening';
   }
 
@@ -811,7 +807,10 @@ export default function SubmissionPage() {
             } else if (nextStageObj) {
               navigateToView(getStageUrl(nextStageObj));
             } else {
-              const juryStage = pipelineStepper.find(s => s.stage_order === 5 || (s.unique_name || '').toLowerCase().includes('jury'));
+              const juryStage = pipelineStepper.find(s => {
+                const n = (s.unique_name || s.name || '').toLowerCase();
+                return (n.includes('jury') || n.includes('voting')) && !n.includes('screening');
+              });
               navigateToView(juryStage ? getStageUrl(juryStage) : '/submissions/jury-voting');
             }
           }}
@@ -832,7 +831,7 @@ export default function SubmissionPage() {
             } else if (nextStageObj) {
               navigateToView(getStageUrl(nextStageObj));
             } else {
-              const nextStage = pipelineStepper.find(s => s.stage_order === 6 || (s.unique_name || '').toLowerCase().includes('finalist'));
+              const nextStage = pipelineStepper.find(s => (s.unique_name || s.name || '').toLowerCase().includes('finalist'));
               navigateToView(nextStage ? getStageUrl(nextStage) : '/submissions/finalists');
             }
           }}
@@ -853,7 +852,7 @@ export default function SubmissionPage() {
             } else if (nextStageObj) {
               navigateToView(getStageUrl(nextStageObj));
             } else {
-              const winnerStage = pipelineStepper.find(s => s.stage_order === 7 || (s.unique_name || '').toLowerCase().includes('winner'));
+              const winnerStage = pipelineStepper.find(s => (s.unique_name || s.name || '').toLowerCase().includes('winner'));
               navigateToView(winnerStage ? getStageUrl(winnerStage) : '/submissions/winners');
             }
           }}
@@ -870,7 +869,7 @@ export default function SubmissionPage() {
             if (prevStageObj) {
               navigateToView(getStageUrl(prevStageObj));
             } else {
-              const finalistStage = pipelineStepper.find(s => s.stage_order === 6 || (s.unique_name || '').toLowerCase().includes('finalist'));
+              const finalistStage = pipelineStepper.find(s => (s.unique_name || s.name || '').toLowerCase().includes('finalist'));
               navigateToView(finalistStage ? getStageUrl(finalistStage) : '/submissions/finalists');
             }
           }}

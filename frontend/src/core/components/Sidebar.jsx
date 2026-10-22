@@ -318,7 +318,6 @@ export default function Sidebar() {
                 >
                   <LocalOfferIcon size={17} style={{ marginRight: '8px' }} />
                   <span>Payouts</span>
-                  <span className="fc-badge fc-badge-subtle">Core</span>
                 </NavLink>
               </div>
             )}
