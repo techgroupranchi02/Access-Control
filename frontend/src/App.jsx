@@ -30,8 +30,6 @@ import AdminPage from './core/pages/AdminPage';
 // Addon Module Pages
 import CalendarPage from './core/pages/CalendarPage';
 import TasksPage from './core/pages/TasksPage';
-
-import JuryPage from './core/pages/JuryPage';
 import DiscoveryPage from './core/pages/DiscoveryPage';
 import NewsPage from './core/pages/NewsPage';
 import AnalyticsPage from './core/pages/AnalyticsPage';
@@ -467,19 +465,6 @@ function App() {
               }
             />
 
-
-
-            {/* Jury Management (Addon) */}
-            <Route
-              path="/jury"
-              element={
-                <ModuleGate module="jury" fallback={<AccessDenied module="jury" />}>
-                  <PermissionGate anyPermissions={['jury.view_panel', 'jury.view_assignments', 'jury:read']} fallback={<AccessDenied />}>
-                    <JuryPage />
-                  </PermissionGate>
-                </ModuleGate>
-              }
-            />
 
             {/* Discovery Feed (Addon - disabled by default) */}
             <Route

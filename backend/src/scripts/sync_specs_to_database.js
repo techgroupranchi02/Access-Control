@@ -48,32 +48,6 @@ const MODULES_SPECS = [
     }
   },
   {
-    module_key: 'jury',
-    type: 'addon',
-    label: 'Jury',
-    description: 'Juror directory, award categories, and confidential ballots',
-    route: '/discover-jury',
-    icon: 'award',
-    display_order: 2,
-    pages: [
-      { page_key: 'discover_jury', label: 'Discover Jury', route: '/discover-jury', display_order: 1 },
-      { page_key: 'jury_workspace', label: 'Jury Workspace & Ballot Portal', route: '/jury/:userId/review-dashboard', display_order: 2 }
-    ],
-    permissions: [
-      { key: 'jury:view_directory', label: 'View Directory', description: 'Browse verified industry jurors and their credits.' },
-      { key: 'jury:invite', label: 'Invite Jurors', description: 'Send invitations to prospective jury members.' },
-      { key: 'jury:manage_awards', label: 'Manage Awards', description: 'Create and reorder festival award categories.' },
-      { key: 'jury:vote_control', label: 'Vote Control', description: 'Open or close the confidential jury voting window.' },
-      { key: 'jury:submit_ballot', label: 'Submit Ballot', description: 'Cast and lock secret ballot votes for nominated films.' },
-      { key: 'jury:publish_awards', label: 'Publish Awards', description: 'Certify results and publish final award winners.' }
-    ],
-    groupAccess: {
-      admin: ['jury:view_directory', 'jury:invite', 'jury:manage_awards', 'jury:vote_control', 'jury:submit_ballot', 'jury:publish_awards'],
-      jury: ['jury:submit_ballot'],
-      volunteer: []
-    }
-  },
-  {
     module_key: 'team',
     type: 'core',
     label: 'Team',

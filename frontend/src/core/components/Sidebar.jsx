@@ -127,8 +127,7 @@ export default function Sidebar() {
   const canAccessSubmissions = isModuleEnabled('submissions') && (isAdminUser || canAny([
     'submission.view', 'submission:view',
     'review.view', 'review:view',
-    'review.score', 'review:score',
-    'jury.submit_ballot', 'jury:submit_ballot'
+    'review.score', 'review:score'
   ]));
 
   const canAccessDiscovery = isModuleEnabled('discovery') && (isAdminUser || canAny(['discovery.view', 'discovery:view', 'discovery.browse', 'discovery:browse']));

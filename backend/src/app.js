@@ -19,7 +19,6 @@ const authRoutes = require('./core/routes/auth.routes');
 const festivalRoutes = require('./core/routes/festival.routes');
 const submissionRoutes = require('./core/routes/submission.routes');
 const teamRoutes = require('./core/routes/team.routes');
-const juryRoutes = require('./core/routes/jury.routes');
 const adminRoutes = require('./core/routes/admin.routes');
 const saasAdminRoutes = require('./core/routes/saasAdmin.routes');
 const {
@@ -71,7 +70,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', festivalRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/team', teamRoutes);
-app.use('/api/jury', juryRoutes);
 app.use('/api/admin/saas', saasAdminRoutes);
 app.use('/api/admin', adminRoutes);
 
