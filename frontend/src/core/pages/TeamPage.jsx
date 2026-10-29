@@ -67,7 +67,7 @@ const MODULE_ICON_MAP = {
   submissions: '🎬',
   film: '🎬',
   jury: '⚖️',
-  award: '🏆',
+  award: '',
   team: '🛡️',
   users: '👥',
   tasks: '📋',
@@ -1584,8 +1584,18 @@ export default function TeamPage() {
                                    You
                                 </span>
                               )}
-                              <span className={`fc-account-type-badge ${member.accountType === 'organization' ? 'org' : 'ind'}`}>
-                                {member.accountType === 'organization' ? '🏢 Organization' : '👤 Individual'}
+                              <span className={`fc-account-type-badge ${member.accountType === 'organization' ? 'org' : 'ind'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                {member.accountType === 'organization' ? (
+                                  <>
+                                    <BusinessIcon size={12} />
+                                    <span>Organization</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <PersonIcon size={12} />
+                                    <span>Individual</span>
+                                  </>
+                                )}
                               </span>
                             </div>
                             <span className="fc-member-email">{highlightMatch(member.email, search)}</span>

@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import PermissionGate from '../components/PermissionGate';
 import { usePermissions } from '../hooks/usePermissions';
+import { GavelIcon, KeyIcon } from '../components/common/Icons';
 
 export default function JuryPage() {
   const [data, setData] = useState([]);
@@ -62,15 +63,17 @@ export default function JuryPage() {
   return (
     <div className="animate-fade-in">
       <div className="page-header">
-        <h2 className="page-title">🏆 Jury Panel</h2>
+        <h2 className="page-title" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <GavelIcon size={20} /> Jury Panel
+        </h2>
         <p className="page-description">
           Manage jury members. This page is feature-toggled (only visible when jury is enabled for the festival)
           and has granular permission control.
         </p>
       </div>
 
-      <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)' }}>
-        🔑 <strong>Feature-Toggled + Granular:</strong>&nbsp;
+      <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        <KeyIcon size={16} /> <strong>Feature-Toggled + Granular:</strong>&nbsp;
         <span className="badge badge-success" style={{ marginRight: 4 }}>Feature: jury ✓</span>
         <span className={`badge ${can('jury:read') ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 4 }}>read</span>
         <span className={`badge ${can('jury:update') ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 4 }}>update</span>

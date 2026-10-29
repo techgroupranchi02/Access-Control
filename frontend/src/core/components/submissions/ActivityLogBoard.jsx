@@ -18,7 +18,23 @@ import {
   ScheduleIcon,
   LockIcon,
   CheckCircleIcon,
-  CloseIcon
+  CloseIcon,
+  FlashOnIcon,
+  ArrowForwardIcon,
+  TrophyIcon,
+  StarIcon,
+  GavelIcon,
+  PersonIcon,
+  PeopleIcon,
+  SyncIcon,
+  UndoIcon,
+  CancelIcon,
+  FlagIcon,
+  LocalOfferIcon,
+  MovieIcon,
+  VisibilityIcon,
+  FolderIcon,
+  InboxIcon,
 } from '../common/Icons';
 
 export function StreamViewIcon({ size = 15, className = '', style = {} }) {
@@ -60,93 +76,102 @@ export const ACTION_CONFIG = {
     color: '#818cf8',
     bg: 'rgba(99, 102, 241, 0.12)',
     border: 'rgba(99, 102, 241, 0.28)',
-    icon: '🚀'
+    Icon: ArrowForwardIcon
   },
   STAGE_CHANGE: {
     label: 'Stage Changed',
     color: '#a78bfa',
     bg: 'rgba(167, 139, 250, 0.12)',
     border: 'rgba(167, 139, 250, 0.28)',
-    icon: '🔄'
+    Icon: SyncIcon
   },
   AUTO_ADVANCE: {
     label: 'Auto Promoted',
     color: '#38bdf8',
     bg: 'rgba(56, 189, 248, 0.12)',
     border: 'rgba(56, 189, 248, 0.28)',
-    icon: '⚡'
+    Icon: FlashOnIcon
   },
   WINNER_SELECTED: {
     label: 'Winner Declared',
     color: '#f59e0b',
     bg: 'rgba(245, 158, 11, 0.12)',
     border: 'rgba(245, 158, 11, 0.35)',
-    icon: '🏆'
+    Icon: TrophyIcon
   },
   WINNER_REVOKED: {
     label: 'Winner Revoked',
     color: '#ef4444',
     bg: 'rgba(239, 68, 68, 0.12)',
     border: 'rgba(239, 68, 68, 0.28)',
-    icon: '↩️'
+    Icon: UndoIcon
   },
   REVIEW_SUBMITTED: {
     label: 'Scorecard Submitted',
     color: '#10b981',
     bg: 'rgba(16, 185, 129, 0.12)',
     border: 'rgba(16, 185, 129, 0.28)',
-    icon: '⭐'
+    Icon: StarIcon
   },
   JURY_ASSIGNED: {
     label: 'Jury Assigned',
     color: '#3b82f6',
     bg: 'rgba(59, 130, 246, 0.12)',
     border: 'rgba(59, 130, 246, 0.28)',
-    icon: '👤'
+    Icon: PersonIcon
   },
   JURY_REMOVED: {
     label: 'Jury Removed',
     color: '#94a3b8',
     bg: 'rgba(148, 163, 184, 0.12)',
     border: 'rgba(148, 163, 184, 0.28)',
-    icon: '✖️'
+    Icon: CancelIcon
   },
   DECISION: {
     label: 'Pipeline Decision',
     color: '#f43f5e',
     bg: 'rgba(244, 63, 94, 0.12)',
     border: 'rgba(244, 63, 94, 0.28)',
-    icon: '⚖️'
+    Icon: GavelIcon
   },
   FLAG_UPDATE: {
     label: 'Flag Updated',
     color: '#eab308',
     bg: 'rgba(234, 179, 8, 0.12)',
     border: 'rgba(234, 179, 8, 0.28)',
-    icon: '🚩'
+    Icon: FlagIcon
   },
   CATEGORY_UPDATE: {
     label: 'Category Updated',
     color: '#06b6d4',
     bg: 'rgba(6, 182, 212, 0.12)',
     border: 'rgba(6, 182, 212, 0.28)',
-    icon: '🏷️'
+    Icon: LocalOfferIcon
   },
   STATUS_UPDATE: {
     label: 'Status Updated',
     color: '#cbd5e1',
     bg: 'rgba(203, 213, 225, 0.12)',
     border: 'rgba(203, 213, 225, 0.28)',
-    icon: '📝'
+    Icon: MovieIcon
   },
   DEFAULT: {
     label: 'Activity',
     color: '#94a3b8',
     bg: 'rgba(148, 163, 184, 0.12)',
     border: 'rgba(148, 163, 184, 0.28)',
-    icon: '📌'
+    Icon: MovieIcon
   }
 };
+
+export function renderActionIcon(cfg, size = 12) {
+  if (!cfg) return null;
+  const Comp = cfg.Icon;
+  if (Comp && typeof Comp === 'function') {
+    return <Comp size={size} style={{ flexShrink: 0 }} />;
+  }
+  return null;
+}
 
 export const formatDateTime = (timestamp) => {
   if (!timestamp) return { dateStr: '—', timeStr: '', relativeStr: '' };
@@ -235,8 +260,9 @@ export const getActivitySentence = (log, onViewFilm) => {
       );
     case 'WINNER_SELECTED':
       return (
-        <span>
-          declared {filmLink} as <strong>Official Award Winner</strong> 🏆
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+          <span>declared {filmLink} as <strong>Official Award Winner</strong></span>
+          <TrophyIcon size={14} style={{ flexShrink: 0 }} />
         </span>
       );
     case 'WINNER_REVOKED':
@@ -318,7 +344,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
   const [viewMode, setViewMode] = useState(() => {
     try {
       return localStorage.getItem('fc_activity_view_mode') || 'stream';
-    } catch (e) {
+    } catch {
       return 'stream';
     }
   });
@@ -327,7 +353,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
     setViewMode(mode);
     try {
       localStorage.setItem('fc_activity_view_mode', mode);
-    } catch (e) {
+    } catch {
       // Ignore localStorage errors
     }
   };
@@ -508,7 +534,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
             <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fc-text-muted)' }}>
               Audit Integrity
             </div>
-            <LockIcon size={14} style={{ color: '#10b981' }} />
+            <LockIcon size={14} style={{ color: 'var(--fc-text-muted)' }} />
           </div>
           <div style={{ fontSize: '12px', color: 'var(--fc-text-secondary)', marginTop: '8px', lineHeight: 1.4 }}>
             {isJuryUser
@@ -715,9 +741,10 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                 setActionFilter('STAGE_ADVANCE');
                 setPage(1);
               }}
-              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px' }}
+              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              🚀 Stage Advance {actionCounts['STAGE_ADVANCE'] ? `(${actionCounts['STAGE_ADVANCE']})` : ''}
+              <ArrowForwardIcon size={12} />
+              <span>Stage Advance {actionCounts['STAGE_ADVANCE'] ? `(${actionCounts['STAGE_ADVANCE']})` : ''}</span>
             </button>
             <button
               type="button"
@@ -726,9 +753,10 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                 setActionFilter('WINNER_SELECTED');
                 setPage(1);
               }}
-              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px' }}
+              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              🏆 Winners {actionCounts['WINNER_SELECTED'] ? `(${actionCounts['WINNER_SELECTED']})` : ''}
+              <TrophyIcon size={12} />
+              <span>Winners {actionCounts['WINNER_SELECTED'] ? `(${actionCounts['WINNER_SELECTED']})` : ''}</span>
             </button>
             <button
               type="button"
@@ -737,9 +765,10 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                 setActionFilter('REVIEW_SUBMITTED');
                 setPage(1);
               }}
-              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px' }}
+              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              ⭐ Reviews {actionCounts['REVIEW_SUBMITTED'] ? `(${actionCounts['REVIEW_SUBMITTED']})` : ''}
+              <StarIcon size={12} />
+              <span>Reviews {actionCounts['REVIEW_SUBMITTED'] ? `(${actionCounts['REVIEW_SUBMITTED']})` : ''}</span>
             </button>
             <button
               type="button"
@@ -748,9 +777,10 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                 setActionFilter('DECISION');
                 setPage(1);
               }}
-              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px' }}
+              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              ⚖️ Decisions {actionCounts['DECISION'] ? `(${actionCounts['DECISION']})` : ''}
+              <GavelIcon size={12} />
+              <span>Decisions {actionCounts['DECISION'] ? `(${actionCounts['DECISION']})` : ''}</span>
             </button>
             <button
               type="button"
@@ -759,9 +789,10 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                 setActionFilter('JURY_ASSIGNED');
                 setPage(1);
               }}
-              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px' }}
+              style={{ borderRadius: '16px', fontSize: '12px', padding: '3px 10px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
             >
-              👤 Jury Assignments {actionCounts['JURY_ASSIGNED'] ? `(${actionCounts['JURY_ASSIGNED']})` : ''}
+              <PersonIcon size={12} />
+              <span>Jury Assignments {actionCounts['JURY_ASSIGNED'] ? `(${actionCounts['JURY_ASSIGNED']})` : ''}</span>
             </button>
           </div>
 
@@ -865,7 +896,9 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
             </div>
           ) : logs.length === 0 ? (
             <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>
-              <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
+              <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                <InboxIcon size={36} />
+              </div>
               <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--fc-text-primary)' }}>No Activity Recorded</div>
               <div style={{ fontSize: '13px', maxWidth: '400px', margin: '6px auto 0' }}>
                 {hasActiveFilters
@@ -888,7 +921,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
           ) : (
             logs.map((log, idx) => {
               const cfg = ACTION_CONFIG[log.action] || ACTION_CONFIG.DEFAULT;
-              const { dateStr, timeStr, relativeStr, fullFormatted } = formatDateTime(log.created_at);
+              const { timeStr, relativeStr, fullFormatted } = formatDateTime(log.created_at);
               const isJuryActor = log.actor_group_key === 'jury' || log.action === 'REVIEW_SUBMITTED';
               const isSystem = !log.actor_user_id || log.actor_name === 'System';
 
@@ -1060,7 +1093,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px',
+                          gap: '5px',
                           padding: '2px 8px',
                           borderRadius: '12px',
                           fontSize: '11px',
@@ -1070,7 +1103,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                           border: `1px solid ${cfg.border}`
                         }}
                       >
-                        <span>{cfg.icon}</span>
+                        {renderActionIcon(cfg, 12)}
                         <span>{cfg.label}</span>
                       </span>
 
@@ -1083,10 +1116,14 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                             borderRadius: '12px',
                             background: 'var(--fc-surface-subtle, rgba(255,255,255,0.05))',
                             color: 'var(--fc-text-muted)',
-                            border: '1px solid var(--fc-border)'
+                            border: '1px solid var(--fc-border)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
                           }}
                         >
-                          📁 {log.category_name}
+                          <LocalOfferIcon size={11} />
+                          <span>{log.category_name}</span>
                         </span>
                       )}
 
@@ -1131,7 +1168,8 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                           onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
                         >
-                          🎬 View Film Details
+                          <VisibilityIcon size={12} />
+                          <span>View Film Details</span>
                         </button>
                       )}
 
@@ -1151,7 +1189,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                             cursor: 'pointer',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '3px',
+                            gap: '4px',
                             padding: '2px 6px',
                             borderRadius: '4px'
                           }}
@@ -1162,7 +1200,8 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                             e.currentTarget.style.color = 'var(--fc-text-muted)';
                           }}
                         >
-                          👤 {log.actor_name}
+                          <PersonIcon size={11} />
+                          <span>{log.actor_name}</span>
                         </button>
                       )}
                     </div>
@@ -1217,7 +1256,9 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
               ) : logs.length === 0 ? (
                 <tr>
                   <td colSpan={5} style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>
-                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
+                    <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                      <InboxIcon size={36} />
+                    </div>
                     <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--fc-text-primary)' }}>No Activity Recorded</div>
                     <div style={{ fontSize: '13px', maxWidth: '400px', margin: '6px auto 0' }}>
                       {hasActiveFilters
@@ -1292,7 +1333,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                             whiteSpace: 'nowrap'
                           }}
                         >
-                          <span>{cfg.icon}</span>
+                          {renderActionIcon(cfg, 12)}
                           <span>{cfg.label}</span>
                         </div>
                       </td>

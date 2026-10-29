@@ -511,17 +511,20 @@ function App() {
             {/* Sponsors & Deliverables */}
             <Route path="/sponsors" element={<SponsorsPage />} />
 
-            {/* Audience Add-on Module */}
+            {/* Audience Settings under Settings: /settings/audience */}
             <Route
-              path="/audience"
+              path="/settings/audience"
               element={
                 <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
-                  <PermissionGate permission="audience.view" fallback={<AccessDenied />}>
+                  <PermissionGate anyPermissions={['audience.view', 'audience:view', 'audience.manage', 'audience:manage', 'settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
                     <AudienceSettingsPage />
                   </PermissionGate>
                 </ModuleGate>
               }
             />
+            <Route path="/settings/Audience" element={<Navigate to="/settings/audience" replace />} />
+            <Route path="/audience" element={<Navigate to="/settings/audience" replace />} />
+            <Route path="/Audience" element={<Navigate to="/settings/audience" replace />} />
             <Route
               path="/attendance"
               element={

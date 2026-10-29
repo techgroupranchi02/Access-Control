@@ -512,12 +512,23 @@ export default function SettingsPage() {
                                     (Inactive)
                                   </span>
                                 </strong>
-                                <span className="criteria-chip" style={{ background: '#f1f5f9', color: '#64748b', borderColor: '#cbd5e1' }}>
-                                  {stage.jury_assignment_mode === 'manual'
-                                    ? '👤 Manual Jury Assignment'
-                                    : (stage.jury_auto_rule === 'n_jury'
-                                        ? `⚡ Auto: ${stage.jury_count_per_film || 1} Jurors / Film`
-                                        : '⚡ Auto: All Jurors')}
+                                <span className="criteria-chip" style={{ background: '#f1f5f9', color: '#64748b', borderColor: '#cbd5e1', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  {stage.jury_assignment_mode === 'manual' ? (
+                                    <>
+                                      <PersonIcon size={12} />
+                                      <span>Manual Jury Assignment</span>
+                                    </>
+                                  ) : (stage.jury_auto_rule === 'n_jury' ? (
+                                    <>
+                                      <FlashOnIcon size={12} />
+                                      <span>Auto: {stage.jury_count_per_film || 1} Jurors / Film</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FlashOnIcon size={12} />
+                                      <span>Auto: All Jurors</span>
+                                    </>
+                                  ))}
                                 </span>
                                 <span className="criteria-chip" style={{ background: '#f1f5f9', color: '#64748b', borderColor: '#cbd5e1' }}>
                                   {stage.review_type === 'pass_fail' || (stage.review_type === 'vote_based' && stage.vote_mode === 'single')
@@ -557,7 +568,7 @@ export default function SettingsPage() {
                                   className="fc-btn fc-btn-outline fc-btn-sm"
                                   onClick={() => handleToggleEditStage(stage.id)}
                                 >
-                                  ✎ Edit Stage
+                                  <EditIcon size={12} style={{ marginRight: '4px', verticalAlign: '-1px' }} />Edit Stage
                                 </button>
                               </div>
                             </div>

@@ -71,6 +71,10 @@ const env = {
   cookieName: '__Host-access-token',
   cookieSecure: process.env.NODE_ENV === 'production',
   cookieSameSite: 'lax',
+
+  // Kashish External Votes API
+  kashishApiKey: process.env.KASHISH_API_KEY || 'kashish_live_sec_8f4b1e7d2a9c3b6e5a0d1f4c',
+  kashishApiUrl: process.env.KASHISH_API_URL || 'https://kashish-admin.vercel.app/api/v1/votes',
 };
 
 module.exports = env;

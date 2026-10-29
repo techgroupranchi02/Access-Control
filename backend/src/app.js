@@ -41,7 +41,9 @@ const {
   votingRouter,
   registrationRouter,
   publicVoteRouter,
+  publicRegistrationRouter,
 } = require('./core/routes/audience.routes');
+const { kashishSyncRouter } = require('./core/routes/kashish-sync.routes');
 const { authenticate } = require('./core/middleware/auth.middleware');
 const { requirePermission } = require('./core/middleware/permission.middleware');
 const { getModuleSettings, updateModuleSettings } = require('./core/controllers/moduleSettings.controller');
@@ -113,6 +115,8 @@ app.use('/api/attendance', attendanceRouter);
 app.use('/api/voting', votingRouter);
 app.use('/api/registration', registrationRouter);
 app.use('/api/public/vote', publicVoteRouter);
+app.use('/api/public', publicRegistrationRouter);
+app.use('/api/kashish-sync', kashishSyncRouter);
 
 
 

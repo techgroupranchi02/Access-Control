@@ -171,11 +171,11 @@ export default function PublicVotingPage() {
             <form onSubmit={handleVerifyVoter}>
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#cbd5e1', marginBottom: '6px' }}>
-                  Badge Pass Number
+                  Badge Pass Number / Serial
                 </label>
                 <input 
-                  type="number"
-                  placeholder="e.g. 104"
+                  type="text"
+                  placeholder="e.g. KB26-0011 or 276"
                   value={badgeNumber}
                   onChange={(e) => setBadgeNumber(e.target.value)}
                   style={{
@@ -190,7 +190,7 @@ export default function PublicVotingPage() {
                   }}
                 />
                 <small style={{ color: '#64748b', display: 'block', marginTop: '4px', fontSize: '0.75rem' }}>
-                  Printed on your delegate pass badge.
+                  Printed on your delegate pass badge (Serial or Attendee ID).
                 </small>
               </div>
 
@@ -225,15 +225,18 @@ export default function PublicVotingPage() {
                 style={{
                   width: '100%',
                   padding: '14px',
-                  background: 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)',
+                  background: '#a82f2f',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '10px',
                   fontWeight: 800,
                   fontSize: '1rem',
                   cursor: 'pointer',
-                  boxShadow: '0 4px 15px rgba(225, 29, 72, 0.4)'
+                  boxShadow: '0 4px 15px rgba(168, 47, 47, 0.4)',
+                  transition: 'background 0.15s ease'
                 }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
               >
                 Continue to Official Ballot →
               </button>

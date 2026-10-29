@@ -28,27 +28,27 @@ function renderOptionIcon(icon) {
     case '⭐':
     case '🌟':
     case '✨':
-      return <StarIcon size={18} style={{ color: 'var(--fc-brand, #a82f2f)' }} />;
+      return <StarIcon size={18} />;
     case '🗳️':
     case 'vote':
-      return <HowToVoteIcon size={18} style={{ color: 'var(--fc-brand, #a82f2f)' }} />;
+      return <HowToVoteIcon size={18} />;
     case '⚖️':
-      return <GavelIcon size={18} style={{ color: 'var(--fc-brand, #a82f2f)' }} />;
+      return <GavelIcon size={18} />;
     case '📝':
     case '✍️':
-      return <EditIcon size={18} style={{ color: 'var(--fc-brand, #a82f2f)' }} />;
+      return <EditIcon size={18} />;
     case '🏁':
-      return <CheckCircleIcon size={18} style={{ color: 'var(--fc-brand, #a82f2f)' }} />;
+      return <CheckCircleIcon size={18} />;
     case '👥':
-      return <PeopleIcon size={18} style={{ color: 'var(--fc-brand, #a82f2f)' }} />;
+      return <PeopleIcon size={18} />;
     case '🔒':
-      return <LockIcon size={18} style={{ color: 'var(--fc-brand, #a82f2f)' }} />;
+      return <LockIcon size={18} />;
     case '❌':
-      return <CancelIcon size={18} style={{ color: '#ef4444' }} />;
+      return <CancelIcon size={18} />;
     case '⚡':
-      return <FlashOnIcon size={18} style={{ color: '#eab308' }} />;
+      return <FlashOnIcon size={18} />;
     case '⏳':
-      return <ScheduleIcon size={18} style={{ color: '#64748b' }} />;
+      return <ScheduleIcon size={18} />;
     default:
       return null;
   }
@@ -659,23 +659,57 @@ export default function InPageReviewStateBuilder({
                 {uniqueName.trim() || (isEditMode ? 'Configure Review Stage' : 'New Dynamic Review Stage')}
               </strong>
               <span className={`fc-builder-draft-chip ${isEditMode ? 'edit-mode' : ''}`}>
-                {isEditMode ? '✎ In-Page Stage Editor' : '● In-Page Builder Draft'}
+                {isEditMode ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <EditIcon size={12} />
+                    <span>In-Page Stage Editor</span>
+                  </span>
+                ) : (
+                  '● In-Page Builder Draft'
+                )}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
-              <span className="criteria-chip" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd' }}>
-                {juryAssignmentMode === 'none'
-                  ? '🚫 No Jury (Admin Only)'
-                  : (juryAssignmentMode === 'manual'
-                      ? '👤 Manual Jury Assignment'
-                      : (juryAutoRule === 'n_jury'
-                          ? `⚡ Auto: ${juryCountPerFilm || 1} Juror${Number(juryCountPerFilm) === 1 ? '' : 's'} / Film`
-                          : '⚡ Auto: All Jurors'))}
+              <span className="criteria-chip" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                {juryAssignmentMode === 'none' ? (
+                  <>
+                    <LockIcon size={12} />
+                    <span>No Jury (Admin Only)</span>
+                  </>
+                ) : (juryAssignmentMode === 'manual' ? (
+                  <>
+                    <PersonIcon size={12} />
+                    <span>Manual Jury Assignment</span>
+                  </>
+                ) : (juryAutoRule === 'n_jury' ? (
+                  <>
+                    <FlashOnIcon size={12} />
+                    <span>Auto: {juryCountPerFilm || 1} Juror{Number(juryCountPerFilm) === 1 ? '' : 's'} / Film</span>
+                  </>
+                ) : (
+                  <>
+                    <FlashOnIcon size={12} />
+                    <span>Auto: All Jurors</span>
+                  </>
+                )))}
               </span>
-              <span className="criteria-chip" style={{ background: '#f5f3ff', color: '#7c3aed', borderColor: '#ddd6fe' }}>
-                {reviewType === 'star_rating'
-                  ? `⭐ ${starScale}-Star Rating`
-                  : (reviewType === 'pass_fail' ? '⚖️ Pass / Fail' : '👍 Vote / Nomination')}
+              <span className="criteria-chip" style={{ background: '#f5f3ff', color: '#7c3aed', borderColor: '#ddd6fe', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                {reviewType === 'star_rating' ? (
+                  <>
+                    <StarIcon size={12} />
+                    <span>{starScale}-Star Rating</span>
+                  </>
+                ) : (reviewType === 'pass_fail' ? (
+                  <>
+                    <GavelIcon size={12} />
+                    <span>Pass / Fail</span>
+                  </>
+                ) : (
+                  <>
+                    <HowToVoteIcon size={12} />
+                    <span>Vote / Nomination</span>
+                  </>
+                ))}
               </span>
               <span className="criteria-chip" style={{ background: notesRequirement === 'required' ? '#fef3c7' : '#f1f5f9', color: notesRequirement === 'required' ? '#b45309' : '#475569', borderColor: notesRequirement === 'required' ? '#fde68a' : '#cbd5e1' }}>
                 Notes: {notesRequirement === 'required' ? 'Mandatory Critique' : 'Optional Notes'}
@@ -832,8 +866,9 @@ export default function InPageReviewStateBuilder({
                             {displayName}
                           </span>
                           {isCurrent && (
-                            <span className="fc-stage-editing-tag">
-                              ★ Editing This Stage
+                            <span className="fc-stage-editing-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <StarIcon size={11} />
+                              <span>Editing This Stage</span>
                             </span>
                           )}
                         </div>

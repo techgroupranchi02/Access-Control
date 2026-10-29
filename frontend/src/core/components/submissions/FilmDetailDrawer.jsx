@@ -11,7 +11,8 @@ import {
   CancelIcon,
   CheckCircleIcon,
   FlashOnIcon,
-  EditIcon
+  EditIcon,
+  TrophyIcon
 } from '../common/Icons';
 
 const STANDARD_FLAGS = [
@@ -914,7 +915,7 @@ export default function FilmDetailDrawer({
 
           {/* Vertical Lifecycle Stepper */}
           <div className="fc-drawer-section">
-            <label className="fc-drawer-field-label">LIFECYCLE</label>
+            <label className="fc-drawer-field-label">Review Stages</label>
             <div className="fc-lifecycle-track">
               {activeStagesList.map((stage, idx) => {
                 const isPast = !isRejected && idx < activeStageIndex;
@@ -1162,8 +1163,9 @@ export default function FilmDetailDrawer({
               </div>
             </div>
           ) : activeFilm.status === 'Winner' ? (
-            <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(234, 88, 12, 0.1)', color: '#c2410c', borderRadius: '8px', fontWeight: 700, fontSize: '0.88rem' }}>
-              🏆 Winner — Festival Award Recipient
+            <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(234, 88, 12, 0.1)', color: '#c2410c', borderRadius: '8px', fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <TrophyIcon size={16} />
+              <span>Winner — Festival Award Recipient</span>
             </div>
           ) : (
             <div className="fc-drawer-footer-actions">

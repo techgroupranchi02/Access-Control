@@ -2561,7 +2561,7 @@ async function selectWinner(req, res) {
 
     res.json({
       success: true,
-      message: `"${filmTitle}" selected as Winner of ${trimmedAward}! 🏆`,
+      message: `"${filmTitle}" selected as Winner of ${trimmedAward}!`,
       award_name: trimmedAward,
       submission_id: filmId,
       filmTitle
