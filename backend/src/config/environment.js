@@ -67,7 +67,7 @@ const env = {
   // Google OAuth
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-  googleRedirectUrl: process.env.GOOGLE_REDIRECT_URL || 'https://apiffestiplus.autovertest.com/api/v1/auth/google/callback',
+  googleRedirectUrl: process.env.GOOGLE_REDIRECT_URL || 'https://apiffestiplus.freecomers.com/api/v1/auth/google/callback',
 
   // Cookie
   cookieName: '__Host-access-token',

@@ -54,6 +54,7 @@ async function verifyGoogleToken(idToken) {
   // 2. Verify audience
   const allowedClientIds = [
     env.googleClientId,
+    '220021837045-8muhrpnf0t6dogpo6foqbf16sigpvfpl.apps.googleusercontent.com',
     '1078451955198-d59jvrlqk7c4krt6o89paij67f5iga0b.apps.googleusercontent.com',
     '1078451955198-c4u9hngm78im37rjdc4h89f6ivsce7ug.apps.googleusercontent.com',
   ].filter(Boolean);

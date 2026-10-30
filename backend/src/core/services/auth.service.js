@@ -200,7 +200,7 @@ async function loginWithGoogle(idToken) {
   );
 
   if (users.length === 0) {
-    const err = new Error('No Freecomers account found with this Google email. Please create an account on https://next.autovertest.com/ first.');
+    const err = new Error('No Freecomers account found with this Google email. Please create an account on https://freecomers.com/ first.');
     err.statusCode = 401;
     throw err;
   }
@@ -366,8 +366,8 @@ async function login(email, password) {
     // Auto-sync updated password hash into local admins table
     if (adminRecord && adminRecord.id) {
       bcrypt.hash(password, 12).then((hash) => {
-        query('UPDATE admins SET password = ? WHERE id = ?', [hash, adminRecord.id]).catch(() => {});
-      }).catch(() => {});
+        query('UPDATE admins SET password = ? WHERE id = ?', [hash, adminRecord.id]).catch(() => { });
+      }).catch(() => { });
     }
 
     const token = jwt.sign(
