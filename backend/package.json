@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node src/app.js",
     "start": "NODE_ENV=production node src/app.js",
-    "migrate": "node migrations/001_initial_schema.js",
+    "migrate": "node migrations/run_all_migrations.js",
     "seed": "node seeders/001_seed_data.js",
     "setup": "npm run migrate && npm run seed"
   },

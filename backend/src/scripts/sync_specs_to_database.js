@@ -6,8 +6,9 @@
  * Freecomers Admin Module Specs document.
  */
 
+const path = require('path');
 const mysql = require('mysql2/promise');
-require('dotenv').config({ path: '/var/www/Access-Control/backend/.env' });
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const CANONICAL_GROUPS = [
   { key: 'admin', label: 'Admin', description: 'Festival Director & Control Tower governance', is_system: 1 },
@@ -529,13 +530,9 @@ async function syncDatabase(dbName) {
 
 async function main() {
   try {
-    await syncDatabase('freecomers_database');
-    try {
-      await syncDatabase('access_control_database');
-    } catch (e) {
-      console.warn('[Sync] Note on access_control_database:', e.message);
-    }
-    console.log('\n[SUCCESS] Entire system successfully synchronized with Freecomers Admin Module Specs v8.0!');
+    const targetDb = process.env.DB_DATABASE || 'freecomers_database';
+    await syncDatabase(targetDb);
+    console.log(`\n[SUCCESS] Entire system successfully synchronized with Freecomers Admin Module Specs v8.0 for ${targetDb}!`);
     process.exit(0);
   } catch (error) {
     console.error('[FATAL] Sync failed:', error);
