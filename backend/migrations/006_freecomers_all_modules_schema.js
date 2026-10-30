@@ -19,8 +19,11 @@ async function up() {
   console.log('[Migration 006] Creating Freecomers operational module tables...');
   await query('SET FOREIGN_KEY_CHECKS = 0;');
 
-  // Ensure `edition` exists on `events`
+  // Ensure `slug` and `edition` exist on `events`
   const eventCols = (await query('SHOW COLUMNS FROM `events`')).map(c => c.Field);
+  if (!eventCols.includes('slug')) {
+    await query("ALTER TABLE `events` ADD COLUMN `slug` VARCHAR(100) NULL AFTER `name`");
+  }
   if (!eventCols.includes('edition')) {
     await query("ALTER TABLE `events` ADD COLUMN `edition` VARCHAR(50) NOT NULL DEFAULT 'Edition 4 · 2026' AFTER `slug`");
   }
@@ -140,6 +143,49 @@ async function up() {
       order_index SMALLINT UNSIGNED NOT NULL DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_awards_event (event_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  await query(`
+    CREATE TABLE IF NOT EXISTS award_category_nominations (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      event_id BIGINT UNSIGNED NOT NULL,
+      award_category_id INT UNSIGNED NULL,
+      award_name VARCHAR(255) NOT NULL,
+      submission_id BIGINT UNSIGNED NOT NULL,
+      is_winner TINYINT(1) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_event_award_sub (event_id, award_name(100), submission_id),
+      INDEX idx_award_sub (submission_id),
+      INDEX idx_event_winner (event_id, is_winner)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS award_category_jury (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      event_id BIGINT UNSIGNED NOT NULL,
+      award_category_id INT UNSIGNED NULL,
+      award_name VARCHAR(255) NOT NULL,
+      jury_user_id BIGINT UNSIGNED NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_event_award_jury (event_id, award_name(100), jury_user_id),
+      INDEX idx_jury_user (jury_user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS attendances (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      event_id BIGINT UNSIGNED NOT NULL,
+      attendee_id BIGINT UNSIGNED NULL,
+      user_id BIGINT UNSIGNED NULL,
+      venue_id BIGINT UNSIGNED NULL,
+      volunteer_id BIGINT UNSIGNED NULL,
+      checked_in_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_event (event_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 

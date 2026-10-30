@@ -441,7 +441,7 @@ async function syncDatabase(dbName) {
 
   for (const m of MODULES_SPECS) {
     const modId = moduleMap[m.module_key];
-    
+
     for (const p of m.permissions) {
       const [existing] = await conn.query('SELECT id FROM permissions WHERE permission_key = ? LIMIT 1', [p.key]);
       let permId;
@@ -506,20 +506,18 @@ async function syncDatabase(dbName) {
   console.log('[EventsModules] Ensuring all active SaaS festivals have all 14 modules provisioned...');
   const validModIds = Object.values(moduleMap);
   try {
-    const [saasEvents] = await conn.query(`
-      SELECT event_id FROM events 
-      WHERE (saas_enabled = 1 OR is_saas = 1)
-    `);
-
-    for (const evt of saasEvents) {
-      for (const modId of validModIds) {
-        await conn.query(`
-          INSERT IGNORE INTO events_modules (event_id, module_id)
-          VALUES (?, ?)
-        `, [evt.event_id, modId]);
-      }
+    if (validModIds.length > 0) {
+      const modPlaceholders = validModIds.map(() => '?').join(',');
+      await conn.query(`
+        INSERT IGNORE INTO events_modules (event_id, module_id)
+        SELECT e.event_id, m.id 
+        FROM events e 
+        CROSS JOIN modules m 
+        WHERE (e.saas_enabled = 1 OR e.is_saas = 1) 
+          AND m.id IN (${modPlaceholders})
+      `, validModIds);
+      console.log(`  ✓ All 14 modules enabled across SaaS festival editions in bulk.`);
     }
-    console.log(`  ✓ All 14 modules enabled across ${saasEvents.length} SaaS festival editions.`);
   } catch (err) {
     console.warn(`[EventsModules] Notice on events table for ${dbName}:`, err.message);
   }

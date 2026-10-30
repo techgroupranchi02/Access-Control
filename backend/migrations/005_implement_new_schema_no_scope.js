@@ -109,6 +109,7 @@ async function up() {
       \`id\` INT NOT NULL AUTO_INCREMENT,
       \`module_id\` INT NOT NULL,
       \`page_key\` VARCHAR(255) NOT NULL,
+      \`label\` VARCHAR(255) DEFAULT NULL,
       \`route\` VARCHAR(255) NOT NULL,
       \`permission_id\` INT DEFAULT NULL,
       \`display_order\` INT DEFAULT 0,
