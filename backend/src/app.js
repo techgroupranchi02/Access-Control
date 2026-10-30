@@ -69,6 +69,7 @@ app.get('/api/health', (req, res) => {
 
 // ── Core & Module Routes ─────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/events', festivalRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/team', teamRoutes);

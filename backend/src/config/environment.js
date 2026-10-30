@@ -65,7 +65,9 @@ const env = {
   jwtExpiresIn: '8h',
 
   // Google OAuth
-  googleClientId: process.env.GOOGLE_CLIENT_ID || '1078451955198-c4u9hngm78im37rjdc4h89f6ivsce7ug.apps.googleusercontent.com',
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  googleRedirectUrl: process.env.GOOGLE_REDIRECT_URL || 'https://apiffestiplus.autovertest.com/api/v1/auth/google/callback',
 
   // Cookie
   cookieName: '__Host-access-token',

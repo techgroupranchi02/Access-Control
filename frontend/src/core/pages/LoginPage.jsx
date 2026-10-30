@@ -33,10 +33,9 @@ export default function LoginPage() {
     }
     return null;
   });
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithToken, loginWithGoogle } = useAuth();
   const { toggleTheme, isDark } = useTheme();
   const navigate = useNavigate();
-  const googleBtnContainerRef = useRef(null);
 
   const getPostLoginRedirect = () => {
     try {
@@ -55,114 +54,55 @@ export default function LoginPage() {
     return '/';
   };
 
-  // Initialize Google Identity Services
+  // Handle URL tokens or errors returned by Google OAuth redirect callback
   useEffect(() => {
-    let intervalId = null;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token') || urlParams.get('google-token');
+      const err = urlParams.get('error');
 
-    const handleGoogleResponse = async (response) => {
-      if (!response?.credential) {
-        setError('No credential received from Google. Please try again.');
-        return;
-      }
-      setError('');
-      setIsAccessDenied(false);
-      setGoogleLoading(true);
-
-      // Extract user info to maintain customized badge matching design
-      try {
-        const payload = JSON.parse(atob(response.credential.split('.')[1]));
-        const userObj = {
-          name: payload.given_name || payload.name?.split(' ')[0] || payload.name || (payload.email ? payload.email.split('@')[0] : 'User'),
-          email: payload.email || '',
-          initial: (payload.given_name || payload.name || payload.email || 'U').charAt(0).toUpperCase(),
-        };
-        setGoogleUser(userObj);
-        localStorage.setItem('fc_last_google_user', JSON.stringify(userObj));
-      } catch (e) {
-        console.warn('Could not parse Google credential token payload', e);
-      }
-
-      try {
-        await loginWithGoogle(response.credential);
-        navigate(getPostLoginRedirect());
-      } catch (err) {
-        const status = err.response?.status;
-        const msg = err.response?.data?.error || err.message || 'Google sign-in failed.';
-        if (status === 403 || msg.includes('Access Denied')) {
+      if (err) {
+        const decodedErr = decodeURIComponent(err);
+        setError(decodedErr);
+        if (decodedErr.includes('Access Denied')) {
           setIsAccessDenied(true);
         }
-        setError(msg);
-      } finally {
-        setGoogleLoading(false);
       }
-    };
 
-    const setupGoogleBtn = () => {
-      if (window.google?.accounts?.id && googleBtnContainerRef.current) {
-        try {
-          window.google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: handleGoogleResponse,
-            auto_select: false,
-            cancel_on_tap_outside: true,
+      if (token) {
+        setGoogleLoading(true);
+        loginWithToken(token)
+          .then((userProfile) => {
+            if (userProfile?.email) {
+              const userObj = {
+                name: userProfile.name || userProfile.email.split('@')[0],
+                email: userProfile.email,
+                initial: (userProfile.name || userProfile.email).charAt(0).toUpperCase(),
+              };
+              setGoogleUser(userObj);
+              localStorage.setItem('fc_last_google_user', JSON.stringify(userObj));
+            }
+            navigate(getPostLoginRedirect());
+          })
+          .catch((e) => {
+            setError(e.message || 'Authentication failed.');
+          })
+          .finally(() => {
+            setGoogleLoading(false);
           });
-
-          // Clear any previous render
-          googleBtnContainerRef.current.innerHTML = '';
-
-          const measuredWidth = googleBtnContainerRef.current.clientWidth || 372;
-          const btnWidth = Math.min(Math.max(measuredWidth, 240), 400);
-
-          window.google.accounts.id.renderButton(googleBtnContainerRef.current, {
-            theme: isDark ? 'filled_black' : 'outline',
-            size: 'large',
-            width: btnWidth,
-            text: 'continue_with',
-            shape: 'rectangular',
-            logo_alignment: 'center',
-          });
-          return true;
-        } catch (e) {
-          console.warn('[Google GIS] Setup error:', e);
-        }
       }
-      return false;
-    };
-
-    if (!setupGoogleBtn()) {
-      intervalId = setInterval(() => {
-        if (setupGoogleBtn()) {
-          clearInterval(intervalId);
-        }
-      }, 350);
+    } catch (e) {
+      console.warn('Failed to parse OAuth callback parameters', e);
     }
-
-    const handleResize = () => {
-      setupGoogleBtn();
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [loginWithGoogle, navigate, isDark]);
+  }, [loginWithToken, navigate]);
 
   const handleGoogleClick = () => {
     if (googleLoading || loading) return;
     setError('');
     setIsAccessDenied(false);
-    if (window.google?.accounts?.id) {
-      try {
-        window.google.accounts.id.prompt((notification) => {
-          if (notification.isNotDisplayed()) {
-            console.warn('[GIS] One Tap prompt not displayed:', notification.getNotDisplayedReason());
-          }
-        });
-      } catch (e) {
-        console.warn('[GIS] Prompt error:', e);
-      }
-    }
+    setGoogleLoading(true);
+    // Direct browser to backend OAuth redirect flow using authorized callback URI
+    window.location.href = '/api/auth/google/redirect';
   };
 
   const handleSubmit = async (e) => {
@@ -406,14 +346,6 @@ export default function LoginPage() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
               </div>
-
-              {/* Invisible Google GIS Overlay Layer for direct native iframe click handling */}
-              <div
-                id="google-signin-btn-container"
-                ref={googleBtnContainerRef}
-                className="fc-google-gis-invisible-layer"
-                aria-hidden="true"
-              />
             </div>
 
             {googleUser && (

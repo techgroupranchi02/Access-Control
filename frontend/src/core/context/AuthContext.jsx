@@ -74,6 +74,22 @@ export function AuthProvider({ children }) {
     return res.data;
   }, []);
 
+  const loginWithToken = useCallback(async (token) => {
+    if (!token) return null;
+    localStorage.setItem('authToken', token);
+    localStorage.removeItem('currentFestivalId');
+    localStorage.removeItem('currentEditionId');
+    sessionStorage.removeItem('fc_festival_selected');
+
+    try {
+      const meRes = await api.get('/auth/me');
+      setUser(meRes.data);
+      return meRes.data;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const switchPersona = useCallback(async () => {
     // Persona switching removed — use proper role assignment instead.
     console.warn('switchPersona is deprecated. Use the admin panel to assign roles.');
@@ -114,6 +130,7 @@ export function AuthProvider({ children }) {
     user,
     loading,
     login,
+    loginWithToken,
     loginWithGoogle,
     register,
     logout,

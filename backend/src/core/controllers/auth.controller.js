@@ -106,4 +106,75 @@ async function me(req, res) {
   }
 }
 
-module.exports = { register, login, googleLogin, logout, me };
+/**
+ * GET /api/auth/google/redirect
+ * Initiates standard Google OAuth 2.0 Web redirect flow.
+ */
+async function googleRedirect(req, res) {
+  const clientId = env.googleClientId;
+  const redirectUri = env.googleRedirectUrl;
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'openid email profile',
+    access_type: 'online',
+    prompt: 'select_account',
+  });
+
+  return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+}
+
+/**
+ * GET /api/auth/google/callback
+ * Handles Google OAuth callback, exchanges code for token, authenticates user, and redirects.
+ */
+async function googleCallback(req, res) {
+  const frontendUrl = (env.frontendUrl || 'https://ffestiplus.autovertest.com').replace(/\/$/, '');
+  const { code, error: oauthError } = req.query;
+
+  if (oauthError || !code) {
+    return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(oauthError || 'Google authentication was cancelled.')}`);
+  }
+
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: env.googleClientId,
+        client_secret: env.googleClientSecret,
+        redirect_uri: env.googleRedirectUrl,
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok || (!tokenData.id_token && !tokenData.access_token)) {
+      throw new Error(tokenData.error_description || 'Failed to exchange authorization code with Google.');
+    }
+
+    let authResult;
+    if (tokenData.id_token) {
+      authResult = await authService.loginWithGoogle(tokenData.id_token);
+    } else {
+      const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+      const userData = await userRes.json();
+      if (!userData.email) throw new Error('No verified email address returned by Google.');
+      throw new Error('Google did not return an ID token.');
+    }
+
+    setAuthCookies(req, res, authResult.token);
+    return res.redirect(`${frontendUrl}/login?token=${encodeURIComponent(authResult.token)}&status=success`);
+  } catch (error) {
+    console.error('[Google Callback Error]:', error.message);
+    const msg = error.message || 'Google authentication failed.';
+    return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(msg)}`);
+  }
+}
+
+module.exports = { register, login, googleLogin, googleRedirect, googleCallback, logout, me };

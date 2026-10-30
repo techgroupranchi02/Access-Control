@@ -20,7 +20,7 @@ function securityHeaders() {
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'blob:'],
-        connectSrc: ["'self'", 'https://access.saas.autovertest.com', 'http://127.0.0.1:4000', 'http://localhost:5173'],
+        connectSrc: ["'self'", 'https://ffestiplus.autovertest.com', 'https://apiffestiplus.autovertest.com', 'https://access.saas.autovertest.com', 'http://127.0.0.1:4000', 'http://localhost:5173'],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
       },
@@ -37,6 +37,8 @@ function securityHeaders() {
 function corsPolicy() {
   const allowedOrigins = [
     env.frontendUrl,
+    'https://ffestiplus.autovertest.com',
+    'https://apiffestiplus.autovertest.com',
     'https://access.saas.autovertest.com',
     'https://admin.autovertest.com',
     'http://localhost:5173',

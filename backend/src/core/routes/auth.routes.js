@@ -16,6 +16,8 @@ const { authLimiter } = require('../middleware/rateLimiter.middleware');
 router.post('/register', authLimiter, authController.register);
 router.post('/login', authLimiter, authController.login);
 router.post('/google', authLimiter, authController.googleLogin);
+router.get('/google/redirect', authController.googleRedirect);
+router.get('/google/callback', authController.googleCallback);
 
 // Protected routes
 router.post('/logout', authenticate, authController.logout);

@@ -12,6 +12,7 @@
  */
 
 const { query } = require('../../config/database');
+const env = require('../../config/environment');
 
 /**
  * GET /api/admin/saas/festivals
@@ -295,7 +296,7 @@ async function getFestivalArchitecture(req, res) {
         isSaaS: Boolean(event.is_saas),
         saasEnabled: Boolean(event.saas_enabled),
         maxUsers,
-        portalUrl: `https://access.saas.autovertest.com/?eventId=${event.event_id}`
+        portalUrl: `${env.frontendUrl || 'https://ffestiplus.autovertest.com'}/?eventId=${event.event_id}`
       },
       groups,
       modules: moduleTree
