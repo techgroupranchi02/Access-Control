@@ -558,21 +558,25 @@ async function syncDatabase(dbName) {
   }
   console.log('  ✓ Group Access Matrix populated for all modules and groups.');
 
-  // 8. Provision all 14 modules for active SaaS festivals
-  console.log('[EventsModules] Ensuring all active SaaS festivals have all 14 modules provisioned...');
+  // 8. Provision default modules ONLY for uninitialized active SaaS festivals
+  // Existing festivals with configured modules are preserved so disabled toggles are not overridden
+  console.log('[EventsModules] Initializing default modules for unconfigured SaaS festivals...');
   const validModIds = Object.values(moduleMap);
   try {
     if (validModIds.length > 0) {
       const modPlaceholders = validModIds.map(() => '?').join(',');
-      await conn.query(`
+      const [res] = await conn.query(`
         INSERT IGNORE INTO events_modules (event_id, module_id)
         SELECT e.event_id, m.id 
         FROM events e 
         CROSS JOIN modules m 
         WHERE (e.saas_enabled = 1 OR e.is_saas = 1) 
           AND m.id IN (${modPlaceholders})
+          AND NOT EXISTS (
+            SELECT 1 FROM events_modules em WHERE em.event_id = e.event_id
+          )
       `, validModIds);
-      console.log(`  ✓ All 14 modules enabled across SaaS festival editions in bulk.`);
+      console.log(`  ✓ Initialized default modules for new SaaS festivals (${res.affectedRows || 0} rows added, existing customizations preserved).`);
     }
   } catch (err) {
     console.warn(`[EventsModules] Notice on events table for ${dbName}:`, err.message);
