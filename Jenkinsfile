@@ -28,7 +28,7 @@ pipeline {
             steps {
                 script {
                     def branch = env.BRANCH_NAME ?: (env.GIT_BRANCH ? env.GIT_BRANCH.replaceFirst('^origin/', '').replaceFirst('^refs/heads/', '') : 'development')
-                    def isProduction = (branch == 'main' || branch == 'master')
+                    def isProduction = (branch == 'main')
                     env.DEPLOY_BRANCH = branch
                     env.DEPLOY_ENV = isProduction ? 'production' : 'development'
                     env.TARGET_SERVER = isProduction ? env.PROD_SERVER : env.DEV_SERVER
