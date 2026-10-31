@@ -14,6 +14,19 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const checkAuth = async () => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlToken = urlParams.get('token') || urlParams.get('google-token');
+      if (urlToken) {
+        localStorage.setItem('authToken', urlToken);
+        localStorage.removeItem('currentFestivalId');
+        localStorage.removeItem('currentEditionId');
+        sessionStorage.removeItem('fc_festival_selected');
+      }
+    } catch (e) {
+      // ignore
+    }
+
     const token = localStorage.getItem('authToken');
     if (!token) {
       setUser(null);

@@ -11,6 +11,7 @@
  * - Set seat limits (event_user_limits) and assign primary festival admin
  */
 
+const jwt = require('jsonwebtoken');
 const { query } = require('../../config/database');
 const env = require('../../config/environment');
 
@@ -430,6 +431,63 @@ async function updateFestivalSettings(req, res) {
   }
 }
 
+/**
+ * POST or GET /api/admin/saas/festivals/:eventId/launch-token
+ * Generates an Admin SSO launch token so Freecomers platform administrators
+ * can launch and manage any festival portal directly as Platform SuperAdmin.
+ */
+async function generateLaunchToken(req, res) {
+  try {
+    const eventId = parseInt(req.params.eventId, 10);
+    if (!eventId || isNaN(eventId)) {
+      return res.status(400).json({ error: 'Valid eventId is required' });
+    }
+
+    const events = await query(
+      'SELECT event_id, name, saas_enabled, is_saas FROM events WHERE event_id = ? AND is_deleted = 0',
+      [eventId]
+    );
+
+    if (events.length === 0) {
+      return res.status(404).json({ error: 'Festival event not found' });
+    }
+
+    // Freecomers platform administrator credentials
+    const adminRows = await query('SELECT id, name, email FROM admins ORDER BY id ASC LIMIT 1');
+    const adminUser = adminRows.length > 0 ? adminRows[0] : { id: 1, name: 'Freecomers Administrator', email: 'freecomersfilmworks@gmail.com' };
+
+    // Sign launch JWT with role: admin, isSuperAdmin: true, targetFestivalId: eventId
+    const token = jwt.sign(
+      {
+        id: adminUser.id,
+        email: adminUser.email,
+        name: adminUser.name || 'Platform Administrator',
+        role: 'admin',
+        isSuperAdmin: true,
+        targetFestivalId: eventId,
+      },
+      env.jwtSecret,
+      {
+        algorithm: 'HS256',
+        expiresIn: '24h',
+      }
+    );
+
+    const baseUrl = (env.frontendUrl || 'https://ffestiplus.autovertest.com').replace(/\/$/, '');
+    const launchUrl = `${baseUrl}/login?token=${token}&festival=${eventId}`;
+
+    return res.json({
+      success: true,
+      token,
+      eventId,
+      launchUrl,
+    });
+  } catch (error) {
+    console.error('[generateLaunchToken] Error:', error);
+    return res.status(500).json({ error: 'Failed to generate festival launch token' });
+  }
+}
+
 module.exports = {
   listFestivals,
   toggleFestivalSaaS,
@@ -437,4 +495,5 @@ module.exports = {
   toggleFestivalModule,
   updateGroupPermissionMatrix,
   updateFestivalSettings,
+  generateLaunchToken,
 };

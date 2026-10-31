@@ -47,6 +47,7 @@ function authenticate(req, res, next) {
       userIds: decoded.userIds || [decoded.id],
       role: decoded.role || (decoded.isSuperAdmin ? 'admin' : 'user'),
       isSuperAdmin: Boolean(decoded.isSuperAdmin),
+      targetFestivalId: decoded.targetFestivalId || null,
     };
 
     next();
@@ -78,6 +79,7 @@ function optionalAuth(req, res, next) {
         userIds: decoded.userIds || [decoded.id],
         role: decoded.role || (decoded.isSuperAdmin ? 'admin' : 'user'),
         isSuperAdmin: Boolean(decoded.isSuperAdmin),
+        targetFestivalId: decoded.targetFestivalId || null,
       };
     }
   } catch {

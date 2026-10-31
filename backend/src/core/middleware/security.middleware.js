@@ -53,6 +53,7 @@ function corsPolicy() {
     'https://apiffestiplus.freecomers.com',
     'https://access.saas.autovertest.com',
     'https://admin.autovertest.com',
+    'https://admin.freecomers.com',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:9001',

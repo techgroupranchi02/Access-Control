@@ -40,7 +40,7 @@ export function FestivalProvider({ children }) {
         const urlParams = new URLSearchParams(window.location.search);
         const queryId = urlParams.get('festival') || urlParams.get('edition');
         if (queryId) {
-          const match = res.data.find(f => f.id === parseInt(queryId, 10));
+          const match = res.data.find(f => f.id === parseInt(queryId, 10) || String(f.id) === String(queryId) || f.slug === queryId);
           if (match) {
             selectFestival(match, true);
             return;

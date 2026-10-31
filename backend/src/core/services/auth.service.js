@@ -529,6 +529,8 @@ async function getProfile(userId, role, editionId) {
     );
     if (adminRows.length > 0) {
       adminProfile = adminRows[0];
+    } else {
+      adminProfile = { id: userId, name: 'Platform Administrator', email: 'admin@freecomers.com' };
     }
   }
 

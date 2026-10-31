@@ -26,4 +26,8 @@ router.put('/festivals/:eventId/modules/:moduleId/matrix', saasAdminController.u
 // Settings (Seat limits & edition metadata)
 router.put('/festivals/:eventId/settings', saasAdminController.updateFestivalSettings);
 
+// Admin SSO Launch Token to launch festival portal
+router.post('/festivals/:eventId/launch-token', saasAdminController.generateLaunchToken);
+router.get('/festivals/:eventId/launch-token', saasAdminController.generateLaunchToken);
+
 module.exports = router;
