@@ -305,6 +305,62 @@ const MODULES_SPECS = [
       jury: [],
       volunteer: []
     }
+  },
+  {
+    module_key: 'audience',
+    type: 'addon',
+    label: 'Audience',
+    description: 'Audience management, delegate categories, badges, attendance check-in and voting',
+    route: '/audience',
+    icon: 'users',
+    display_order: 15,
+    pages: [
+      { page_key: 'audience_settings', label: 'Audience Settings & Categories', route: '/settings/audience', display_order: 1 },
+      { page_key: 'audience_attendance', label: 'Attendance & Gate Check-in', route: '/attendance', display_order: 2 },
+      { page_key: 'audience_voting', label: 'Audience Choice Voting & Results', route: '/voting', display_order: 3 },
+      { page_key: 'audience_registration', label: 'Attendee Registration & Passes', route: '/registration', display_order: 4 }
+    ],
+    permissions: [
+      { key: 'audience:view', label: 'View Audience Hub', description: 'Access to Audience dashboard and settings overview.' },
+      { key: 'audience:manage_settings', label: 'Manage Audience Settings', description: 'Configure voting thresholds, venue links, and parameters.' },
+      { key: 'audience:manage_categories', label: 'Manage Delegate Categories', description: 'Create and edit delegate badge categories and quotas.' },
+      { key: 'attendance:view', label: 'View Attendance Records', description: 'View venue and screening check-in headcounts and lists.' },
+      { key: 'attendance:scan_checkin', label: 'Perform Gate Check-in', description: 'Scan attendee QR codes for venue and screening entry.' },
+      { key: 'attendance:export', label: 'Export Attendance Reports', description: 'Export attendance spreadsheets and gate audit logs.' },
+      { key: 'voting:view_results', label: 'View Voting Standings', description: 'View raw votes, participation rates, and Bayesian scores.' },
+      { key: 'voting:control_window', label: 'Open / Close Voting Window', description: 'Trigger balloting start and end for screenings.' },
+      { key: 'voting:audit_fraud', label: 'Audit & Moderate Votes', description: 'Flag or void duplicate and suspicious votes.' },
+      { key: 'registration:view', label: 'View Attendees List', description: 'Browse registered attendees and delegate roster.' },
+      { key: 'registration:create', label: 'Register New Attendee', description: 'Manual and spot registration at the venue desk.' },
+      { key: 'registration:issue_badge', label: 'Issue & Print Badge Passes', description: 'Generate printable badge passes and dispatch QR tokens.' }
+    ],
+    groupAccess: {
+      admin: [
+        'audience:view',
+        'audience:manage_settings',
+        'audience:manage_categories',
+        'attendance:view',
+        'attendance:scan_checkin',
+        'attendance:export',
+        'voting:view_results',
+        'voting:control_window',
+        'voting:audit_fraud',
+        'registration:view',
+        'registration:create',
+        'registration:issue_badge'
+      ],
+      jury: [
+        'voting:view_results'
+      ],
+      volunteer: [
+        'audience:view',
+        'attendance:view',
+        'attendance:scan_checkin',
+        'registration:view',
+        'registration:create',
+        'registration:issue_badge'
+      ]
+    }
   }
 ];
 
