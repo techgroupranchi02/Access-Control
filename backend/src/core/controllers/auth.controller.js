@@ -98,8 +98,11 @@ async function logout(req, res) {
  */
 async function me(req, res) {
   try {
+    if (req.bearerToken) {
+      setAuthCookies(req, res, req.bearerToken);
+    }
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || req.query.editionId || req.query.festivalId || null;
-    const profile = await authService.getProfile(req.user.id, req.user.role, eventId);
+    const profile = await authService.getProfile(req.user.id, req.user.role, eventId, req.user);
     res.json(profile);
   } catch (error) {
     res.status(404).json({ error: error.message });

@@ -517,7 +517,7 @@ async function login(email, password) {
  * @param {number|null} editionId
  * @returns {Promise<object>}
  */
-async function getProfile(userId, role, editionId) {
+async function getProfile(userId, role, editionId, reqUser = null) {
   // If role is explicitly 'admin' or no user exists in users table, check admins table
   let isAdminUser = (role === 'admin');
   let adminProfile = null;
@@ -536,6 +536,11 @@ async function getProfile(userId, role, editionId) {
 
   // ── Flow A: Freecomers Admin Profile ──
   if (adminProfile) {
+    const targetFestivalId = (reqUser && reqUser.targetFestivalId) ? parseInt(reqUser.targetFestivalId, 10) : (editionId ? parseInt(editionId, 10) : null);
+    const orderClause = targetFestivalId
+      ? `ORDER BY (event_id = ${targetFestivalId}) DESC, event_id DESC`
+      : `ORDER BY event_id DESC`;
+
     const allEvents = await query(
       `SELECT 
          event_id, 
@@ -549,7 +554,7 @@ async function getProfile(userId, role, editionId) {
          1 as is_system
        FROM events
        WHERE is_deleted = 0
-       ORDER BY event_id DESC`
+       ${orderClause}`
     );
 
     // Freecomers Admin receives all system permissions
@@ -629,7 +634,7 @@ async function getProfile(userId, role, editionId) {
       [userId]
     );
     if (fallbackAdmins.length > 0) {
-      return getProfile(userId, 'admin', editionId);
+      return getProfile(userId, 'admin', editionId, reqUser);
     }
     throw new Error('User not found or deactivated.');
   }
@@ -695,11 +700,12 @@ async function getProfile(userId, role, editionId) {
 
   let permissionsMap = {};
   let isSuperAdmin = false;
-  let activeGroup = editionId
-    ? eventGroups.find(eg => eg.event_id === parseInt(editionId, 10))
+  const preferredTargetId = (reqUser && reqUser.targetFestivalId) ? parseInt(reqUser.targetFestivalId, 10) : (editionId ? parseInt(editionId, 10) : null);
+  let activeGroup = preferredTargetId
+    ? eventGroups.find(eg => eg.event_id === preferredTargetId)
     : (eventGroups.find(eg => eg.saas_enabled === 1 || eg.saas_enabled === true) || eventGroups[0]);
 
-  const targetEditionId = editionId ? parseInt(editionId, 10) : (activeGroup ? activeGroup.event_id : null);
+  const targetEditionId = preferredTargetId || (activeGroup ? activeGroup.event_id : null);
 
   if (targetEditionId) {
     if (!activeGroup) {

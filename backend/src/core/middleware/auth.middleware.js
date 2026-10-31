@@ -18,11 +18,15 @@ const env = require('../../config/environment');
  */
 function authenticate(req, res, next) {
   try {
-    // Read token from HttpOnly cookie or Authorization header
-    const cookieName = env.nodeEnv === 'production' ? env.cookieName : 'access-token';
-    let token = req.cookies && (req.cookies[cookieName] || req.cookies['access-token']);
-    if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    // Read token: prioritize Authorization: Bearer <token> over cookies to avoid stale cookie override on SSO
+    let token = null;
+    let isBearer = false;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
       token = req.headers.authorization.split(' ')[1];
+      isBearer = true;
+    } else if (req.cookies) {
+      const cookieName = env.nodeEnv === 'production' ? env.cookieName : 'access-token';
+      token = req.cookies[cookieName] || req.cookies['access-token'];
     }
 
     if (!token) {
@@ -49,6 +53,9 @@ function authenticate(req, res, next) {
       isSuperAdmin: Boolean(decoded.isSuperAdmin),
       targetFestivalId: decoded.targetFestivalId || null,
     };
+    if (isBearer) {
+      req.bearerToken = token;
+    }
 
     next();
   } catch (error) {
@@ -65,10 +72,14 @@ function authenticate(req, res, next) {
  */
 function optionalAuth(req, res, next) {
   try {
-    const cookieName = env.nodeEnv === 'production' ? env.cookieName : 'access-token';
-    let token = req.cookies && (req.cookies[cookieName] || req.cookies['access-token']);
-    if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    let token = null;
+    let isBearer = false;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
       token = req.headers.authorization.split(' ')[1];
+      isBearer = true;
+    } else if (req.cookies) {
+      const cookieName = env.nodeEnv === 'production' ? env.cookieName : 'access-token';
+      token = req.cookies[cookieName] || req.cookies['access-token'];
     }
     if (token) {
       const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
@@ -81,6 +92,9 @@ function optionalAuth(req, res, next) {
         isSuperAdmin: Boolean(decoded.isSuperAdmin),
         targetFestivalId: decoded.targetFestivalId || null,
       };
+      if (isBearer) {
+        req.bearerToken = token;
+      }
     }
   } catch {
     // Silently ignore — user remains unauthenticated

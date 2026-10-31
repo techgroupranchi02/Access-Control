@@ -16,8 +16,11 @@ async function getAllEditions(user) {
   // If user is SuperAdmin or role 'admin' from Freecomers admins table, restrict to active SaaS festivals (plus target festival if launched directly)
   if (user && (user.isSuperAdmin || user.role === 'admin')) {
     let extraFilter = '';
+    let targetOrder = '';
     if (user.targetFestivalId) {
-      extraFilter = ` OR event_id = ${parseInt(user.targetFestivalId, 10)}`;
+      const targetId = parseInt(user.targetFestivalId, 10);
+      extraFilter = ` OR event_id = ${targetId}`;
+      targetOrder = `(event_id = ${targetId}) DESC, `;
     }
     return query(
       `SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at,
@@ -25,7 +28,7 @@ async function getAllEditions(user) {
        FROM events 
        WHERE is_deleted = 0 
          AND (saas_enabled = 1 OR is_saas = 1${extraFilter})
-       ORDER BY (saas_enabled = 1) DESC, event_id DESC`
+       ORDER BY ${targetOrder}(saas_enabled = 1) DESC, event_id DESC`
     );
   }
 
@@ -75,7 +78,7 @@ async function getAllEditions(user) {
        LEFT JOIN \`groups\` g ON g.id = ueg.group_id
        WHERE e.is_deleted = 0
          AND (e.user_id IN (${placeholders}) OR ffc_approved.event_id IS NOT NULL OR ueg.user_id IS NOT NULL)
-       ORDER BY (e.saas_enabled = 1) DESC, e.event_id DESC`,
+       ORDER BY ${user && user.targetFestivalId ? `(e.event_id = ${parseInt(user.targetFestivalId, 10)}) DESC, ` : ''}(e.saas_enabled = 1) DESC, e.event_id DESC`,
       [
         ...allUserIds,
         ...allUserIds,
