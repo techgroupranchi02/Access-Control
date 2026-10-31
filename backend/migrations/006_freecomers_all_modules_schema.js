@@ -47,20 +47,16 @@ async function up() {
       event_id BIGINT UNSIGNED NOT NULL,
       title VARCHAR(255) NOT NULL,
       director VARCHAR(255) NOT NULL,
-      category ENUM('Short Film', 'Documentary', 'Student Film', 'Animation', 'Music Video', 'Feature Film') NOT NULL,
-      runtime INT UNSIGNED NOT NULL COMMENT 'Runtime in minutes',
+      category VARCHAR(255) NOT NULL DEFAULT 'Short Film',
+      runtime VARCHAR(50) NOT NULL DEFAULT '15',
       country VARCHAR(100) NOT NULL,
       language VARCHAR(100) NOT NULL DEFAULT 'English',
       format VARCHAR(50) NOT NULL DEFAULT 'Digital',
-      premiere ENUM('World', 'International', 'National', 'Regional', 'None') NOT NULL DEFAULT 'None',
+      premiere VARCHAR(100) NULL DEFAULT 'None',
       year SMALLINT UNSIGNED NOT NULL DEFAULT 2026,
       email VARCHAR(255) NOT NULL,
       synopsis TEXT NULL,
-      status ENUM(
-        'Submitted', 'Round 1 Screening', 'Admin Review', 'Round 2 Screening',
-        'Round 3 Screening', 'Round 4 Screening', 'Official Selection',
-        'Winner', 'Finalist', 'Rejected'
-      ) NOT NULL DEFAULT 'Submitted',
+      status VARCHAR(100) NOT NULL DEFAULT 'Submitted',
       flag_id VARCHAR(50) NULL,
       overall_average_rating DECIMAL(3, 2) NULL,
       rejection_reason TEXT NULL,
@@ -82,6 +78,7 @@ async function up() {
       actor_user_id INT UNSIGNED NOT NULL,
       old_value JSON NULL,
       new_value JSON NULL,
+      notes TEXT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_sublogs_submission (submission_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -94,12 +91,12 @@ async function up() {
       event_id BIGINT UNSIGNED NOT NULL,
       film_id BIGINT UNSIGNED NOT NULL,
       round_number TINYINT UNSIGNED NOT NULL DEFAULT 1,
-      judge_user_id INT UNSIGNED NOT NULL,
+      jury_user_id INT UNSIGNED NOT NULL,
       status ENUM('assigned', 'in_progress', 'completed') NOT NULL DEFAULT 'assigned',
       assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       completed_at TIMESTAMP NULL DEFAULT NULL,
-      UNIQUE KEY uk_assignment (film_id, round_number, judge_user_id),
-      INDEX idx_screening_judge (judge_user_id),
+      UNIQUE KEY uk_assignment (film_id, round_number, jury_user_id),
+      INDEX idx_screening_judge (jury_user_id),
       INDEX idx_screening_event (event_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
@@ -111,7 +108,7 @@ async function up() {
       assignment_id BIGINT UNSIGNED NOT NULL,
       event_id BIGINT UNSIGNED NOT NULL,
       film_id BIGINT UNSIGNED NOT NULL,
-      judge_user_id INT UNSIGNED NOT NULL,
+      jury_user_id INT UNSIGNED NOT NULL,
       round_number TINYINT UNSIGNED NOT NULL DEFAULT 1,
       criteria_scores JSON NOT NULL COMMENT '{"directing": 5, "screenplay": 4, "cinematography": 5, "acting": 4, "sound": 5}',
       overall_rating DECIMAL(3, 2) NOT NULL,
@@ -195,10 +192,11 @@ async function up() {
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
       event_id BIGINT UNSIGNED NOT NULL,
       category_id INT UNSIGNED NOT NULL,
-      judge_user_id INT UNSIGNED NOT NULL,
-      voted_film_id BIGINT UNSIGNED NOT NULL,
+      jury_user_id INT UNSIGNED NOT NULL,
+      voted_film_id BIGINT UNSIGNED NULL DEFAULT NULL,
+      ranked_nominees JSON NULL DEFAULT NULL,
       submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uk_juror_vote (category_id, judge_user_id),
+      UNIQUE KEY uk_juror_vote (category_id, jury_user_id),
       INDEX idx_ballots_event (event_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);

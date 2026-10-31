@@ -52,6 +52,12 @@ async function up() {
       \`acceptance_template\` TEXT NULL,
       \`notify_rejection\` TINYINT(1) NOT NULL DEFAULT 0,
       \`rejection_template\` TEXT NULL,
+
+      -- Jury Assignment Rules & Criteria
+      \`jury_assignment_mode\` ENUM('auto', 'manual', 'none') NOT NULL DEFAULT 'auto',
+      \`jury_auto_rule\` ENUM('all_jury', 'n_jury') NOT NULL DEFAULT 'all_jury',
+      \`jury_count_per_film\` INT UNSIGNED NULL DEFAULT 1,
+      \`award_criteria\` TEXT NULL,
       
       \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       \`updated_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

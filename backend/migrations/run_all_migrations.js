@@ -17,6 +17,7 @@ const MIGRATION_SCRIPTS = [
   path.resolve(__dirname, '009_implement_scope_key_scoping.js'),
   path.resolve(__dirname, '010_sequential_6_stages_review_workflow.js'),
   path.resolve(__dirname, '011_remove_jury_addon_module.js'),
+  path.resolve(__dirname, '012_align_submissions_and_review_schema.js'),
   path.resolve(__dirname, '../src/scripts/migrate_kashish_integration.js'),
   path.resolve(__dirname, '../src/scripts/sync_specs_to_database.js'),
 ];
