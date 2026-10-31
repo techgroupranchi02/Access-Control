@@ -79,13 +79,28 @@ async function checkFestivalRoles(userIds) {
        e.event_id, 
        1 as group_id,
        'admin' as group_key, 
-       'Admin' as role_name, 
+       'Festival Owner · Admin' as role_name, 
        e.name as event_name,
        e.saas_enabled
      FROM events e
      WHERE e.user_id IN (${placeholders}) AND e.is_deleted = 0
+
+     UNION
+
+     SELECT 
+       e.event_id, 
+       1 as group_id,
+       'admin' as group_key, 
+       'Festival Owner · Admin' as role_name, 
+       e.name as event_name,
+       e.saas_enabled
+     FROM events e
+     JOIN film_festivals ff ON ff.event_id = e.event_id
+     JOIN film_festivals_claims ffc ON ffc.film_festival_id = ff.film_festival_id
+     WHERE ffc.user_id IN (${placeholders}) AND ffc.claim_request_status = 'approved' AND e.is_deleted = 0
+
      ORDER BY (saas_enabled = 1) DESC, event_id DESC`,
-    [...ids, ...ids]
+    [...ids, ...ids, ...ids]
   );
 
   return roles;
@@ -330,7 +345,8 @@ async function login(email, password) {
     }
   }
 
-  // If local bcrypt check did not match, verify against the admin login API (same like currently)
+  // If local bcrypt check did not match, verify against the admin login API
+  // Strictly check admin endpoints only — do NOT fall back to user /api/v1/login here
   if (!isAdminAuthenticated) {
     const adminApi1 = await verifyApiAuth('api.freecomers.com', '/api/v1/admin/login', normalizedEmail, password);
     if (adminApi1.ok) {
@@ -339,16 +355,6 @@ async function login(email, password) {
       const adminApi2 = await verifyApiAuth('api.autovertest.com', '/api/v1/admin/login', normalizedEmail, password);
       if (adminApi2.ok) {
         isAdminAuthenticated = true;
-      } else {
-        const adminApi3 = await verifyApiAuth('api.freecomers.com', '/api/v1/login', normalizedEmail, password);
-        if (adminApi3.ok) {
-          isAdminAuthenticated = true;
-        } else {
-          const adminApi4 = await verifyApiAuth('api.autovertest.com', '/api/v1/login', normalizedEmail, password);
-          if (adminApi4.ok) {
-            isAdminAuthenticated = true;
-          }
-        }
       }
     }
   }

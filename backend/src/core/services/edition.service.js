@@ -13,13 +13,14 @@ const { query } = require('../../config/database');
  * Active SaaS festivals (saas_enabled = 1) are always prioritized at the top.
  */
 async function getAllEditions(user) {
-  // If user is SuperAdmin or role 'admin' from Freecomers admins table, return all events
+  // If user is SuperAdmin or role 'admin' from Freecomers admins table, restrict to active SaaS festivals
   if (user && (user.isSuperAdmin || user.role === 'admin')) {
     return query(
       `SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at,
               1 as is_owner, 'Platform Admin' as role_label
        FROM events 
        WHERE is_deleted = 0 
+         AND (saas_enabled = 1 OR is_saas = 1)
        ORDER BY (saas_enabled = 1) DESC, event_id DESC`
     );
   }
