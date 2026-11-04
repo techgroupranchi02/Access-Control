@@ -10,6 +10,7 @@
 
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
+import QrCode, { qrSvgMarkup } from '../common/QrCode';
 import { 
   ConfirmationNumberIcon, 
   PrintIcon, 
@@ -155,6 +156,11 @@ export default function BulkQrModal({ open, onClose, onUpdated }) {
               display: block;
               margin: 0 auto 6px auto;
             }
+            .qr-img svg {
+              width: 100%;
+              height: 100%;
+              display: block;
+            }
             .code-text {
               font-family: monospace;
               font-size: 13px;
@@ -179,9 +185,9 @@ export default function BulkQrModal({ open, onClose, onUpdated }) {
               <div class="badge-card">
                 <div class="festival-title">KASHISH x BENGALURU 2026</div>
                 <div class="badge-type">OFFICIAL PHYSICAL DELEGATE BADGE</div>
-                <img class="qr-img" src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(q.qr_data)}" alt="${q.qr_data}" />
+                <div class="qr-img">${qrSvgMarkup(q.qr_data, 160)}</div>
                 <div class="code-text">${q.badge_serial ? 'BADGE NO: ' + q.badge_serial : 'CODE: ' + q.qr_data}</div>
-                <div class="footer-text">Scan at reception or hall entry gate</div>
+                <div class="footer-text">Scan at the registration desk or hall entry gate</div>
                 <div class="footer-text">#${String(idx + 1).padStart(3, '0')}</div>
               </div>
             `).join('')}
@@ -247,7 +253,7 @@ export default function BulkQrModal({ open, onClose, onUpdated }) {
               <span>Bulk Physical QR Generator &amp; Pre-Print Pool</span>
             </h2>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: 'var(--fc-text-muted)' }}>
-              Generate, track, and print physical badges with guaranteed unique 6-digit codes ready for reception pairing.
+              Generate, track, and print physical badges with guaranteed unique 6-digit codes ready for registration pairing.
             </p>
           </div>
           <button 
@@ -565,12 +571,7 @@ export default function BulkQrModal({ open, onClose, onUpdated }) {
                     </div>
 
                     <div style={{ background: '#ffffff', padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', marginBottom: '8px' }}>
-                      <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(item.qr_data)}`} 
-                        alt={item.qr_data}
-                        style={{ width: '120px', height: '120px', display: 'block' }}
-                        loading="lazy"
-                      />
+                      <QrCode value={item.qr_data} size={120} />
                     </div>
 
                     <div style={{

@@ -17,6 +17,7 @@ import useAttendeeSearch from '../hooks/useAttendeeSearch';
 import SearchInput from '../components/common/SearchInput';
 import RegistrationHeader from '../components/registration/RegistrationHeader';
 import { useCanViewRoster } from '../hooks/useCanViewRoster';
+import QrCode from '../components/common/QrCode';
 import {
   ConfirmationNumberIcon, 
   QrCodeScannerIcon, 
@@ -291,11 +292,7 @@ export default function AttendeeAssignQrPage() {
             }}>
               {/* QR always on white so scanners can read it in both themes */}
               <div style={{ background: '#ffffff', padding: '8px', borderRadius: '10px', border: '1px solid var(--fc-border)', flexShrink: 0 }}>
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(successResult.code)}`}
-                  alt={`QR code for badge ${successResult.badge_serial || ''}`}
-                  style={{ width: '112px', height: '112px', display: 'block' }}
-                />
+                <QrCode value={successResult.code} size={112} />
               </div>
 
               <div style={{ flex: '1 1 200px', minWidth: 0 }}>
@@ -521,7 +518,7 @@ export default function AttendeeAssignQrPage() {
               </div>
             </div>
 
-            {/* Reception Desk Operational Info */}
+            {/* Registration Desk Operational Info */}
             <div style={{
               background: 'rgba(168, 47, 47, 0.04)',
               border: '1px dashed rgba(168, 47, 47, 0.28)',
@@ -531,7 +528,7 @@ export default function AttendeeAssignQrPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                 <PlaceIcon size={15} style={{ color: 'var(--fc-brand, var(--fc-brand-text))' }} />
                 <span style={{ fontWeight: 800, fontSize: '0.78rem', letterSpacing: '0.03em', textTransform: 'uppercase', color: 'var(--fc-brand, var(--fc-brand-text))' }}>
-                  RECEPTION INTAKE PROTOCOL
+                  REGISTRATION INTAKE PROTOCOL
                 </span>
               </div>
               <div style={{ fontSize: '0.78rem', color: 'var(--fc-text-secondary)', lineHeight: 1.5 }}>

@@ -113,7 +113,7 @@ export function getPrimaryAccessibleRoute(isModuleEnabled, hasPermission, isSupe
     return '/submissions';
   }
 
-  // 4. Audience & Voting (Volunteer, Operations, Reception Desk)
+  // 4. Audience & Voting (Volunteer, Operations, Registration Desk)
   if (isModOn('audience')) {
     if (canAccess('registration.view_roster')) return '/audience';
     if (canAccess('registration.create')) return '/registration/add';

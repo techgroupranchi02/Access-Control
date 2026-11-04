@@ -92,5 +92,5 @@ The production data and the other writers of `saas_qr` changed some details of t
    - Staff gate scan and badge check: 100 failures per user per 5 min.
 
 **Follow-ups (not done here)**
-- **QR images are rendered by `api.qrserver.com`.** Every badge credential (UUID) is sent to a third party when it is displayed or printed. Generate the images locally instead, for example with the `qrcode` npm package.
+- ~~**QR images are rendered by `api.qrserver.com`.**~~ **Done (2026-11-04):** QR codes are now drawn locally as inline SVG (`components/common/QrCode.jsx`, `qrcode` package). This removes the third-party leak, and also the 5–10 s (sometimes 100 s+) load delays caused by that service stalling.
 - **festease and Laravel.** If `festease_backend` is ever restarted, or Laravel issuance is kept, they should create rows with a `serial_no` too. Until then, their badges can only be scanned, not typed.

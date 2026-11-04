@@ -14,6 +14,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import SearchInput from '../components/common/SearchInput';
+import QrCode, { qrSvgMarkup } from '../components/common/QrCode';
 import {
   ConfirmationNumberIcon, 
   PrintIcon, 
@@ -192,11 +193,12 @@ export default function BulkQrManagementPage() {
         <div class="festival-title">KASHISH 2026</div>
         <div class="badge-subtitle">DELEGATE PASS BADGE</div>
         <div class="qr-container">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(item.qr_data)}" alt="${item.qr_data}" />
+          <div class="qr-wrap">
+            <div>${qrSvgMarkup(item.qr_data, 180)}</div>
+            <div class="stock-index">#${String(idx + 1).padStart(3, '0')}</div>
+          </div>
         </div>
         <div class="code-box">${item.badge_serial ? 'BADGE NO: ' + item.badge_serial : 'CODE: ' + item.qr_data}</div>
-        <div class="instruction">${item.attendee_name ? ('Assigned: ' + item.attendee_name) : 'Scan or enter badge number at reception'}</div>
-        <div class="stock-index">#${String(idx + 1).padStart(3, '0')}</div>
       </div>
     `).join('');
 
@@ -250,16 +252,28 @@ export default function BulkQrManagementPage() {
               justify-content: center;
               margin-bottom: 8px;
             }
-            .qr-container img {
+            .qr-container svg {
               width: 125px;
               height: 125px;
               display: block;
             }
+            /* QR + stock number: the number sits vertically on the right, centred on the QR */
+            .qr-wrap {
+              position: relative;
+              display: inline-block;
+            }
             .stock-index {
+              position: absolute;
+              left: 100%;
+              top: 50%;
+              transform: translateY(-50%);
+              margin-left: 4px;
+              writing-mode: vertical-rl;
               font-size: 7pt;
-              color: #94a3b8;
-              margin-top: 2px;
-              letter-spacing: 0.04em;
+              font-weight: 700;
+              color: #64748b;
+              letter-spacing: 0.08em;
+              white-space: nowrap;
             }
             .code-box {
               font-family: monospace;
@@ -271,11 +285,6 @@ export default function BulkQrManagementPage() {
               display: inline-block;
               letter-spacing: 0.12em;
               margin-bottom: 4px;
-            }
-            .instruction {
-              font-size: 7.5px;
-              color: #94a3b8;
-              font-weight: 600;
             }
           </style>
         </head>
@@ -322,7 +331,7 @@ export default function BulkQrManagementPage() {
             <span>Bulk Physical QR Generator & Pre-Print Pool</span>
           </h1>
           <p style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem', margin: '4px 0 0 0' }}>
-            Pre-generate, track, export, and print physical badges with guaranteed unique 6-digit codes ready for reception desk pairing.
+            Pre-generate, track, export, and print physical badges with guaranteed unique 6-digit codes ready for registration desk pairing.
           </p>
         </div>
 
@@ -669,12 +678,7 @@ export default function BulkQrManagementPage() {
                       </div>
 
                       <div style={{ background: '#ffffff', padding: '8px', borderRadius: '8px', border: '1px solid var(--fc-border)', marginBottom: '10px', boxShadow: 'inset 0 0 4px rgba(0,0,0,0.05)' }}>
-                        <img 
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(item.qr_data)}`} 
-                          alt={item.qr_data}
-                          style={{ width: '120px', height: '120px', display: 'block' }}
-                          loading="lazy"
-                        />
+                        <QrCode value={item.qr_data} size={120} />
                       </div>
                     </div>
 

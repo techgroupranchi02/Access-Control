@@ -25,9 +25,28 @@ import {
   CalendarTodayIcon,
   QrCodeScannerIcon,
   EditIcon,
-  FilterListIcon
+  FilterListIcon,
+  FileDownloadIcon
 } from '../components/common/Icons';
 import AttendeeFilterDrawer from '../components/registration/AttendeeFilterDrawer';
+import { useFestivalConfig } from '../hooks/useFestivalConfig';
+
+import QrCode from '../components/common/QrCode';
+// ── CSV export helpers ─────────────────────────────────────────────────────
+// Neutralise spreadsheet formulas in user-entered text (=, @, or +/- followed by a non-number)
+function csvCell(value) {
+  let v = value === null || value === undefined ? '' : String(value);
+  if (/^[=@\t\r]/.test(v) || /^[+-][^\d\s]/.test(v)) v = `'${v}`;
+  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
+function csvValue(value) {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return value.join('; ');
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return value;
+}
 
 /** Compact icon-only row action; the label is shown as a tooltip and read by screen readers. */
 function IconAction({ icon, label, onClick, tone }) {
@@ -80,11 +99,11 @@ const DEFAULT_FAQS = [
   },
   {
     question: 'Who Can Attend (Eligibility & Verification)',
-    answer: '<ul><li><strong>18+ Only:</strong> Only individuals 18 years and above (as of November 19, 2026) are permitted to attend the festival.</li><li><strong>Mandatory Registration:</strong> Registration is compulsory to access any film screenings, ceremonies, or panel discussions.</li><li><strong>Badge Access:</strong> Admission into all NGMA festival halls is reserved exclusively for pre-registered delegates holding a verified Festival Pass.</li><li><strong>Photo ID:</strong> Please carry a valid photo ID / age proof document for physical verification at the reception counter.</li></ul>'
+    answer: '<ul><li><strong>18+ Only:</strong> Only individuals 18 years and above (as of November 19, 2026) are permitted to attend the festival.</li><li><strong>Mandatory Registration:</strong> Registration is compulsory to access any film screenings, ceremonies, or panel discussions.</li><li><strong>Badge Access:</strong> Admission into all NGMA festival halls is reserved exclusively for pre-registered delegates holding a verified Festival Pass.</li><li><strong>Photo ID:</strong> Please carry a valid photo ID / age proof document for physical verification at the registration counter.</li></ul>'
   },
   {
     question: 'How to Get Your Festival Pass: Online & Spot Registration',
-    answer: '<p><strong>1. ONLINE REGISTRATION</strong><br/>Register conveniently online via <strong>Freecomers</strong> on this page before arriving at the venue.<br/>Please present your digital pass or Serial Number along with a valid age proof document at the counter when collecting your physical pass badge.</p><p><strong>2. SPOT REGISTRATION</strong><br/>For individuals unable to register online beforehand, on-site manual spot registration will be available at the NGMA venue desk:<br/>• NGMA Reception Desk: November 20 – 22 | 10:15 AM – 5:30 PM</p>'
+    answer: '<p><strong>1. ONLINE REGISTRATION</strong><br/>Register conveniently online via <strong>Freecomers</strong> on this page before arriving at the venue.<br/>Please present your digital pass or Serial Number along with a valid age proof document at the counter when collecting your physical pass badge.</p><p><strong>2. SPOT REGISTRATION</strong><br/>For individuals unable to register online beforehand, on-site manual spot registration will be available at the NGMA venue desk:<br/>• NGMA Registration Desk: November 20 – 22 | 10:15 AM – 5:30 PM</p>'
   },
   {
     question: 'Collecting Your Festival Pass (Badge Pickup & Timing)',
@@ -105,6 +124,7 @@ const DEFAULT_FAQS = [
 ];
 
 export default function RegistrationPage() {
+  const { currentFestival } = useFestivalConfig();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -264,9 +284,10 @@ export default function RegistrationPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      // (Previously a 4th, unused attendee request shifted every result by one: categories and the
+      // form schema never loaded on this page.)
       const [attRes, catRes, formRes] = await Promise.all([
-        api.get('/registration/attendees', { params: { search, category: selectedCat } }).catch(() => ({ data: { attendees: [] } })),
-        api.get('/registration/attendees', { params: { search } }).catch(() => ({ data: { attendees: [] } })),
+        api.get('/registration/attendees', { params: { search, category: selectedCat, limit: 5000 } }).catch(() => ({ data: { attendees: [] } })),
         api.get('/audience/categories').catch(() => ({ data: { categories: [] } })),
         api.get('/audience/registration-form').catch(() => ({ data: { schema: null } }))
       ]);
@@ -579,6 +600,72 @@ const startIndex = (validCurrentPage - 1) * pageSize;
 const endIndex = Math.min(startIndex + pageSize, filteredAttendees.length);
 const paginatedAttendees = filteredAttendees.slice(startIndex, endIndex);
 
+// ── CSV export: column definitions (core fields + this festival's registration form questions) ──
+const exportColumns = React.useMemo(() => {
+  const coreKeys = new Set(['name', 'email', 'phone', 'delegate_category', 'serial_no']);
+  const core = [
+    { key: 'serial_no', label: 'Delegate ID', get: a => a.serial_no || a.attendee_id },
+    { key: 'name', label: 'Name', get: a => a.name },
+    { key: 'email', label: 'Email', get: a => a.email },
+    { key: 'phone', label: 'Phone', get: a => a.phone },
+    { key: 'category', label: 'Category', get: a => a.badge_ribbon || a.delegate_category },
+    { key: 'badge_status', label: 'Badge Status', get: a => (a.qr_token || a.status === 'badge_issued') ? 'QR Issued' : 'Pending Arrival' },
+    { key: 'badge_serial', label: 'Badge No.', get: a => a.badge_serial || '' },
+    { key: 'screenings_attended', label: 'Screenings Attended', get: a => Number(a.screenings_attended) || 0 },
+    { key: 'registered_at', label: 'Registered At', get: a => (a.registered_at ? new Date(a.registered_at).toLocaleString('en-IN') : '') }
+  ];
+  const formCols = (formSchema?.fields || [])
+    .filter(fld => fld && fld.key && !coreKeys.has(fld.key))
+    .map(fld => ({
+      key: `form:${fld.key}`,
+      label: fld.label || fld.key,
+      group: 'form',
+      get: a => csvValue((a.custom_data || {})[fld.key] !== undefined ? a.custom_data[fld.key] : a[fld.key])
+    }));
+  return [...core, ...formCols];
+}, [formSchema]);
+
+const exportPrefKey = `fc_delegate_export_cols_${currentFestival?.id || 'default'}`;
+const [showExportModal, setShowExportModal] = useState(false);
+const [exportSelected, setExportSelected] = useState(() => new Set());
+
+const openExportModal = () => {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(exportPrefKey) || 'null'); } catch { saved = null; }
+  const valid = new Set(exportColumns.map(c => c.key));
+  const initial = Array.isArray(saved) ? saved.filter(k => valid.has(k)) : [];
+  setExportSelected(new Set(initial.length ? initial : exportColumns.map(c => c.key)));
+  setShowExportModal(true);
+};
+
+const toggleExportColumn = (key) => {
+  setExportSelected(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+};
+
+// Download exactly what is listed (current tab, search and filters; all pages) with the chosen columns
+const handleExportCsv = () => {
+  const cols = exportColumns.filter(c => exportSelected.has(c.key));
+  if (cols.length === 0) return;
+  try { localStorage.setItem(exportPrefKey, JSON.stringify(cols.map(c => c.key))); } catch { /* storage unavailable */ }
+  const header = cols.map(c => c.label);
+  const rows = filteredAttendees.map(a => cols.map(c => c.get(a)));
+  const csv = '﻿' + [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+  const slug = (currentFestival?.name || 'festival').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${slug}-delegates-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setShowExportModal(false);
+};
+
 
 return (
   <div className="fc-registration-page">
@@ -589,7 +676,7 @@ return (
           Registration & Passes
         </h1>
         <p className="fc-page-subtitle" style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem' }}>
-          Two-step delegate lifecycle: Online pre-registration &rarr; Venue reception ID verification &rarr; Physical QR badge issuance
+          Two-step delegate lifecycle: Online pre-registration &rarr; Venue registration ID verification &rarr; Physical QR badge issuance
         </p>
       </div>
 
@@ -856,6 +943,36 @@ return (
                   {activeFilterCount}
                 </span>
               )}
+            </button>
+
+            {/* Export the delegates currently listed (tab + search + filters, all pages) */}
+            <button
+              type="button"
+              onClick={openExportModal}
+              disabled={filteredAttendees.length === 0}
+              title={`Download ${filteredAttendees.length} delegate${filteredAttendees.length === 1 ? '' : 's'} as CSV`}
+              style={{
+                height: '40px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '7px',
+                padding: '0 16px',
+                borderRadius: '8px',
+                border: '1px solid var(--fc-border)',
+                background: 'var(--fc-surface)',
+                color: 'var(--fc-text-main)',
+                fontWeight: 600,
+                fontSize: '0.88rem',
+                cursor: filteredAttendees.length === 0 ? 'not-allowed' : 'pointer',
+                opacity: filteredAttendees.length === 0 ? 0.55 : 1,
+                transition: 'background 0.15s ease',
+                whiteSpace: 'nowrap'
+              }}
+              onMouseEnter={(e) => { if (filteredAttendees.length) e.currentTarget.style.background = 'var(--fc-surface-hover)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--fc-surface)'; }}
+            >
+              <FileDownloadIcon size={16} />
+              <span>Export CSV</span>
             </button>
           </div>
 
@@ -1523,7 +1640,7 @@ return (
                       Attendee Accreditation &amp; Pass
                     </h3>
                     <p style={{ margin: '3px 0 0 0', fontSize: '0.8rem', color: 'var(--fc-text-muted)' }}>
-                      Festival reception desk &amp; onsite credential record
+                      Festival registration desk &amp; onsite credential record
                     </p>
                   </div>
                   <div>
@@ -1659,15 +1776,11 @@ return (
                     )}
                   </div>
 
-                  {/* QR Code Section: Live QR if Issued, or Reception Issue Action if Pending */}
+                  {/* QR Code Section: Live QR if Issued, or Registration Issue Action if Pending */}
                   {badgeModal.qr_token ? (
                     <div style={{ margin: '0 14px 14px 14px', padding: '14px', background: 'var(--fc-surface-card)', border: '1px solid var(--fc-border)', borderRadius: '10px', textAlign: 'center' }}>
                       <div style={{ display: 'inline-block', background: '#ffffff', padding: '10px', borderRadius: '10px', border: '1px solid var(--fc-border)', boxShadow: 'var(--shadow-sm)', marginBottom: '8px' }}>
-                        <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(badgeModal.qr_token)}`}
-                          alt={`QR Badge ${serialNo}`}
-                          style={{ width: '140px', height: '140px', display: 'block' }}
-                        />
+                        <QrCode value={badgeModal.qr_token} size={140} />
                       </div>
                       <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--fc-success-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
                         <CheckCircleIcon size={15} /> Active Verified Gate Credential
@@ -1687,7 +1800,7 @@ return (
                         </span>
                       </div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--fc-text-secondary)', lineHeight: 1.45, marginBottom: '12px' }}>
-                        Verify attendee photo ID (18+) at the NGMA reception desk, then proceed to pair a pre-printed physical badge or issue a digital pass.
+                        Verify attendee photo ID (18+) at the NGMA registration desk, then proceed to pair a pre-printed physical badge or issue a digital pass.
                       </div>
                       <button
                         type="button"
@@ -1793,6 +1906,82 @@ return (
             </div>
           );
         })()}
+
+        {/* ── MODAL: CSV EXPORT, CHOOSE COLUMNS ─────────────────────────────── */}
+        {showExportModal && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-cols-title"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowExportModal(false); }}
+            onKeyDown={(e) => { if (e.key === 'Escape') setShowExportModal(false); }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '16px' }}
+          >
+            <div style={{ background: 'var(--fc-surface-card)', color: 'var(--fc-text-main)', border: '1px solid var(--fc-border)', borderRadius: '14px', boxShadow: 'var(--shadow-xl)', width: '100%', maxWidth: '560px', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+              {/* Header */}
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--fc-border)', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 id="export-cols-title" style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Export CSV: choose columns</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--fc-text-muted)' }}>
+                    {filteredAttendees.length} delegate{filteredAttendees.length === 1 ? '' : 's'} from the current view (tab, search and filters).
+                  </p>
+                </div>
+                <button type="button" onClick={() => setShowExportModal(false)} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fc-text-muted)', padding: '4px', display: 'inline-flex' }}>
+                  <CloseIcon size={16} />
+                </button>
+              </div>
+
+              {/* Select all / clear */}
+              <div style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '14px', borderBottom: '1px solid var(--fc-border)', fontSize: '0.8rem' }}>
+                <span style={{ color: 'var(--fc-text-secondary)', fontWeight: 600 }}>{exportSelected.size} of {exportColumns.length} selected</span>
+                <span style={{ flex: 1 }} />
+                <button type="button" onClick={() => setExportSelected(new Set(exportColumns.map(c => c.key)))} style={{ background: 'none', border: 'none', color: 'var(--fc-brand-text)', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Select all</button>
+                <button type="button" onClick={() => setExportSelected(new Set())} style={{ background: 'none', border: 'none', color: 'var(--fc-text-secondary)', fontWeight: 700, cursor: 'pointer', padding: 0 }}>Clear all</button>
+              </div>
+
+              {/* Column list */}
+              <div style={{ padding: '12px 20px', overflowY: 'auto', flex: 1 }}>
+                {[
+                  { title: 'Delegate details', cols: exportColumns.filter(c => c.group !== 'form') },
+                  { title: 'Registration form answers', cols: exportColumns.filter(c => c.group === 'form') }
+                ].filter(g => g.cols.length > 0).map(g => (
+                  <div key={g.title} style={{ marginBottom: '14px' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--fc-text-muted)', marginBottom: '6px' }}>{g.title}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '4px 12px' }}>
+                      {g.cols.map(c => (
+                        <label key={c.key} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '6px 4px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--fc-text-main)' }}>
+                          <input
+                            type="checkbox"
+                            checked={exportSelected.has(c.key)}
+                            onChange={() => toggleExportColumn(c.key)}
+                            style={{ marginTop: '2px', accentColor: 'var(--fc-brand)', flexShrink: 0 }}
+                          />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }} title={c.label}>{c.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--fc-border)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" onClick={() => setShowExportModal(false)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface-card)', color: 'var(--fc-text-main)', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportCsv}
+                  disabled={exportSelected.size === 0 || filteredAttendees.length === 0}
+                  style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--fc-brand)', background: 'var(--fc-brand)', color: 'var(--fc-text-on-brand)', fontWeight: 700, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: exportSelected.size === 0 ? 'not-allowed' : 'pointer', opacity: exportSelected.size === 0 || filteredAttendees.length === 0 ? 0.55 : 1 }}
+                >
+                  <FileDownloadIcon size={15} />
+                  Download CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── MODAL: CSV BULK IMPORTER ────────────────────────────────────────── */}
         {showImportModal && (

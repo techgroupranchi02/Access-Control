@@ -13,6 +13,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import { useCanViewRoster } from '../hooks/useCanViewRoster';
+import QrCode from '../components/common/QrCode';
 import {
   ConfirmationNumberIcon, 
   HelpIcon, 
@@ -450,11 +451,7 @@ export default function AttendeeEditPage() {
               {attendee?.qr_token ? (
                 <div style={{ textAlign: 'center', marginBottom: '12px' }}>
                   <div style={{ display: 'inline-block', background: '#ffffff', padding: '8px', borderRadius: '8px', border: '1px solid var(--fc-border)', boxShadow: 'var(--shadow-sm)' }}>
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(attendee.qr_token)}`}
-                      alt={`Badge QR ${serialNo}`}
-                      style={{ width: '120px', height: '120px', display: 'block' }}
-                    />
+                    <QrCode value={attendee.qr_token} size={120} />
                   </div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--fc-success-text)', fontWeight: 800, marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                     <CheckCircleIcon size={12} /> Active Gate Credential
@@ -468,7 +465,7 @@ export default function AttendeeEditPage() {
               ) : (
                 <div style={{ padding: '10px 12px', background: 'rgba(245, 158, 11, 0.08)', border: '1px dashed rgba(245, 158, 11, 0.35)', borderRadius: '8px', marginBottom: '12px', fontSize: '0.76rem', color: 'var(--fc-warning-text)' }}>
                   <strong>QR Badge Pending Arrival:</strong><br />
-                  Will be issued at the NGMA reception desk upon physical check-in.
+                  Will be issued at the NGMA registration desk upon physical check-in.
                 </div>
               )}
 

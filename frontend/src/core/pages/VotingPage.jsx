@@ -12,6 +12,7 @@
 
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import QrCode from '../components/common/QrCode';
 import {
   MovieIcon,
   TrophyIcon,
@@ -1491,11 +1492,7 @@ export default function VotingPage() {
 
             {/* Simulated Clean QR Code Graphic for Projection */}
             <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', display: 'inline-block', boxShadow: '0 10px 25px rgba(0,0,0,0.3)', marginBottom: '20px' }}>
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(window.location.origin + '/vote/' + projectorModal.qr_token)}`}
-                alt="Audience Voting QR Code"
-                style={{ width: '240px', height: '240px', display: 'block' }}
-              />
+              <QrCode value={window.location.origin + '/vote/' + projectorModal.qr_token} size={240} />
             </div>
 
             <div style={{ background: '#1e293b', padding: '14px', borderRadius: '10px', maxWidth: '440px', margin: '0 auto 24px auto', fontSize: '0.9rem', color: '#cbd5e1' }}>

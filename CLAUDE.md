@@ -93,6 +93,7 @@ npm run lint
   - `src/core/pages/*Page.jsx`: large page components that mostly use inline styles and CSS variables (`--fc-*`).
   - `src/core/components/`, `src/core/context/`, `src/core/hooks/`.
 - **QR scanning** uses `html5-qrcode` in `AttendancePage.jsx`, `AttendeeAssignQrPage.jsx` and `components/registration/AssignQrModal.jsx`.
+- **QR rendering** is local: use `components/common/QrCode.jsx` (`<QrCode value size />`, or `qrSvgMarkup()` for print HTML), built on the `qrcode` package. Never use an external QR image service: it is slow and sends badge credentials off-site.
 
 ## Conventions
 - **Routers**: create the router, call `router.use(authenticate)`, add `requireModule(...)`, then add `requirePermission(...)` on each route.
@@ -139,4 +140,3 @@ npm run lint
 ## Known risks (not yet fixed)
 - `config/environment.js` hardcodes a fallback `KASHISH_API_KEY`.
 - The rate limits are effectively off: the general limit is 50000 requests per 15 minutes, and credential and public-vote endpoints have no limiter of their own.
-- QR images are rendered through the third-party `api.qrserver.com`, which sends badge credentials off-site (ADR 0001 follow-up).

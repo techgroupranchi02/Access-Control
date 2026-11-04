@@ -12,6 +12,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import api from '../../services/api';
 import useAttendeeSearch from '../../hooks/useAttendeeSearch';
+import QrCode from '../common/QrCode';
 import { 
   ConfirmationNumberIcon, 
   QrCodeScannerIcon, 
@@ -331,11 +332,7 @@ export default function AssignQrModal({
               </div>
 
               <div style={{ background: '#ffffff', padding: '10px', borderRadius: '10px', border: '1px solid var(--fc-border)', boxShadow: 'var(--shadow-sm)' }}>
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(successResult.code)}`}
-                  alt={`QR ${successResult.code}`}
-                  style={{ width: '140px', height: '140px', display: 'block' }}
-                />
+                <QrCode value={successResult.code} size={140} />
                 <div style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '1.1rem', color: 'var(--fc-text-main)', marginTop: '6px' }}>
                   {successResult.badge_serial ? `BADGE NO: ${successResult.badge_serial}` : `CODE: ${successResult.code}`}
                 </div>

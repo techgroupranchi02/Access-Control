@@ -475,10 +475,10 @@ async function performScreeningCheckin(req, res) {
         return res.status(404).json({ error: 'Badge not found for this festival. Check the code and try again.' });
       }
 
-      // Enforce 2-step verification: Attendee must have been issued a QR badge at reception
+      // Enforce 2-step verification: Attendee must have been issued a QR badge at the registration desk
       if (!attendeeRecord.qr_token && attendeeRecord.status !== 'badge_issued') {
         return res.status(400).json({
-          error: `Badge Not Issued: Attendee "${attendeeRecord.name}" (${rawToken || '#' + targetAttendeeId}) has pre-registered, but their verified QR pass has not been issued at reception yet. Please direct them to the NGMA reception desk to collect their printed badge.`
+          error: `Badge Not Issued: Attendee "${attendeeRecord.name}" (${rawToken || '#' + targetAttendeeId}) has pre-registered, but their verified QR pass has not been issued at the registration desk yet. Please direct them to the NGMA registration desk to collect their printed badge.`
         });
       }
 
@@ -1299,7 +1299,8 @@ async function listAttendance(req, res) {
       const eventId = getEventId(req);
       const search = req.query.search ? req.query.search.trim() : '';
       const category = req.query.category;
-      const limit = parseInt(req.query.limit, 10) || 100;
+      // Default 100 for lookups; the Audience page asks for the full roster (capped for safety)
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 5000);
 
       let sql = `
       SELECT 
