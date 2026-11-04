@@ -15,8 +15,10 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import useAttendeeSearch from '../hooks/useAttendeeSearch';
 import RegistrationHeader from '../components/registration/RegistrationHeader';
+import { useCanViewRoster } from '../hooks/useCanViewRoster';
 import {
-  CalendarTodayIcon 
+  CalendarTodayIcon,
+  CloseIcon
 } from '../components/common/Icons';
 
 export default function AttendeeCreatePage() {
@@ -33,8 +35,13 @@ export default function AttendeeCreatePage() {
   const [badgeCode, setBadgeCode] = useState('');
   const [badgeStatus, setBadgeStatus] = useState(null);
 
+  // Users without the full delegate list (desk volunteers) stay on this page after saving
+  const canViewRoster = useCanViewRoster();
+  const [successInfo, setSuccessInfo] = useState(null); // { message, attendeeId, paired }
+  const formDefaultsRef = useRef({}); // schema/category-driven defaults applied after load
+
   // Form State
-  const [intakeForm, setIntakeForm] = useState({
+  const makeBlankForm = () => ({
     name: '',
     email: '',
     phone: '',
@@ -53,6 +60,14 @@ export default function AttendeeCreatePage() {
     certified_18_plus: true,
     custom_data: {}
   });
+  const [intakeForm, setIntakeForm] = useState(makeBlankForm);
+
+  const resetForm = () => {
+    setIntakeForm({ ...makeBlankForm(), ...formDefaultsRef.current });
+    setBadgeCode('');
+    setBadgeStatus(null);
+    setErrorMessage(null);
+  };
 
   const convertToIsoDate = (val) => {
     if (!val) return '';
@@ -83,16 +98,12 @@ export default function AttendeeCreatePage() {
           setFormSchema(schema);
 
           const passField = schema.fields?.find(f => f.key === 'pass_type');
-          setIntakeForm(prev => ({
-            ...prev,
-            pass_type: passField?.options?.[0] || prev.pass_type,
-            delegate_category: loadedCats.length > 0 ? loadedCats[0].code : prev.delegate_category
-          }));
+          if (passField?.options?.[0]) formDefaultsRef.current.pass_type = passField.options[0];
+          if (loadedCats.length > 0) formDefaultsRef.current.delegate_category = loadedCats[0].code;
+          setIntakeForm(prev => ({ ...prev, ...formDefaultsRef.current }));
         } else if (loadedCats.length > 0) {
-          setIntakeForm(prev => ({
-            ...prev,
-            delegate_category: loadedCats[0].code
-          }));
+          formDefaultsRef.current.delegate_category = loadedCats[0].code;
+          setIntakeForm(prev => ({ ...prev, ...formDefaultsRef.current }));
         }
       })
       .catch((err) => {
@@ -284,22 +295,31 @@ export default function AttendeeCreatePage() {
       let successMessage = `Success! Attendee registered and Delegate Pass generated for ${intakeForm.name.trim()}.`;
 
       // Pair the pre-printed pass right away (spot registration in one step)
+      let paired = false;
       if (cleanBadge && newAttendee?.attendee_id) {
         try {
           const assignRes = await api.post(`/registration/attendees/${newAttendee.attendee_id}/assign-qr`, { qr_code: cleanBadge });
           newAttendee = { ...newAttendee, ...assignRes.data?.attendee };
+          paired = true;
           successMessage = `Success! ${intakeForm.name.trim()} registered and pass ${assignRes.data?.badge_serial || cleanBadge} assigned.`;
         } catch (assignErr) {
           successMessage = `${intakeForm.name.trim()} was registered, but the pass could not be assigned: ${assignErr.response?.data?.error || 'unknown error'}. Assign it from the delegate's badge.`;
         }
       }
 
-      navigate('/audience', {
-        state: {
-          newlyAddedAttendee: newAttendee,
-          successMessage
-        }
-      });
+      if (canViewRoster) {
+        navigate('/audience', {
+          state: {
+            newlyAddedAttendee: newAttendee,
+            successMessage
+          }
+        });
+      } else {
+        // Desk volunteer: stay here, clear the form for the next delegate
+        resetForm();
+        setSuccessInfo({ message: successMessage, attendeeId: newAttendee?.attendee_id, paired });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     } catch (err) {
       setErrorMessage(err.response?.data?.error || 'Failed to register attendee. Please verify inputs.');
     } finally {
@@ -310,6 +330,33 @@ export default function AttendeeCreatePage() {
   return (
     <div className="fc-registration-create-page animate-fade-in" style={{ paddingBottom: '80px', maxWidth: '1100px', margin: '0 auto' }}>
       <RegistrationHeader active="spot" />
+
+      {successInfo && (
+        <div role="status" style={{
+          marginBottom: '16px', padding: '12px 16px', borderRadius: '10px',
+          background: 'var(--fc-success-bg)', border: '1px solid var(--fc-success-border)', color: 'var(--fc-success-text)',
+          display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap'
+        }}>
+          <span style={{ flex: '1 1 260px', fontWeight: 600, fontSize: '0.88rem' }}>{successInfo.message}</span>
+          {!successInfo.paired && successInfo.attendeeId && (
+            <button
+              type="button"
+              onClick={() => navigate(`/registration/assign-qr/${successInfo.attendeeId}`)}
+              style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid var(--fc-brand)', background: 'var(--fc-brand)', color: 'var(--fc-text-on-brand)', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
+            >
+              Assign QR now
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setSuccessInfo(null)}
+            aria-label="Dismiss"
+            style={{ background: 'transparent', border: 'none', color: 'var(--fc-success-text)', cursor: 'pointer', padding: '4px', display: 'inline-flex' }}
+          >
+            <CloseIcon size={14} />
+          </button>
+        </div>
+      )}
 
       {/* ── Error Banner ──────────────────────────────────────────────────── */}
       {errorMessage && (
@@ -932,7 +979,7 @@ export default function AttendeeCreatePage() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--fc-border)' }}>
                 <button
                   type="button"
-                  onClick={() => navigate('/audience')}
+                  onClick={() => (canViewRoster ? navigate('/audience') : resetForm())}
                   style={{
                     padding: '10px 22px',
                     borderRadius: '8px',

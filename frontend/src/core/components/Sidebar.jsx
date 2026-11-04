@@ -205,6 +205,9 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
   const canAccessAttendance = isAudienceModEnabled && (isAdminUser || canAny(['attendance.view', 'attendance:view']));
   const canAccessVoting = isAudienceModEnabled && (isAdminUser || canAny(['voting.view_results', 'voting:view_results', 'voting.vote', 'voting:vote']));
   const canAccessAudience = canAccessRegistration || canAccessAttendance || canAccessVoting;
+  // Full delegate list (/audience) is permission-based (registration:view_roster); desk volunteers land on Registration
+  const canViewRoster = isAudienceModEnabled && (isAdminUser || canAny(['registration.view_roster', 'registration:view_roster']));
+  const audienceHomeRoute = canViewRoster ? '/audience' : (canAccessRegistration ? '/registration/add' : '/attendance');
 
   const isMarketingModEnabled = isModuleEnabled('marketing');
   const canAccessMarketingButtons = isMarketingModEnabled && (isAdminUser || canAny(['marketing.view', 'marketing:view', 'marketing.manage', 'marketing:manage']));
@@ -545,9 +548,10 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 0 }}
                 >
                   <NavLink
-                    to="/audience"
+                    to={audienceHomeRoute}
+                    end
                     title="Audience"
-                    className={({ isActive }) => `fc-nav-item ${isActive || currentPath === '/audience' || currentPath === '/registration' ? 'active' : ''}`}
+                    className={() => `fc-nav-item ${(canViewRoster && (currentPath === '/audience' || currentPath === '/registration')) ? 'active' : ''}`}
                     style={{ flex: 1, padding: '7px 10px', background: 'transparent', border: 'none', textDecoration: 'none', display: 'flex', alignItems: 'center' }}
                     onClick={() => {
                       if (!openModules.audience) {

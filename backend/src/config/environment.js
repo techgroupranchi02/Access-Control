@@ -43,6 +43,13 @@ function resolveSecret(envKey, fileName) {
   return crypto.randomBytes(32).toString('hex');
 }
 
+const FREECOMERS_API_URL = (
+  process.env.FREECOMERS_API_URL ||
+  ((process.env.FRONTEND_URL || '').includes('autovertest.com')
+    ? 'https://api.autovertest.com'
+    : 'https://api.freecomers.com')
+).replace(/\/$/, '');
+
 const env = {
   // Application
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -76,14 +83,13 @@ const env = {
   cookieSecure: process.env.NODE_ENV === 'production',
   cookieSameSite: 'lax',
 
-  // Freecomers Laravel API used to verify admin-panel JWTs (see docs/adr/0002).
-  // Defaults by environment family of FRONTEND_URL (autovertest = dev/staging).
-  freecomersAdminApiUrl: (
-    process.env.FREECOMERS_ADMIN_API_URL ||
-    ((process.env.FRONTEND_URL || '').includes('autovertest.com')
-      ? 'https://api.autovertest.com'
-      : 'https://api.freecomers.com')
-  ).replace(/\/$/, ''),
+  // Freecomers Laravel API for this environment: media URLs, login fallback, admin-panel JWT
+  // verification (docs/adr/0002). Set FREECOMERS_API_URL; otherwise it follows the environment
+  // family of FRONTEND_URL (autovertest = dev/staging, anything else = production).
+  freecomersApiUrl: FREECOMERS_API_URL,
+  freecomersAdminApiUrl: process.env.FREECOMERS_ADMIN_API_URL
+    ? process.env.FREECOMERS_ADMIN_API_URL.replace(/\/$/, '')
+    : FREECOMERS_API_URL,
 
   // Kashish External Votes API
   kashishApiKey: process.env.KASHISH_API_KEY || 'kashish_live_sec_8f4b1e7d2a9c3b6e5a0d1f4c',

@@ -49,6 +49,7 @@ import AttendeeAssignQrPage from './core/pages/AttendeeAssignQrPage';
 import BulkQrManagementPage from './core/pages/BulkQrManagementPage';
 import PublicVotingPage from './core/pages/PublicVotingPage';
 import PublicResultsPage from './core/pages/PublicResultsPage';
+import { useCanViewRoster } from './core/hooks/useCanViewRoster';
 
 import pluginRegistry from './config/pluginRegistry';
 
@@ -145,6 +146,11 @@ function AccessDenied({ module, feature }) {
       </div>
     </div>
   );
+}
+
+// Full Audience delegate list / Bulk QR stock (registration:view_roster; admins always pass)
+function RosterGate({ fallback = null, children }) {
+  return useCanViewRoster() ? children : fallback;
 }
 
 // Smart home redirect based on enabled modules & permissions
@@ -594,15 +600,15 @@ function App() {
               path="/audience"
               element={
                 <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
-                  <PermissionGate permission="registration.view" fallback={<AccessDenied />}>
+                  <RosterGate fallback={<AccessDenied />}>
                     <RegistrationPage />
-                  </PermissionGate>
+                  </RosterGate>
                 </ModuleGate>
               }
             />
             <Route path="/Audience" element={<Navigate to="/audience" replace />} />
-            <Route path="/registration" element={<Navigate to="/audience" replace />} />
-            <Route path="/Registration" element={<Navigate to="/audience" replace />} />
+            <Route path="/registration" element={<Navigate to="/registration/add" replace />} />
+            <Route path="/Registration" element={<Navigate to="/registration/add" replace />} />
             <Route
               path="/attendance"
               element={
@@ -677,9 +683,9 @@ function App() {
               path="/registration/bulk-qr"
               element={
                 <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
-                  <PermissionGate anyPermissions={['registration.create', 'registration:create', 'registration.view', 'registration:view']} fallback={<AccessDenied />}>
+                  <RosterGate fallback={<AccessDenied />}>
                     <BulkQrManagementPage />
-                  </PermissionGate>
+                  </RosterGate>
                 </ModuleGate>
               }
             />

@@ -12,6 +12,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import api from '../services/api';
+import { useCanViewRoster } from '../hooks/useCanViewRoster';
 import {
   ConfirmationNumberIcon, 
   HelpIcon, 
@@ -36,6 +37,7 @@ const DEFAULT_FAQS = [
 
 export default function AttendeeEditPage() {
   const navigate = useNavigate();
+  const canViewRoster = useCanViewRoster();
   const { id } = useParams();
   const dobPickerRef = useRef(null);
 
@@ -281,7 +283,7 @@ export default function AttendeeEditPage() {
       };
 
       const res = await api.put(`/registration/attendees/${id}`, payload);
-      navigate('/audience', {
+      navigate(canViewRoster ? '/audience' : '/registration/assign-qr', {
         state: {
           updatedAttendee: res.data?.attendee,
           successMessage: `Success! Attendee details for ${intakeForm.name.trim()} updated successfully.`
@@ -301,9 +303,15 @@ export default function AttendeeEditPage() {
     <div className="fc-registration-create-page animate-fade-in" style={{ paddingBottom: '80px', maxWidth: '1100px', margin: '0 auto' }}>
       {/* ── Breadcrumbs Navigation ────────────────────────────────────────── */}
       <nav style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--fc-text-secondary)', marginBottom: '16px' }}>
-        <Link to="/audience" style={{ color: 'var(--fc-text-secondary)', textDecoration: 'none' }}>
-          Audience
-        </Link>
+        {canViewRoster ? (
+          <Link to="/audience" style={{ color: 'var(--fc-text-secondary)', textDecoration: 'none' }}>
+            Audience
+          </Link>
+        ) : (
+          <Link to="/registration/add" style={{ color: 'var(--fc-text-secondary)', textDecoration: 'none' }}>
+            Registration
+          </Link>
+        )}
         <span>/</span>
         <span style={{ color: 'var(--fc-text-muted)' }}>
           Edit Attendee
@@ -1059,7 +1067,7 @@ export default function AttendeeEditPage() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--fc-border)' }}>
                 <button
                   type="button"
-                  onClick={() => navigate('/audience')}
+                  onClick={() => navigate(canViewRoster ? '/audience' : '/registration/assign-qr')}
                   style={{
                     padding: '10px 22px',
                     borderRadius: '8px',

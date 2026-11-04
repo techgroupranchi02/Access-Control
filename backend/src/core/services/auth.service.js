@@ -287,7 +287,7 @@ async function loginWithGoogle(idToken, { remember = false } = {}) {
 }
 
 /**
- * Helper to verify credentials against external Freecomers APIs (api.freecomers.com or api.autovertest.com)
+ * Helper to verify credentials against this environment's Freecomers API (env.freecomersApiUrl)
  * This ensures Freecomers Admin can log in using their credentials same like currently.
  * 
  * @param {string} hostname
@@ -296,11 +296,12 @@ async function loginWithGoogle(idToken, { remember = false } = {}) {
  * @param {string} password
  * @returns {Promise<{ ok: boolean, status: number, body?: object }>}
  */
-async function verifyApiAuth(hostname, path, email, password) {
+async function verifyApiAuth(path, email, password) {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(`https://${hostname}${path}`, {
+    // Only this environment's Freecomers API (env.freecomersApiUrl): a dev password must not log in to prod
+    const res = await fetch(`${env.freecomersApiUrl}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -353,14 +354,9 @@ async function login(email, password, { remember = false } = {}) {
   // If local bcrypt check did not match, verify against the admin login API
   // Strictly check admin endpoints only — do NOT fall back to user /api/v1/login here
   if (!isAdminAuthenticated) {
-    const adminApi1 = await verifyApiAuth('api.freecomers.com', '/api/v1/admin/login', normalizedEmail, password);
-    if (adminApi1.ok) {
+    const adminApi = await verifyApiAuth('/api/v1/admin/login', normalizedEmail, password);
+    if (adminApi.ok) {
       isAdminAuthenticated = true;
-    } else {
-      const adminApi2 = await verifyApiAuth('api.autovertest.com', '/api/v1/admin/login', normalizedEmail, password);
-      if (adminApi2.ok) {
-        isAdminAuthenticated = true;
-      }
     }
   }
 
@@ -441,14 +437,9 @@ async function login(email, password, { remember = false } = {}) {
 
   // Fallback to Freecomers user login APIs if local hash didn't match
   if (!isUserAuthenticated) {
-    const userApi1 = await verifyApiAuth('api.autovertest.com', '/api/v1/login', normalizedEmail, password);
-    if (userApi1.ok) {
+    const userApi = await verifyApiAuth('/api/v1/login', normalizedEmail, password);
+    if (userApi.ok) {
       isUserAuthenticated = true;
-    } else {
-      const userApi2 = await verifyApiAuth('api.freecomers.com', '/api/v1/login', normalizedEmail, password);
-      if (userApi2.ok) {
-        isUserAuthenticated = true;
-      }
     }
   }
 

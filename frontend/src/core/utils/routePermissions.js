@@ -58,8 +58,13 @@ export function checkRouteAccess(pathname, isModuleEnabled, hasPermission, isSup
     return isModOn('audience') && (isAdmin || canAccess('voting.view_results') || canAccess('voting.vote') || canAccess('audience.view'));
   }
 
-  // Audience: Registration & Passes
-  if (path.startsWith('/audience') || path.startsWith('/registration')) {
+  // Audience delegate list + Bulk QR stock: needs the full-roster permission (not desk volunteers)
+  if (path.startsWith('/audience') || path.startsWith('/registration/bulk-qr')) {
+    return isModOn('audience') && (isAdmin || canAccess('registration.view_roster'));
+  }
+
+  // Audience: Registration desk (spot registration, Assign QR, edit)
+  if (path.startsWith('/registration')) {
     return isModOn('audience') && (isAdmin || canAccess('registration.view') || canAccess('registration.create') || canAccess('audience.view'));
   }
 
@@ -110,10 +115,11 @@ export function getPrimaryAccessibleRoute(isModuleEnabled, hasPermission, isSupe
 
   // 4. Audience & Voting (Volunteer, Operations, Reception Desk)
   if (isModOn('audience')) {
-    if (canAccess('registration.view') || canAccess('audience.view')) return '/audience';
+    if (canAccess('registration.view_roster')) return '/audience';
+    if (canAccess('registration.create')) return '/registration/add';
     if (canAccess('attendance.view')) return '/attendance';
     if (canAccess('voting.view_results')) return '/voting';
-    return '/audience';
+    if (canAccess('registration.view')) return '/registration/assign-qr';
   }
 
   // 5. Tasks & Schedule
@@ -147,7 +153,7 @@ export function getPrimaryAccessibleRoute(isModuleEnabled, hasPermission, isSupe
   }
 
   // Default fallback
-  if (isModOn('audience')) return '/audience';
+  if (isModOn('audience') && canAccess('registration.view_roster')) return '/audience';
   return '/dashboard';
 }
 

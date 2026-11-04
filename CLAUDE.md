@@ -58,6 +58,10 @@ npm run lint
 - **Route guards** (`core/middleware/permission.middleware.js`):
   - `requirePermission('module.action')`: `.` and `:` mean the same thing, and so do `view` and `read`. It sets `req.permissionScope.scopeKey` to `all`, `jury_panel` or `assigned`.
   - `requireModule(key)`: checks the event has the module enabled.
+  - **Full delegate list:** `/audience` and Bulk QR stock need `registration:view_roster`. Admin has it and volunteers don't, so volunteers only get Registration (spot registration and Assign QR) and Attendance.
+    - Frontend check: `hooks/useCanViewRoster.js`.
+    - `registration:view` stays with volunteers for desk lookups.
+    - Permissions come only from `sync_specs_to_database.js`, which runs on every `npm run migrate`. It deletes permissions that aren't in the spec and rebuilds each group's grants, so add new keys there, not in a separate migration.
 - **SaaS console** (`/api/admin/saas/*`):
   - Called by the separate Freecomers admin panel (`/var/www/freecomers_frontend`) through nginx `admin.*/api/saas/`.
   - Guarded by `requireFreecomersAdmin` (`core/middleware/freecomersAdmin.middleware.js`), not by `authenticate`. It checks the panel's **Laravel** admin JWT by calling `GET {FREECOMERS_ADMIN_API_URL}/api/v1/admin/verify-token`. See [ADR 0002](docs/adr/0002-saas-admin-console-auth-via-freecomers-laravel.md).
@@ -119,7 +123,11 @@ npm run lint
 - **Jenkins**: pushes to `main` deploy to prod, and any other branch deploys to dev.
   - Steps: `npm ci`, build the frontend, rsync, `npm run migrate || true`, `pm2 reload access-control-backend`, reload nginx.
 - **pm2**: `backend/ecosystem.config.cjs` runs one instance on port 4000.
-- **Backend env keys**: `DB_*`, `APP_PORT`, `NODE_ENV`, `FRONTEND_URL`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL`, `KASHISH_API_KEY`, `KASHISH_API_URL`, `KASHISH_SYNC_INTERVAL_SEC` (default 120; 0 disables auto-sync), and `FREECOMERS_ADMIN_API_URL` (optional; if unset it follows `FRONTEND_URL`: autovertest gives `api.autovertest.com`, anything else gives `api.freecomers.com`).
+- **Backend env keys**: `DB_*`, `APP_PORT`, `NODE_ENV`, `FRONTEND_URL`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL`, `KASHISH_API_KEY`, `KASHISH_API_URL`, `KASHISH_SYNC_INTERVAL_SEC` (default 120; 0 disables auto-sync), and `FREECOMERS_API_URL`.
+  - `FREECOMERS_API_URL` is this environment's Freecomers Laravel API, used for media/avatar URLs, the login fallback and admin JWT checks.
+    - If unset, it follows `FRONTEND_URL`: autovertest gives `api.autovertest.com`, anything else gives `api.freecomers.com`.
+    - Never hard-code either host; use `env.freecomersApiUrl` and `utils/media.utils.js`.
+  - `FREECOMERS_ADMIN_API_URL` optionally overrides it for admin JWT checks only.
 - **Frontend env keys**: `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`.
 - **CORS and CSP domains** are hardcoded in `core/middleware/security.middleware.js`.
 

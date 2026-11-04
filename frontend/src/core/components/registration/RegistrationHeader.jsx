@@ -9,6 +9,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AddIcon, QrCodeScannerIcon } from '../common/Icons';
+import { useCanViewRoster } from '../../hooks/useCanViewRoster';
 
 const TABS = [
   { key: 'spot', label: 'On Spot Registration', to: '/registration/add', Icon: AddIcon },
@@ -17,13 +18,16 @@ const TABS = [
 
 export default function RegistrationHeader({ active, extraCrumb = null }) {
   const navigate = useNavigate();
+  const canViewRoster = useCanViewRoster();
   const activeTab = TABS.find(t => t.key === active) || TABS[0];
 
   return (
     <>
       {/* Breadcrumbs */}
       <nav aria-label="Breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--fc-text-secondary)', marginBottom: '16px' }}>
-        <Link to="/audience" style={{ color: 'var(--fc-text-secondary)', textDecoration: 'none' }}>Audience</Link>
+        {canViewRoster
+          ? <Link to="/audience" style={{ color: 'var(--fc-text-secondary)', textDecoration: 'none' }}>Audience</Link>
+          : <span>Audience</span>}
         <span>/</span>
         <span style={{ color: extraCrumb ? 'var(--fc-text-secondary)' : 'var(--fc-brand-text)', fontWeight: extraCrumb ? 500 : 700 }}>
           Registration · {activeTab.label}

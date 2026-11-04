@@ -68,9 +68,10 @@ registrationRouter.put('/attendees/:id', requirePermission('registration.create'
 registrationRouter.post('/attendees/:id/issue-qr', requirePermission('registration.create'), audienceController.issueAttendeeQrCode);
 registrationRouter.post('/attendees/:id/assign-qr', requirePermission('registration.create'), audienceController.assignAttendeeQR);
 registrationRouter.post('/attendees/:id/revoke-qr', requirePermission('registration.create'), audienceController.revokeAttendeeQrCode);
-registrationRouter.post('/bulk-import', requirePermission('registration.create'), audienceController.bulkImportAttendees);
-registrationRouter.post('/qr/bulk-generate', requirePermission('registration.create'), audienceController.bulkGenerateQRs);
-registrationRouter.get('/qr/pool', requirePermission('registration.view'), audienceController.getQRPool);
+// Bulk badge stock + bulk import belong to the full Audience page (registration.view_roster), not desk volunteers
+registrationRouter.post('/bulk-import', requirePermission('registration.view_roster'), audienceController.bulkImportAttendees);
+registrationRouter.post('/qr/bulk-generate', requirePermission('registration.view_roster'), audienceController.bulkGenerateQRs);
+registrationRouter.get('/qr/pool', requirePermission('registration.view_roster'), audienceController.getQRPool);
 registrationRouter.get('/qr/check/:code', requirePermission('registration.view'), staffCredentialLimiter, audienceController.checkQRCode);
 
 // ── 5. Public Mobile Voter Router (/api/public/vote) [No Staff Auth] ──────────

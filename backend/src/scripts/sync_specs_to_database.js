@@ -330,7 +330,8 @@ const MODULES_SPECS = [
       { key: 'voting:view_results', label: 'View Voting Standings', description: 'View raw votes, participation rates, and Bayesian scores.' },
       { key: 'voting:control_window', label: 'Open / Close Voting Window', description: 'Trigger balloting start and end for screenings.' },
       { key: 'voting:audit_fraud', label: 'Audit & Moderate Votes', description: 'Flag or void duplicate and suspicious votes.' },
-      { key: 'registration:view', label: 'View Attendees List', description: 'Browse registered attendees and delegate roster.' },
+      { key: 'registration:view', label: 'Look Up Attendees', description: 'Search delegates at the desk (needed for spot registration and Assign QR).' },
+      { key: 'registration:view_roster', label: 'View Full Delegate List', description: 'Open the Audience page (full delegate roster, filters, passes) and Bulk QR badge stock.' },
       { key: 'registration:create', label: 'Register New Attendee', description: 'Manual and spot registration at the venue desk.' },
       { key: 'registration:issue_badge', label: 'Issue & Print Badge Passes', description: 'Generate printable badge passes and dispatch QR tokens.' }
     ],
@@ -346,6 +347,7 @@ const MODULES_SPECS = [
         'voting:control_window',
         'voting:audit_fraud',
         'registration:view',
+        'registration:view_roster',
         'registration:create',
         'registration:issue_badge'
       ],

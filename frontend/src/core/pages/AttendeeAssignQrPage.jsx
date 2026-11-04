@@ -16,6 +16,7 @@ import api from '../services/api';
 import useAttendeeSearch from '../hooks/useAttendeeSearch';
 import SearchInput from '../components/common/SearchInput';
 import RegistrationHeader from '../components/registration/RegistrationHeader';
+import { useCanViewRoster } from '../hooks/useCanViewRoster';
 import {
   ConfirmationNumberIcon, 
   QrCodeScannerIcon, 
@@ -30,6 +31,7 @@ import {
 
 export default function AttendeeAssignQrPage() {
   const navigate = useNavigate();
+  const canViewRoster = useCanViewRoster();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -332,7 +334,7 @@ export default function AttendeeAssignQrPage() {
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap-reverse', justifyContent: 'flex-end' }}>
               <button
                 type="button"
-                onClick={() => navigate('/audience')}
+                onClick={() => navigate(canViewRoster ? '/audience' : '/registration/add')}
                 style={{
                   flex: '1 1 160px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center',
                   padding: '10px 18px', borderRadius: '8px',
@@ -342,7 +344,7 @@ export default function AttendeeAssignQrPage() {
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--fc-surface-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--fc-surface-card)'; }}
               >
-                Back to Audience
+                {canViewRoster ? 'Back to Audience' : 'Back to Registration'}
               </button>
               <button
                 type="button"

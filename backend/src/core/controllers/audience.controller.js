@@ -10,6 +10,7 @@
  */
 
 const crypto = require('crypto');
+const { festivalImageUrl } = require('../utils/media.utils');
 const { query, getConnection } = require('../../config/database');
 const { PREBUILT_TEMPLATES, getAvailableTemplates, getTemplateByKey } = require('../services/registration-form-templates');
 const qrCredential = require('../services/qrCredential.service');
@@ -220,9 +221,20 @@ async function getAudienceSettings(req, res) {
       }
     }
 
-    // Festival name always comes from the events table (never stored / hard-coded in settings)
+    // Festival name and images always come from the festival's own records (never stored / hard-coded)
     const eventRows = await query('SELECT name FROM events WHERE event_id = ? LIMIT 1', [eventId]);
-    config = { ...config, festival_name: eventRows[0]?.name || '' };
+    const festRows = await query(
+      `SELECT film_festival_banner, film_festival_banner_image_name, film_festival_logo, film_festival_logo_image_name
+       FROM film_festivals WHERE event_id = ? AND is_deleted = 0 ORDER BY film_festival_id LIMIT 1`,
+      [eventId]
+    );
+    const fest = festRows[0] || {};
+    config = {
+      ...config,
+      festival_name: eventRows[0]?.name || '',
+      festival_banner_url: festivalImageUrl(fest.film_festival_banner_image_name || fest.film_festival_banner),
+      festival_logo_url: festivalImageUrl(fest.film_festival_logo_image_name || fest.film_festival_logo)
+    };
 
     res.json({ success: true, settings: config });
   } catch (error) {
@@ -238,7 +250,7 @@ async function updateAudienceSettings(req, res) {
   try {
     const eventId = getEventId(req);
     // festival_name is derived from events.name on read; don't persist a copy that can go stale
-    const { festival_name: _ignoredName, ...settings } = req.body || {};
+    const { festival_name: _ignoredName, festival_banner_url: _b, festival_logo_url: _l, ...settings } = req.body || {};
 
     await query(`
       INSERT INTO audience_settings (event_id, settings_json)

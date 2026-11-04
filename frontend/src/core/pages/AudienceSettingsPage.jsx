@@ -247,7 +247,7 @@ function FaqRichTextEditor({ value, onChange }) {
   );
 }
 
-function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
+function DelegateFaqPreviewModal({ open, onClose, formSchema, bannerUrl = null, logoUrl = null }) {
   if (!open) return null;
 
   const faqs = (formSchema?.policy_info?.faqs && formSchema.policy_info.faqs.length > 0)
@@ -276,8 +276,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
 
   const additionalFaqs = faqs.filter((_, i) => !matchedIndices.has(i));
 
-  const bannerUrl = 'https://api.autovertest.com/api/v1/non-auth-user/retrieve-media/images/film-festivals/film_festival_banner_F00015.webp';
-  const logoUrl = 'https://api.autovertest.com/api/v1/non-auth-user/retrieve-media/images/film-festivals/film_festival_logo_6ad8a4b35295e31fda4b4e5.webp';
+  // bannerUrl / logoUrl: the current festival's own images (from GET /audience/settings); may be null
 
   return (
     <div style={{
@@ -312,7 +311,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
           position: 'relative',
           width: '100%',
           minHeight: '130px',
-          backgroundImage: `url(${bannerUrl})`,
+          backgroundImage: bannerUrl ? `url(${bannerUrl})` : 'linear-gradient(135deg, var(--fc-brand), var(--fc-brand-hover))',
           backgroundSize: 'cover',
           backgroundPosition: 'center top',
           borderBottom: '3px solid var(--fc-brand)',
@@ -391,7 +390,9 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
             justifyContent: 'center',
             overflow: 'hidden'
           }}>
-            <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            {logoUrl
+              ? <img src={logoUrl} alt="Festival logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              : <span style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--fc-brand-text)' }}>{(formSchema?.form_title || 'F').charAt(0)}</span>}
           </div>
 
           {/* Golden Central Badge */}
@@ -3959,6 +3960,8 @@ export default function AudienceSettingsPage() {
         open={showPreviewFaqModal}
         onClose={() => setShowPreviewFaqModal(false)}
         formSchema={formSchema}
+        bannerUrl={settings.festival_banner_url}
+        logoUrl={settings.festival_logo_url}
       />
 
       {/* ========================================================================= */}
