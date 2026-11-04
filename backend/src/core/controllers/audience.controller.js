@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 const { query, getConnection } = require('../../config/database');
 const { PREBUILT_TEMPLATES, getAvailableTemplates, getTemplateByKey } = require('../services/registration-form-templates');
+const qrCredential = require('../services/qrCredential.service');
 
 /**
  * Helper: Extract event_id from request headers or query
@@ -206,8 +207,7 @@ async function getAudienceSettings(req, res) {
       require_screening_checkin: true,
       enable_did_not_watch_skip: true,
       anti_sharing_protection: true,
-      delegate_registration_enabled: false,
-      festival_name: 'Delhi Shorts International Film Festival (Kashish Edition)'
+      delegate_registration_enabled: false
     };
 
     let config = defaultConfig;
@@ -219,6 +219,10 @@ async function getAudienceSettings(req, res) {
         config = defaultConfig;
       }
     }
+
+    // Festival name always comes from the events table (never stored / hard-coded in settings)
+    const eventRows = await query('SELECT name FROM events WHERE event_id = ? LIMIT 1', [eventId]);
+    config = { ...config, festival_name: eventRows[0]?.name || '' };
 
     res.json({ success: true, settings: config });
   } catch (error) {
@@ -233,7 +237,8 @@ async function getAudienceSettings(req, res) {
 async function updateAudienceSettings(req, res) {
   try {
     const eventId = getEventId(req);
-    const settings = req.body;
+    // festival_name is derived from events.name on read; don't persist a copy that can go stale
+    const { festival_name: _ignoredName, ...settings } = req.body || {};
 
     await query(`
       INSERT INTO audience_settings (event_id, settings_json)
@@ -436,40 +441,26 @@ async function performScreeningCheckin(req, res) {
     const rawToken = qr_token ? String(qr_token).trim() : '';
 
       if (!targetAttendeeId && rawToken) {
-        const cleanToken = rawToken;
-        let derivedId = parseInt(cleanToken, 10);
-        if (cleanToken.toUpperCase().startsWith('KB26-')) {
-          const idPart = cleanToken.replace(/KB26-/i, '');
-          derivedId = parseInt(idPart, 10) || 0;
-        }
-
-        // Find in saas_attendees or saas_qr or by serial_no
-        const rows = await query(`
-        SELECT sa.attendee_id, sa.name, sa.email, sa.phone, sa.delegate_category, sa.status, sa.qr_token
-        FROM saas_attendees sa
-        LEFT JOIN saas_qr sq ON sq.attendee_id = sa.attendee_id
-        WHERE sa.qr_token = ? 
-           OR sq.qr_data = ? 
-           OR sa.attendee_id = ?
-           OR JSON_UNQUOTE(JSON_EXTRACT(sa.custom_data, '$.serial_no')) = ?
-        LIMIT 1
-      `, [cleanToken, cleanToken, derivedId || 0, cleanToken]);
-
-        if (rows.length > 0) {
-          attendeeRecord = rows[0];
+        // Credentials: scanned QR payload or typed 6-digit badge serial, scoped to this event (ADR 0001).
+        // The KB26-xxxx delegate label and raw attendee ids are not accepted as credentials.
+        const resolved = await qrCredential.resolveAttendee(eventId, rawToken);
+        if (resolved) {
+          const { custom_data, event_id, ...rest } = resolved.attendee;
+          attendeeRecord = rest;
           targetAttendeeId = attendeeRecord.attendee_id;
         }
       } else if (targetAttendeeId) {
+        // Explicit selection by authenticated staff (attendee picked from the list)
         const rows = await query(`
         SELECT attendee_id, name, email, phone, delegate_category, status, qr_token
         FROM saas_attendees
-        WHERE attendee_id = ?
-      `, [targetAttendeeId]);
+        WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)
+      `, [targetAttendeeId, eventId, eventId]);
         if (rows.length > 0) attendeeRecord = rows[0];
       }
 
       if (!attendeeRecord || !targetAttendeeId) {
-        return res.status(404).json({ error: 'Attendee not found with provided token or ID.' });
+        return res.status(404).json({ error: 'Badge not found for this festival. Check the code and try again.' });
       }
 
       // Enforce 2-step verification: Attendee must have been issued a QR badge at reception
@@ -557,6 +548,28 @@ async function listAttendance(req, res) {
         params.push(screeningId);
       }
 
+      // Optional search: name, email, phone (formatting ignored), category, scanner, or 6-digit badge number
+      const search = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 100) : '';
+      if (search) {
+        const like = `%${search}%`;
+        const searchDigits = search.replace(/\D/g, '');
+        const phoneDigits = searchDigits.length >= 4 ? searchDigits.slice(-10) : '';
+        const badgeSerial = /^\d{6}$/.test(search) ? search : '';
+        sql += `
+        AND (
+          sa.name LIKE ?
+          OR sa.email LIKE ?
+          OR sa.phone LIKE ?
+          OR sa.delegate_category LIKE ?
+          OR ac.badge_ribbon_text LIKE ?
+          OR ind.name LIKE ?
+          OR u.email LIKE ?
+          OR (? <> '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(sa.phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ?)
+          OR (? <> '' AND EXISTS (SELECT 1 FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.event_id = sc.event_id AND sq.serial_no = ?))
+        )`;
+        params.push(like, like, like, like, like, like, like, phoneDigits, `%${phoneDigits}%`, badgeSerial, badgeSerial);
+      }
+
       sql += ' ORDER BY sc.scanned_at DESC LIMIT ?';
       params.push(limit);
 
@@ -599,9 +612,10 @@ async function listAttendance(req, res) {
         return res.status(400).json({ error: 'Attendee full name is required.' });
       }
 
-      // High entropy 36-char secure UUID token for the QR - only if explicitly requested (e.g. spot issue)
+      // QR badge (UUID payload + 6-digit serial) only if explicitly requested (e.g. spot issue)
       const issueQrNow = Boolean(req.body.issue_qr_now);
-      const qrToken = issueQrNow ? crypto.randomUUID() : null;
+      let qrToken = null;
+      let badgeSerial = null;
       const category = delegate_category || 'bangalore_general';
       const regType = registration_type || 'spot';
       const initialStatus = issueQrNow ? 'badge_issued' : 'registered';
@@ -630,12 +644,12 @@ async function listAttendance(req, res) {
       customData.serial_no = serialNo;
       await query('UPDATE saas_attendees SET custom_data = ? WHERE attendee_id = ?', [JSON.stringify(customData), attendeeId]);
 
-      // If issued immediately, also register in saas_qr
-      if (qrToken) {
-        await query(`
-        INSERT INTO saas_qr (qr_data, event_id, festival_id, attendee_id)
-        VALUES (?, ?, ?, ?)
-      `, [qrToken, eventId, eventId, attendeeId]);
+      // If issued immediately, create the badge credential in saas_qr and link it
+      if (issueQrNow) {
+        const qrRow = await qrCredential.createQrRow(eventId, { attendeeId });
+        qrToken = qrRow.qr_data;
+        badgeSerial = qrRow.serial_no;
+        await query('UPDATE saas_attendees SET qr_token = ? WHERE attendee_id = ?', [qrToken, attendeeId]);
       }
 
       res.json({
@@ -654,12 +668,162 @@ async function listAttendance(req, res) {
           pass_days: customData.pass_days || ['All Days'],
           custom_data: customData,
           qr_token: qrToken,
+          badge_serial: badgeSerial,
           status: initialStatus
         }
       });
     } catch (error) {
       console.error('[AudienceController] registerAttendee error:', error.message);
       res.status(500).json({ error: 'Failed to register attendee.' });
+    }
+  }
+
+  /**
+   * GET /api/registration/attendees/:id
+   * Retrieves full details of a single attendee for viewing or editing.
+   */
+  async function getAttendee(req, res) {
+    try {
+      const eventId = getEventId(req);
+      const attendeeId = parseInt(req.params.id, 10);
+      if (!attendeeId) {
+        return res.status(400).json({ error: 'Valid attendee ID is required.' });
+      }
+
+      const sql = `
+        SELECT 
+          sa.attendee_id,
+          sa.name,
+          sa.email,
+          sa.phone,
+          sa.delegate_category,
+          COALESCE(ac.badge_color, '#6366f1') AS badge_color,
+          COALESCE(ac.badge_ribbon_text, UPPER(sa.delegate_category)) AS badge_ribbon,
+          sa.status,
+          sa.qr_token,
+          sa.registered_at,
+          sa.custom_data,
+          (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended
+        FROM saas_attendees sa
+        LEFT JOIN audience_categories ac ON (ac.code = sa.delegate_category OR ac.name = sa.delegate_category) AND ac.event_id = sa.event_id
+        WHERE sa.attendee_id = ? AND (sa.event_id = ? OR sa.festival_id = ?)
+        LIMIT 1
+      `;
+      const rows = await query(sql, [attendeeId, eventId, eventId]);
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({ error: 'Attendee not found.' });
+      }
+
+      const row = rows[0];
+      let cd = row.custom_data;
+      if (typeof cd === 'string') {
+        try { cd = JSON.parse(cd); } catch { }
+      }
+      const attendee = {
+        ...row,
+        custom_data: cd || {},
+        serial_no: cd?.serial_no || ('KB26-' + String(row.attendee_id).padStart(4, '0')),
+        badge_serial: await qrCredential.getBadgeSerial(row.attendee_id),
+        pass_type: cd?.pass_type || 'Full-Festival Pass',
+        pass_days: cd?.pass_days || ['All Days']
+      };
+
+      res.json({ success: true, attendee });
+    } catch (error) {
+      console.error('[AudienceController] getAttendee error:', error.message);
+      res.status(500).json({ error: 'Failed to retrieve attendee.' });
+    }
+  }
+
+  /**
+   * PUT /api/registration/attendees/:id
+   * Updates attendee details (name, email, phone, category, custom schema fields, status).
+   */
+  async function updateAttendee(req, res) {
+    try {
+      const eventId = getEventId(req);
+      const attendeeId = parseInt(req.params.id, 10);
+      if (!attendeeId) {
+        return res.status(400).json({ error: 'Valid attendee ID is required.' });
+      }
+
+      const existingRows = await query(
+        'SELECT * FROM saas_attendees WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)',
+        [attendeeId, eventId, eventId]
+      );
+      if (!existingRows || existingRows.length === 0) {
+        return res.status(404).json({ error: 'Attendee not found.' });
+      }
+      const existing = existingRows[0];
+
+      const { name, email, phone, delegate_category, status } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ error: 'Attendee full name is required.' });
+      }
+
+      let currentCustomData = {};
+      if (typeof existing.custom_data === 'string') {
+        try { currentCustomData = JSON.parse(existing.custom_data); } catch { }
+      } else if (existing.custom_data && typeof existing.custom_data === 'object') {
+        currentCustomData = existing.custom_data;
+      }
+
+      const incomingCustomData = req.body.custom_data || {};
+      const updatedCustomData = {
+        ...currentCustomData,
+        ...incomingCustomData
+      };
+
+      for (const [k, v] of Object.entries(req.body)) {
+        if (!['name', 'email', 'phone', 'delegate_category', 'status', 'custom_data', 'attendee_id', 'qr_token', 'registered_at', 'created_at', 'updated_at'].includes(k)) {
+          updatedCustomData[k] = v;
+        }
+      }
+
+      if (!updatedCustomData.serial_no) {
+        updatedCustomData.serial_no = 'KB26-' + String(attendeeId).padStart(4, '0');
+      }
+
+      const updatedCategory = delegate_category || existing.delegate_category || 'bangalore_general';
+      const updatedStatus = status || existing.status;
+
+      const updateSql = `
+        UPDATE saas_attendees
+        SET name = ?, email = ?, phone = ?, delegate_category = ?, status = ?, custom_data = ?
+        WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)
+      `;
+      await query(updateSql, [
+        name.trim(),
+        email ? email.trim() : null,
+        phone ? phone.trim() : null,
+        updatedCategory,
+        updatedStatus,
+        JSON.stringify(updatedCustomData),
+        attendeeId,
+        eventId,
+        eventId
+      ]);
+
+      res.json({
+        success: true,
+        message: 'Attendee updated successfully.',
+        attendee: {
+          attendee_id: attendeeId,
+          name: name.trim(),
+          email: email ? email.trim() : null,
+          phone: phone ? phone.trim() : null,
+          delegate_category: updatedCategory,
+          status: updatedStatus,
+          serial_no: updatedCustomData.serial_no,
+          pass_type: updatedCustomData.pass_type || 'Full-Festival Pass',
+          pass_days: updatedCustomData.pass_days || ['All Days'],
+          custom_data: updatedCustomData,
+          qr_token: existing.qr_token
+        }
+      });
+    } catch (error) {
+      console.error('[AudienceController] updateAttendee error:', error.message);
+      res.status(500).json({ error: 'Failed to update attendee.' });
     }
   }
 
@@ -689,24 +853,21 @@ async function listAttendance(req, res) {
       const attendee = rows[0];
       let qrToken = attendee.qr_token;
 
-      // Generate new secure UUID token if not already assigned
+      // Create a new badge credential (UUID payload + 6-digit serial) if not already assigned
+      let badgeSerial;
       if (!qrToken) {
-        qrToken = crypto.randomUUID();
+        const qrRow = await qrCredential.createQrRow(eventId, { attendeeId });
+        qrToken = qrRow.qr_data;
+        badgeSerial = qrRow.serial_no;
         await query(`
-        UPDATE saas_attendees 
+        UPDATE saas_attendees
         SET qr_token = ?, status = 'badge_issued'
         WHERE attendee_id = ?
       `, [qrToken, attendeeId]);
-
-        // Insert or update in saas_qr
-        await query(`
-        INSERT INTO saas_qr (qr_data, event_id, festival_id, attendee_id)
-        VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE qr_data = VALUES(qr_data)
-      `, [qrToken, eventId, eventId, attendeeId]);
       } else {
         // Ensure status is badge_issued
         await query(`UPDATE saas_attendees SET status = 'badge_issued' WHERE attendee_id = ?`, [attendeeId]);
+        badgeSerial = await qrCredential.getBadgeSerial(attendeeId);
       }
 
       let cd = attendee.custom_data;
@@ -717,15 +878,17 @@ async function listAttendance(req, res) {
 
       res.json({
         success: true,
-        message: `QR Badge successfully issued for ${attendee.name} (${serialNo}).`,
+        message: `QR Badge successfully issued for ${attendee.name}${badgeSerial ? ` (badge ${badgeSerial})` : ''}.`,
         qr_token: qrToken,
         serial_no: serialNo,
+        badge_serial: badgeSerial,
         status: 'badge_issued',
         attendee: {
           ...attendee,
           status: 'badge_issued',
           qr_token: qrToken,
-          serial_no: serialNo
+          serial_no: serialNo,
+          badge_serial: badgeSerial
         }
       });
     } catch (error) {
@@ -764,6 +927,358 @@ async function listAttendance(req, res) {
   }
 
   /**
+   * POST /api/registration/qr/bulk-generate
+   * Generates batches of unassigned physical QR credentials with 6-digit unique codes.
+   */
+  async function bulkGenerateQRs(req, res) {
+    try {
+      const eventId = getEventId(req);
+      const count = Math.min(Math.max(parseInt(req.body.count, 10) || 50, 1), 2000);
+
+      // UUID payload + random 6-digit serial unique per event; uniqueness enforced by the DB (ADR 0001)
+      let created;
+      try {
+        created = await qrCredential.createQrRows(eventId, count);
+      } catch (genErr) {
+        if (genErr.code === 'SERIAL_SPACE_EXHAUSTED') {
+          return res.status(409).json({
+            error: genErr.message,
+            generated_count: genErr.created.length,
+            batch: genErr.created.map(r => ({ code: r.serial_no, qr_data: r.qr_data, badge_serial: r.serial_no, status: 'unassigned' }))
+          });
+        }
+        throw genErr;
+      }
+
+      // Fetch updated pool stats for event
+      const statsRows = await query(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN attendee_id IS NULL THEN 1 ELSE 0 END) as unassigned,
+          SUM(CASE WHEN attendee_id IS NOT NULL THEN 1 ELSE 0 END) as assigned
+        FROM saas_qr
+        WHERE event_id = ? OR festival_id = ?
+      `, [eventId, eventId]);
+      const statsRow = statsRows?.[0] || {};
+
+      res.json({
+        success: true,
+        message: `Successfully generated ${created.length} bulk QR codes.`,
+        generated_count: created.length,
+        batch: created.map((r, idx) => ({
+          code: r.serial_no,
+          qr_data: r.qr_data,
+          badge_serial: r.serial_no,
+          stock_index: idx + 1,
+          status: 'unassigned'
+        })),
+        pool_stats: {
+          total: parseInt(statsRow?.total || 0, 10),
+          unassigned: parseInt(statsRow?.unassigned || 0, 10),
+          assigned: parseInt(statsRow?.assigned || 0, 10)
+        }
+      });
+    } catch (error) {
+      console.error('[AudienceController] bulkGenerateQRs error:', error.message);
+      res.status(500).json({ error: 'Failed to generate bulk QR codes: ' + error.message });
+    }
+  }
+
+  /**
+   * GET /api/registration/qr/pool
+   * Returns QR pool statistics and list of badges.
+   */
+  async function getQRPool(req, res) {
+    try {
+      const eventId = getEventId(req);
+      const statusFilter = req.query.status; // 'unassigned', 'assigned', 'all'
+      const search = req.query.search ? req.query.search.trim() : '';
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 1000);
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const offset = (page - 1) * limit;
+
+      // Stats
+      const statsRows = await query(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN attendee_id IS NULL THEN 1 ELSE 0 END) as unassigned,
+          SUM(CASE WHEN attendee_id IS NOT NULL THEN 1 ELSE 0 END) as assigned
+        FROM saas_qr
+        WHERE event_id = ? OR festival_id = ?
+      `, [eventId, eventId]);
+      const statsRow = statsRows?.[0] || {};
+
+      let sql = `
+        SELECT 
+          sq.qr_id,
+          sq.qr_data,
+          sq.serial_no,
+          sq.attendee_id,
+          sq.created_at,
+          sq.updated_at,
+          sa.name as attendee_name,
+          sa.email as attendee_email,
+          sa.phone as attendee_phone,
+          sa.delegate_category,
+          sa.custom_data as attendee_custom_data
+        FROM saas_qr sq
+        LEFT JOIN saas_attendees sa ON sa.attendee_id = sq.attendee_id
+        WHERE (sq.event_id = ? OR sq.festival_id = ?)
+      `;
+      const params = [eventId, eventId];
+
+      if (statusFilter === 'unassigned') {
+        sql += ' AND sq.attendee_id IS NULL';
+      } else if (statusFilter === 'assigned') {
+        sql += ' AND sq.attendee_id IS NOT NULL';
+      }
+
+      if (search) {
+        // Badge number (partial), QR UUID, delegate name / email, phone (formatting ignored)
+        const like = `%${search.slice(0, 100)}%`;
+        const searchDigits = search.replace(/\D/g, '');
+        const phoneDigits = searchDigits.length >= 4 ? searchDigits.slice(-10) : '';
+        sql += `
+        AND (
+          sq.serial_no LIKE ? OR sq.qr_data LIKE ? OR sa.name LIKE ? OR sa.email LIKE ? OR sa.phone LIKE ?
+          OR (? <> '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(sa.phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ?)
+        )`;
+        params.push(like, like, like, like, like, phoneDigits, `%${phoneDigits}%`);
+      }
+
+      sql += ' ORDER BY sq.qr_id DESC LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+
+      const rows = await query(sql, params);
+
+      const qrs = (rows || []).map(r => {
+        let cd = r.attendee_custom_data;
+        if (typeof cd === 'string') {
+          try { cd = JSON.parse(cd); } catch { }
+        }
+        return {
+          qr_id: r.qr_id,
+          qr_data: r.qr_data,
+          code: r.serial_no || r.qr_data,
+          badge_serial: r.serial_no,
+          status: r.attendee_id ? 'assigned' : 'unassigned',
+          attendee_id: r.attendee_id,
+          attendee_name: r.attendee_name,
+          attendee_serial: cd?.serial_no || (r.attendee_id ? ('KB26-' + String(r.attendee_id).padStart(4, '0')) : null),
+          attendee_category: r.delegate_category,
+          created_at: r.created_at,
+          updated_at: r.updated_at
+        };
+      });
+
+      res.json({
+        success: true,
+        stats: {
+          total: parseInt(statsRow?.total || 0, 10),
+          unassigned: parseInt(statsRow?.unassigned || 0, 10),
+          assigned: parseInt(statsRow?.assigned || 0, 10)
+        },
+        page,
+        limit,
+        qrs
+      });
+    } catch (error) {
+      console.error('[AudienceController] getQRPool error:', error.message);
+      res.status(500).json({ error: 'Failed to retrieve QR pool.' });
+    }
+  }
+
+  /**
+   * GET /api/registration/qr/check/:code
+   * Validates if a 6-digit code or scanned QR token is valid and available.
+   */
+  async function checkQRCode(req, res) {
+    try {
+      const eventId = getEventId(req);
+      let rawCode = req.params.code ? req.params.code.trim() : '';
+      if (!rawCode) {
+        return res.status(400).json({ valid: false, error: 'Code is required.' });
+      }
+
+      rawCode = qrCredential.normalizeCredential(rawCode);
+
+      // Scanned QR payload or typed 6-digit serial, within this event's stock (ADR 0001)
+      const qrRow = await qrCredential.findQrRow(eventId, rawCode);
+
+      if (!qrRow) {
+        res.locals.credentialMiss = true;
+        return res.json({
+          success: true,
+          valid: false,
+          in_pool: false,
+          status: 'not_found',
+          code: rawCode,
+          message: `Code "${rawCode}" is not in this festival's badge stock. Check the code, or generate new stock.`
+        });
+      }
+
+      let row = { ...qrRow, attendee_name: null, delegate_category: null, custom_data: null };
+      if (qrRow.attendee_id) {
+        const aRows = await query(
+          'SELECT name AS attendee_name, delegate_category, custom_data FROM saas_attendees WHERE attendee_id = ? LIMIT 1',
+          [qrRow.attendee_id]
+        );
+        if (aRows.length > 0) row = { ...row, ...aRows[0] };
+      }
+      const displayCode = row.serial_no || row.qr_data;
+
+      if (row.attendee_id) {
+        let cd = row.custom_data;
+        if (typeof cd === 'string') {
+          try { cd = JSON.parse(cd); } catch { }
+        }
+        const serialNo = cd?.serial_no || ('KB26-' + String(row.attendee_id).padStart(4, '0'));
+        return res.json({
+          success: true,
+          valid: false,
+          in_pool: true,
+          status: 'already_assigned',
+          code: row.qr_data,
+          badge_serial: row.serial_no,
+          display_code: displayCode,
+          assigned_to: {
+            attendee_id: row.attendee_id,
+            name: row.attendee_name,
+            serial_no: serialNo,
+            delegate_category: row.delegate_category
+          },
+          message: `Badge "${displayCode}" is already assigned to ${row.attendee_name} (${serialNo}).`
+        });
+      }
+
+      return res.json({
+        success: true,
+        valid: true,
+        in_pool: true,
+        status: 'unassigned',
+        code: row.qr_data,
+        badge_serial: row.serial_no,
+        display_code: displayCode,
+        message: `Badge "${displayCode}" is valid and ready to be assigned.`
+      });
+    } catch (error) {
+      console.error('[AudienceController] checkQRCode error:', error.message);
+      res.status(500).json({ error: 'Failed to check QR code.' });
+    }
+  }
+
+  /**
+   * POST /api/registration/attendees/:id/assign-qr
+   * Assigns a physical 6-digit QR badge to a registered delegate.
+   */
+  async function assignAttendeeQR(req, res) {
+    try {
+      const eventId = getEventId(req);
+      const attendeeId = parseInt(req.params.id, 10);
+      const qrCode = qrCredential.normalizeCredential(req.body.qr_code);
+
+      if (!attendeeId) {
+        return res.status(400).json({ error: 'Valid attendee ID is required.' });
+      }
+      if (!qrCode) {
+        return res.status(400).json({ error: 'Scan the badge QR or enter its 6-digit badge number.' });
+      }
+
+      // Verify attendee exists for this event
+      const attendeeRows = await query(`
+        SELECT attendee_id, name, email, phone, delegate_category, status, qr_token, custom_data
+        FROM saas_attendees
+        WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)
+        LIMIT 1
+      `, [attendeeId, eventId, eventId]);
+
+      if (!attendeeRows || attendeeRows.length === 0) {
+        return res.status(404).json({ error: 'Attendee not found.' });
+      }
+
+      const attendee = attendeeRows[0];
+
+      // Resolve to an existing stock row of this event (QR payload or 6-digit serial). Unknown codes
+      // are rejected: badges must come from generated stock (ADR 0001).
+      const qrRow = await qrCredential.findQrRow(eventId, qrCode);
+      if (!qrRow) {
+        return res.status(404).json({
+          error: `Badge "${qrCode}" is not in this festival's badge stock. Check the code, or generate new stock first.`
+        });
+      }
+      const displayCode = qrRow.serial_no || qrRow.qr_data;
+
+      // Link atomically: only if unassigned or already ours (guards concurrent desks)
+      const linkResult = await query(`
+        UPDATE saas_qr
+        SET attendee_id = ?, updated_at = NOW()
+        WHERE qr_id = ? AND (attendee_id IS NULL OR attendee_id = ?)
+      `, [attendeeId, qrRow.qr_id, attendeeId]);
+
+      if (!linkResult.affectedRows) {
+        const otherRows = await query(
+          'SELECT attendee_id, name, custom_data FROM saas_attendees WHERE attendee_id = (SELECT attendee_id FROM saas_qr WHERE qr_id = ?) LIMIT 1',
+          [qrRow.qr_id]
+        );
+        const other = otherRows[0] || {};
+        let ocd = other.custom_data;
+        if (typeof ocd === 'string') {
+          try { ocd = JSON.parse(ocd); } catch { }
+        }
+        const otherSerial = ocd?.serial_no || (other.attendee_id ? 'KB26-' + String(other.attendee_id).padStart(4, '0') : '');
+        return res.status(400).json({
+          error: `Badge ${displayCode} is already assigned to another delegate: "${other.name || 'unknown'}" (${otherSerial}). Please scan or enter an unassigned badge.`
+        });
+      }
+
+      // Release any other badge previously linked to this attendee in this event
+      await query(`
+        UPDATE saas_qr
+        SET attendee_id = NULL, updated_at = NOW()
+        WHERE attendee_id = ? AND qr_id <> ? AND (event_id = ? OR festival_id = ?)
+      `, [attendeeId, qrRow.qr_id, eventId, eventId]);
+
+      // Parse custom data and ensure serial_no (delegate label) is preserved
+      let cd = attendee.custom_data;
+      if (typeof cd === 'string') {
+        try { cd = JSON.parse(cd); } catch { }
+      }
+      if (!cd || typeof cd !== 'object') cd = {};
+      const serialNo = cd?.serial_no || ('KB26-' + String(attendeeId).padStart(4, '0'));
+      cd.serial_no = serialNo;
+      cd.physical_qr_code = displayCode;
+
+      // Attendee credential token = the badge's QR payload
+      await query(`
+        UPDATE saas_attendees 
+        SET qr_token = ?, status = 'badge_issued', custom_data = ?
+        WHERE attendee_id = ?
+      `, [qrRow.qr_data, JSON.stringify(cd), attendeeId]);
+
+      res.json({
+        success: true,
+        message: `Physical QR Badge (${displayCode}) successfully assigned to ${attendee.name} (${serialNo}).`,
+        qr_token: qrRow.qr_data,
+        code: qrRow.qr_data,
+        serial_no: serialNo,
+        badge_serial: qrRow.serial_no,
+        status: 'badge_issued',
+        attendee: {
+          ...attendee,
+          status: 'badge_issued',
+          qr_token: qrRow.qr_data,
+          serial_no: serialNo,
+          badge_serial: qrRow.serial_no,
+          custom_data: cd
+        }
+      });
+    } catch (error) {
+      console.error('[AudienceController] assignAttendeeQR error:', error.message);
+      res.status(500).json({ error: 'Failed to assign QR badge: ' + error.message });
+    }
+  }
+
+  /**
    * GET /api/registration/attendees
    * List registered attendees with filter and search
    */
@@ -787,7 +1302,8 @@ async function listAttendance(req, res) {
         sa.qr_token,
         sa.registered_at,
         sa.custom_data,
-        (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended
+        (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended,
+        (SELECT sq.serial_no FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.serial_no IS NOT NULL ORDER BY sq.qr_id DESC LIMIT 1) AS badge_serial
       FROM saas_attendees sa
       LEFT JOIN audience_categories ac ON (ac.code = sa.delegate_category OR ac.name = sa.delegate_category) AND ac.event_id = sa.event_id
       WHERE (sa.event_id = ? OR sa.festival_id = ?)
@@ -808,7 +1324,14 @@ async function listAttendance(req, res) {
         OR sa.delegate_category LIKE ? 
         OR ac.badge_ribbon_text LIKE ?
         OR ac.name LIKE ?
+        OR (? <> '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(sa.phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ?)
+        OR (? <> '' AND EXISTS (SELECT 1 FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.serial_no = ?))
       )`;
+        // Phone match ignoring formatting: "+91 98765-43210", "9876543210", "43210" all match
+        // (last 10 digits of the typed number, min 4 digits). 6-digit input also matches badge numbers.
+        const searchDigits = search.replace(/\D/g, '');
+        const phoneDigits = searchDigits.length >= 4 ? searchDigits.slice(-10) : '';
+        const badgeSerial = /^\d{6}$/.test(search) ? search : '';
         params.push(
           `%${search}%`,
           `%${search}%`,
@@ -817,7 +1340,9 @@ async function listAttendance(req, res) {
           `%${search}%`,
           `%${search}%`,
           `%${search}%`,
-          `%${search}%`
+          `%${search}%`,
+          phoneDigits, `%${phoneDigits}%`,
+          badgeSerial, badgeSerial
         );
       }
 
@@ -888,13 +1413,14 @@ async function listAttendance(req, res) {
         `, [d.name.trim(), category, existing[0].attendee_id]);
           updatedCount++;
         } else {
-          const qrToken = crypto.randomUUID();
           const res = await query(`
           INSERT INTO saas_attendees (event_id, festival_id, name, email, phone, delegate_category, registration_type, registered_by_user_id, registered_by_role, status, qr_token)
-          VALUES (?, ?, ?, ?, ?, ?, 'kashish_sync', ?, 'admin', 'registered', ?)
-        `, [eventId, eventId, d.name.trim(), email, phone, category, userId, qrToken]);
+          VALUES (?, ?, ?, ?, ?, ?, 'kashish_sync', ?, 'admin', 'registered', NULL)
+        `, [eventId, eventId, d.name.trim(), email, phone, category, userId]);
 
-          await query('INSERT INTO saas_qr (qr_data, event_id, festival_id, attendee_id) VALUES (?, ?, ?, ?)', [qrToken, eventId, eventId, res.insertId]);
+          // Badge credential: UUID payload + per-event 6-digit serial (ADR 0001)
+          const qrRow = await qrCredential.createQrRow(eventId, { attendeeId: res.insertId });
+          await query('UPDATE saas_attendees SET qr_token = ? WHERE attendee_id = ?', [qrRow.qr_data, res.insertId]);
           createdCount++;
         }
       }
@@ -1088,6 +1614,72 @@ async function listAttendance(req, res) {
   }
 
   /**
+   * GET /api/public/results/:eventId   [No auth, ADR 0003]
+   * Approved Audience Choice standings for the big-screen winners page and the Kashish app.
+   * Returns 403 { status: 'results_not_approved' } until the festival team approves the results,
+   * so nothing is public before approval.
+   */
+  async function getPublicResults(req, res) {
+    try {
+      const eventId = parseInt(req.params.eventId, 10);
+      if (!eventId) {
+        return res.status(400).json({ error: 'Valid event id is required.' });
+      }
+
+      const eventRows = await query('SELECT event_id, name FROM events WHERE event_id = ? AND is_deleted = 0 LIMIT 1', [eventId]);
+      if (eventRows.length === 0) {
+        return res.status(404).json({ error: 'Festival not found.' });
+      }
+
+      const approvalRows = await query(
+        'SELECT approved_at FROM audience_voting_scores WHERE event_id = ? AND results_approved = 1 ORDER BY approved_at DESC LIMIT 1',
+        [eventId]
+      );
+      if (approvalRows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          status: 'results_not_approved',
+          event: { event_id: eventId, name: eventRows[0].name },
+          message: 'Audience Choice results have not been approved yet.'
+        });
+      }
+
+      const standings = await query(`
+        SELECT avs.standing_rank AS \`rank\`, avs.film_id, s.title AS film_title, s.director,
+               avs.total_votes, avs.raw_average, avs.bayesian_score, avs.has_quorum
+        FROM audience_voting_scores avs
+        JOIN submissions s ON s.id = avs.film_id
+        WHERE avs.event_id = ? AND avs.total_votes > 0
+        ORDER BY avs.standing_rank ASC
+      `, [eventId]);
+
+      const ranked = standings.map(r => ({
+          rank: r.rank,
+          film_id: r.film_id,
+          film_title: r.film_title,
+          director: r.director,
+          total_votes: Number(r.total_votes),
+          average_rating: Number(r.raw_average),
+          score: Number(r.bayesian_score),
+          eligible: Boolean(r.has_quorum)
+      }));
+
+      res.set('Cache-Control', 'public, max-age=30');
+      res.json({
+        success: true,
+        status: 'approved',
+        event: { event_id: eventId, name: eventRows[0].name },
+        approved_at: approvalRows[0].approved_at,
+        winner: ranked.find(r => r.eligible) || null,
+        standings: ranked
+      });
+    } catch (error) {
+      console.error('[AudienceController] getPublicResults error:', error.message);
+      res.status(500).json({ error: 'Failed to load results.' });
+    }
+  }
+
+  /**
    * POST /api/voting/approve-results
    * Approves and locks the official Audience Choice results for publication
    */
@@ -1174,11 +1766,14 @@ async function listAttendance(req, res) {
         av.rating,
         av.is_attendance_verified,
         av.status,
+        av.voting_method,
+        sq.serial_no AS badge_serial,
         av.ip_address,
         av.created_at
       FROM audience_votes av
       JOIN submissions s ON s.id = av.film_id
       JOIN saas_attendees sa ON sa.attendee_id = av.attendee_id
+      LEFT JOIN saas_qr sq ON sq.qr_id = av.qr_id
       WHERE av.event_id = ? AND av.status != 'valid'
       ORDER BY av.created_at DESC
     `;
@@ -1313,48 +1908,38 @@ async function listAttendance(req, res) {
         return res.status(403).json({ error: 'Voting is currently closed for this screening session.' });
       }
 
-      // 2. Identify Attendee by Badge ID, Serial Number (e.g. KB26-0011), or Phone
-      const cleanBadgeStr = badge_number ? String(badge_number).trim() : '';
-      const cleanPhone = phone_number ? String(phone_number).trim() : '';
-
-      let derivedId = 0;
-      if (cleanBadgeStr && /^\d+$/.test(cleanBadgeStr)) {
-        derivedId = parseInt(cleanBadgeStr, 10);
+      // 2. Identify Attendee (ADR 0001):
+      //    - scanned badge QR (UUID) is sufficient on its own;
+      //    - typed 6-digit badge number (or legacy printed code) also needs the last 4 digits
+      //      of the registered mobile number.
+      //    KB26-xxxx labels, attendee ids and phone-only lookups are not accepted.
+      const cleanBadgeStr = qrCredential.normalizeCredential(badge_number);
+      if (!cleanBadgeStr) {
+        return res.status(400).json({ error: 'Please scan your badge QR or enter the 6-digit badge number printed on it.' });
       }
 
-      if (!cleanBadgeStr && !derivedId && !cleanPhone) {
-        return res.status(400).json({ error: 'Please enter your Badge ID or Registered Mobile number to verify attendance.' });
+      const notFoundMsg = 'We could not verify this badge. Check the badge number and mobile digits on your festival pass.';
+      const resolved = await qrCredential.resolveAttendee(block.event_id, cleanBadgeStr);
+      if (!resolved) {
+        return res.status(404).json({ error: notFoundMsg });
+      }
+      if (!resolved.strong) {
+        if (!phone_number || String(phone_number).replace(/\D/g, '').length < 4) {
+          return res.status(400).json({
+            error: 'Please also enter the last 4 digits of your registered mobile number.',
+            requires_phone: true
+          });
+        }
+        if (!qrCredential.phoneLast4Matches(resolved.attendee.phone, phone_number)) {
+          return res.status(404).json({ error: notFoundMsg });
+        }
       }
 
-      let attendeeRows = [];
-      if (cleanBadgeStr || derivedId) {
-        attendeeRows = await query(`
-        SELECT attendee_id, name, delegate_category, qr_token
-        FROM saas_attendees 
-        WHERE (attendee_id = ? 
-           OR UPPER(JSON_UNQUOTE(JSON_EXTRACT(custom_data, '$.serial_no'))) = UPPER(?) 
-           OR qr_token = ?)
-          AND (event_id = ? OR festival_id = ?)
-        LIMIT 1
-      `, [derivedId || 0, cleanBadgeStr, cleanBadgeStr, block.event_id, block.event_id]);
-      } 
-      
-      if (attendeeRows.length === 0 && cleanPhone) {
-        const digitsOnly = cleanPhone.replace(/\D/g, '');
-        attendeeRows = await query(`
-        SELECT attendee_id, name, delegate_category, qr_token
-        FROM saas_attendees 
-        WHERE (phone = ? OR REPLACE(REPLACE(phone, ' ', ''), '-', '') = ? OR REPLACE(REPLACE(phone, ' ', ''), '-', '') LIKE ?)
-          AND (event_id = ? OR festival_id = ?)
-        LIMIT 1
-      `, [cleanPhone, digitsOnly, `%${digitsOnly.slice(-10)}`, block.event_id, block.event_id]);
-      }
-
-      if (attendeeRows.length === 0) {
-        return res.status(404).json({ error: 'No attendee found matching this Badge ID or Mobile Number. Please check your festival pass.' });
-      }
-
-      const attendee = attendeeRows[0];
+      const attendee = resolved.attendee;
+      // Badge the vote was cast with (stored on every vote, ADR 0003)
+      const voteQrId = resolved.qr?.qr_id
+        || (await query('SELECT qr_id FROM saas_qr WHERE attendee_id = ? ORDER BY qr_id DESC LIMIT 1', [attendee.attendee_id]))[0]?.qr_id
+        || null;
 
       // 3. Option 3 Eligibility Enforcement: Verify Attendee was Checked-In at this Screening
       const checkinRows = await query(`
@@ -1385,11 +1970,11 @@ async function listAttendance(req, res) {
         try {
           await query(`
           INSERT INTO audience_votes (
-            event_id, screening_block_id, film_id, attendee_id, rating, 
+            event_id, screening_block_id, film_id, attendee_id, qr_id, rating, 
             is_attendance_verified, voting_method, status, ip_address, user_agent, device_fingerprint
-          ) VALUES (?, ?, ?, ?, ?, TRUE, 'qr_direct', 'valid', ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, TRUE, 'qr_direct', 'valid', ?, ?, ?)
         `, [
-            block.event_id, block.id, filmId, attendee.attendee_id, rating,
+            block.event_id, block.id, filmId, attendee.attendee_id, voteQrId, rating,
             clientIp, userAgent, device_fingerprint || null
           ]);
           votesCast++;
@@ -1587,6 +2172,7 @@ async function listAttendance(req, res) {
       }
 
       currentConfig.registration_form_schema = schema;
+      delete currentConfig.festival_name; // derived from events.name on read
 
       await query(`
       INSERT INTO audience_settings (event_id, settings_json)
@@ -2054,6 +2640,7 @@ async function listAttendance(req, res) {
   }
 
   module.exports = {
+  getPublicResults,
     listCategories,
     createCategory,
     updateCategory,
@@ -2068,8 +2655,14 @@ async function listAttendance(req, res) {
     performScreeningCheckin,
     listAttendance,
     registerAttendee,
+    getAttendee,
+    updateAttendee,
     issueAttendeeQrCode,
     revokeAttendeeQrCode,
+    bulkGenerateQRs,
+    getQRPool,
+    checkQRCode,
+    assignAttendeeQR,
     listAttendees,
     bulkImportAttendees,
     getVotingLeaderboard,

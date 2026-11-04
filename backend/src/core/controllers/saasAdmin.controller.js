@@ -432,7 +432,7 @@ async function updateFestivalSettings(req, res) {
 }
 
 /**
- * POST or GET /api/admin/saas/festivals/:eventId/launch-token
+ * POST /api/admin/saas/festivals/:eventId/launch-token
  * Generates an Admin SSO launch token so Freecomers platform administrators
  * can launch and manage any festival portal directly as Platform SuperAdmin.
  */
@@ -452,8 +452,15 @@ async function generateLaunchToken(req, res) {
       return res.status(404).json({ error: 'Festival event not found' });
     }
 
-    // Freecomers platform administrator credentials
-    const adminRows = await query('SELECT id, name, email FROM admins ORDER BY id ASC LIMIT 1');
+    // Identity of the requesting Freecomers admin (verified by requireFreecomersAdmin);
+    // falls back to the first admin row if the token carried no usable `sub`.
+    const requesterId = req.freecomersAdmin && req.freecomersAdmin.id;
+    let adminRows = requesterId
+      ? await query('SELECT id, name, email FROM admins WHERE id = ? LIMIT 1', [requesterId])
+      : [];
+    if (adminRows.length === 0) {
+      adminRows = await query('SELECT id, name, email FROM admins ORDER BY id ASC LIMIT 1');
+    }
     const adminUser = adminRows.length > 0 ? adminRows[0] : { id: 1, name: 'Freecomers Administrator', email: 'freecomersfilmworks@gmail.com' };
 
     // Sign launch JWT with role: admin, isSuperAdmin: true, targetFestivalId: eventId

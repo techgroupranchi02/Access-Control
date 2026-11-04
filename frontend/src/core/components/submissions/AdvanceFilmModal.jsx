@@ -104,9 +104,9 @@ export default function AdvanceFilmModal({ film, stages = [], onClose, onSuccess
               style={{
                 padding: '10px 14px',
                 borderRadius: '8px',
-                background: '#fee2e2',
-                border: '1px solid #fca5a5',
-                color: '#b91c1c',
+                background: 'var(--fc-danger-bg)',
+                border: '1px solid var(--fc-danger-border)',
+                color: 'var(--fc-danger-text)',
                 fontSize: '13px'
               }}
             >

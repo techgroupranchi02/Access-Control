@@ -8,6 +8,10 @@
 const express = require('express');
 const router = express.Router();
 const saasAdminController = require('../controllers/saasAdmin.controller');
+const { requireFreecomersAdmin } = require('../middleware/freecomersAdmin.middleware');
+
+// All SaaS console routes require a Freecomers admin JWT verified by Laravel (docs/adr/0002)
+router.use(requireFreecomersAdmin);
 
 // Festival List & SaaS Toggle
 router.get('/festivals', saasAdminController.listFestivals);
@@ -27,7 +31,7 @@ router.put('/festivals/:eventId/modules/:moduleId/matrix', saasAdminController.u
 router.put('/festivals/:eventId/settings', saasAdminController.updateFestivalSettings);
 
 // Admin SSO Launch Token to launch festival portal
+// POST only: a GET would let tokens be minted from plain links and leak into logs/history
 router.post('/festivals/:eventId/launch-token', saasAdminController.generateLaunchToken);
-router.get('/festivals/:eventId/launch-token', saasAdminController.generateLaunchToken);
 
 module.exports = router;

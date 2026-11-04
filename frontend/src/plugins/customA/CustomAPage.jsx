@@ -73,7 +73,7 @@ export default function CustomAPage() {
   return (
     <div className="animate-fade-in">
       <div className="page-header">
-        <h2 className="page-title">🧩 Custom A</h2>
+        <h2 className="page-title">Custom A</h2>
         <p className="page-description">
           This is a <strong>plugin page</strong> — it exists entirely outside core business logic.
           It was discovered and registered automatically via config.
@@ -82,10 +82,10 @@ export default function CustomAPage() {
 
       {/* Plugin Architecture Info */}
       <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)' }}>
-        🔌 <strong>Plugin Architecture:</strong> This page was loaded from <code>plugins/customA/</code> —
+        <strong>Plugin Architecture:</strong> This page was loaded from <code>plugins/customA/</code> —
         no core business logic references it directly. Permission group: <strong>CustomGroupX</strong>.
         <br />
-        🔑&nbsp;
+        &nbsp;
         <span className={`badge ${can('customA:read') ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 4 }}>customA:read</span>
         <span className={`badge ${can('customA:update') ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 4 }}>customA:update</span>
         <span className={`badge ${can('customA:delete') ? 'badge-success' : 'badge-danger'}`}>customA:delete</span>
@@ -134,9 +134,9 @@ export default function CustomAPage() {
                     <PermissionGate permission="customA:update">
                       <td>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(item)}>✏️ Edit</button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(item)}>Edit</button>
                           <PermissionGate permission="customA:delete">
-                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(item.id)}>🗑️ Delete</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(item.id)}>Delete</button>
                           </PermissionGate>
                         </div>
                       </td>
@@ -153,7 +153,7 @@ export default function CustomAPage() {
       <PermissionGate permission="customA:update">
         <div className="permission-section">
           <h3 className="permission-section-title">
-            ✏️ Edit Custom Item
+            Edit Custom Item
             <span className="permission-section-badge">Requires: customA:update</span>
           </h3>
           {editingId ? (
@@ -179,7 +179,7 @@ export default function CustomAPage() {
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button className="btn btn-success btn-sm" onClick={() => handleSave(editingId)}>💾 Save</button>
+                <button className="btn btn-success btn-sm" onClick={() => handleSave(editingId)}>Save</button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
               </div>
             </div>
@@ -195,7 +195,7 @@ export default function CustomAPage() {
               borderRadius: 'var(--radius-md)',
             }}>
               <h4 style={{ fontSize: '0.875rem', color: 'var(--color-danger)' }}>
-                🗑️ Danger Zone <span className="permission-section-badge" style={{ marginLeft: 8, background: 'rgba(239,68,68,0.15)', color: 'var(--color-danger)' }}>Requires: customA:delete</span>
+                Danger Zone <span className="permission-section-badge" style={{ marginLeft: 8, background: 'rgba(239,68,68,0.15)', color: 'var(--color-danger)' }}>Requires: customA:delete</span>
               </h4>
               <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
                 Delete actions for Custom A items. Only visible with <code>customA:delete</code> permission.

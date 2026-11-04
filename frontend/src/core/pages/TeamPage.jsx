@@ -218,7 +218,7 @@ function MultiGroupPicker({
           })}
         </div>
       ) : (
-        <div style={{ fontSize: '0.75rem', color: '#b91c1c', fontStyle: 'italic', padding: '4px 0' }}>
+        <div style={{ fontSize: '0.75rem', color: 'var(--fc-danger-text)', fontStyle: 'italic', padding: '4px 0' }}>
           No groups selected. Please select at least one group below.
         </div>
       )}
@@ -404,7 +404,7 @@ function PermissionsByModuleSection({
               <LockIcon size={12} /> Inherited & Read-Only
             </span>
           ) : isCustomGroupCreation ? (
-            <span className="fc-perm-custom-tag" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#d8b4fe', borderColor: 'rgba(168, 85, 247, 0.3)' }}>
+            <span className="fc-perm-custom-tag" style={{ background: 'var(--fc-info-bg)', color: 'var(--fc-info-text)', borderColor: 'var(--fc-info-border)' }}>
               Custom Group Config
             </span>
           ) : null}
@@ -713,7 +713,7 @@ export default function TeamPage() {
     const parts = String(text).split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
     return parts.map((part, i) => 
       part.toLowerCase() === query.toLowerCase() ? (
-        <mark key={i} style={{ background: 'rgba(225, 29, 72, 0.28)', color: 'inherit', padding: '0 2px', borderRadius: '3px' }}>
+        <mark key={i} style={{ background: 'rgba(168, 47, 47, 0.28)', color: 'inherit', padding: '0 2px', borderRadius: '3px' }}>
           {part}
         </mark>
       ) : part

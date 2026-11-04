@@ -782,6 +782,14 @@ async function createReviewState(req, res) {
       return res.status(400).json({ error: 'Stage name is required.' });
     }
 
+    const existingName = await query(
+      'SELECT id FROM festival_review_states WHERE event_id = ? AND unique_name = ?',
+      [eventId, unique_name.trim()]
+    );
+    if (existingName.length > 0) {
+      return res.status(400).json({ error: `A review stage named "${unique_name.trim()}" already exists for this festival.` });
+    }
+
     // Determine order
     let order = parseInt(stage_order, 10);
     if (isNaN(order)) {
@@ -963,7 +971,21 @@ async function updateReviewState(req, res) {
     const fields = [];
     const params = [];
 
-    if (unique_name !== undefined) { fields.push('unique_name = ?'); params.push(unique_name.trim()); }
+    if (unique_name !== undefined) {
+      const trimmedName = unique_name.trim();
+      if (!trimmedName) {
+        return res.status(400).json({ error: 'Stage name cannot be empty.' });
+      }
+      const existingName = await query(
+        'SELECT id FROM festival_review_states WHERE event_id = ? AND unique_name = ? AND id != ?',
+        [eventId, trimmedName, stateId]
+      );
+      if (existingName.length > 0) {
+        return res.status(400).json({ error: `A review stage named "${trimmedName}" already exists for this festival.` });
+      }
+      fields.push('unique_name = ?');
+      params.push(trimmedName);
+    }
     if (stage_order !== undefined) { fields.push('stage_order = ?'); params.push(parseInt(stage_order, 10)); }
     if (access_group_name !== undefined) { fields.push('access_group_name = ?'); params.push(access_group_name); }
     if (scope_key !== undefined) { fields.push('scope_key = ?'); params.push(scope_key); }

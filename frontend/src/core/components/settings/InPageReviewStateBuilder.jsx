@@ -670,7 +670,7 @@ export default function InPageReviewStateBuilder({
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
-              <span className="criteria-chip" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span className="criteria-chip" style={{ background: 'var(--fc-info-bg)', color: 'var(--fc-info-text)', borderColor: 'var(--fc-info-border)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 {juryAssignmentMode === 'none' ? (
                   <>
                     <LockIcon size={12} />
@@ -693,7 +693,7 @@ export default function InPageReviewStateBuilder({
                   </>
                 )))}
               </span>
-              <span className="criteria-chip" style={{ background: '#f5f3ff', color: '#7c3aed', borderColor: '#ddd6fe', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <span className="criteria-chip" style={{ background: 'var(--fc-info-bg)', color: 'var(--fc-info-text)', borderColor: 'var(--fc-info-border)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 {reviewType === 'star_rating' ? (
                   <>
                     <StarIcon size={12} />
@@ -711,19 +711,19 @@ export default function InPageReviewStateBuilder({
                   </>
                 ))}
               </span>
-              <span className="criteria-chip" style={{ background: notesRequirement === 'required' ? '#fef3c7' : '#f1f5f9', color: notesRequirement === 'required' ? '#b45309' : '#475569', borderColor: notesRequirement === 'required' ? '#fde68a' : '#cbd5e1' }}>
+              <span className="criteria-chip" style={{ background: notesRequirement === 'required' ? 'var(--fc-warning-bg)' : 'var(--fc-surface-subtle)', color: notesRequirement === 'required' ? 'var(--fc-warning-text)' : 'var(--fc-text-secondary)', borderColor: notesRequirement === 'required' ? 'var(--fc-warning-border)' : 'var(--fc-border)' }}>
                 Notes: {notesRequirement === 'required' ? 'Mandatory Critique' : 'Optional Notes'}
               </span>
-              <span className="criteria-chip" style={{ background: status === 'active' ? '#dbeafe' : '#f1f5f9', color: status === 'active' ? '#1d4ed8' : '#64748b', borderColor: status === 'active' ? '#bfdbfe' : '#cbd5e1' }}>
+              <span className="criteria-chip" style={{ background: status === 'active' ? 'var(--fc-info-bg)' : 'var(--fc-surface-subtle)', color: status === 'active' ? 'var(--fc-info-text)' : 'var(--fc-text-secondary)', borderColor: status === 'active' ? 'var(--fc-info-border)' : 'var(--fc-border)' }}>
                 {status === 'active' ? '● Active' : '○ Inactive'}
               </span>
               {reviewType === 'vote_nomination' && awardCriteriaList.length > 0 && (
-                <span className="criteria-chip" style={{ background: '#fdf2f8', color: '#db2777', borderColor: '#fbcfe8', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span className="criteria-chip" style={{ background: 'var(--fc-brand-tint)', color: 'var(--fc-brand-text)', borderColor: 'var(--fc-brand-border)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   <TrophyIcon size={13} /> {awardCriteriaList.length} Award Categories
                 </span>
               )}
               {reviewType !== 'vote_nomination' && criteriaList.length > 0 && (
-                <span className="criteria-chip" style={{ background: '#f8fafc', color: '#475569', borderColor: '#cbd5e1', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span className="criteria-chip" style={{ background: 'var(--fc-surface-subtle)', color: 'var(--fc-text-secondary)', borderColor: 'var(--fc-border)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                   {criteriaList.length} Rubric Criteria
                 </span>
               )}
@@ -750,7 +750,7 @@ export default function InPageReviewStateBuilder({
           <div className="fc-builder-section">
             <div className="fc-builder-section-title">
               <span>1. STAGE IDENTITY & SEQUENCE</span>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: '#78716c' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>
                 Define the stage name, sequence order, and whether this stage is active.
               </span>
             </div>
@@ -770,7 +770,7 @@ export default function InPageReviewStateBuilder({
                 />
                 {/* Preset Suggestions */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
-                  <span style={{ fontSize: '11px', color: '#78716c', fontWeight: 600 }}>Quick Presets:</span>
+                  <span style={{ fontSize: '11px', color: 'var(--fc-text-secondary)', fontWeight: 600 }}>Quick Presets:</span>
                   {PRESET_SUGGESTIONS.map((sug) => (
                     <button
                       key={sug}
@@ -803,7 +803,7 @@ export default function InPageReviewStateBuilder({
                     {status === 'active' ? '● Active' : '○ Inactive'}
                   </button>
                 </div>
-                <span style={{ fontSize: '11px', color: '#78716c', marginTop: '4px', display: 'block' }}>
+                <span style={{ fontSize: '11px', color: 'var(--fc-text-secondary)', marginTop: '4px', display: 'block' }}>
                   {status === 'active' ? 'Accepting jury reviews' : 'Bypassed / on hold'}
                 </span>
               </div>
@@ -929,7 +929,7 @@ export default function InPageReviewStateBuilder({
           <div className="fc-builder-section">
             <div className="fc-builder-section-title">
               <span>2. EVALUATION & SCORING MODEL</span>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: '#78716c' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>
                 Select how juries grade submissions in this sequential stage.
               </span>
             </div>
@@ -955,7 +955,7 @@ export default function InPageReviewStateBuilder({
                     <span style={{ fontSize: '11px', color: 'var(--fc-brand, #a82f2f)', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
                       {typeof opt.scaleText === 'function' ? opt.scaleText(starScale) : opt.scaleText}
                     </span>
-                    <p style={{ fontSize: '11.5px', color: '#78716c', lineHeight: 1.35, margin: 0 }}>
+                    <p style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', lineHeight: 1.35, margin: 0 }}>
                       {opt.description}
                     </p>
                   </div>
@@ -977,16 +977,16 @@ export default function InPageReviewStateBuilder({
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <StarIcon size={16} style={{ color: '#d97706' }} />
+                      <StarIcon size={16} style={{ color: 'var(--fc-warning-text)' }} />
                       <strong style={{ fontSize: '13px', color: 'var(--fc-text-main, #1c1917)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                         Configure Star Scale (How many stars?)
                       </strong>
                     </div>
-                    <span style={{ fontSize: '11.5px', color: '#78716c', display: 'block', marginTop: '2px' }}>
+                    <span style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', display: 'block', marginTop: '2px' }}>
                       Choose the rating scale granularity jurors will use to score each rubric criterion.
                     </span>
                   </div>
-                  <span className="criteria-chip" style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a', fontSize: '11px', fontWeight: 700 }}>
+                  <span className="criteria-chip" style={{ background: 'var(--fc-warning-bg)', color: 'var(--fc-warning-text)', borderColor: 'var(--fc-warning-border)', fontSize: '11px', fontWeight: 700 }}>
                     Active: {starScale} Stars
                   </span>
                 </div>
@@ -1017,7 +1017,7 @@ export default function InPageReviewStateBuilder({
                               style={{
                                 fontSize: '10px',
                                 padding: '1px 6px',
-                                background: isScaleSelected ? 'rgba(225, 29, 72, 0.14)' : 'var(--fc-surface-hover)',
+                                background: isScaleSelected ? 'rgba(168, 47, 47, 0.14)' : 'var(--fc-surface-hover)',
                                 color: isScaleSelected ? 'var(--fc-brand)' : 'var(--fc-text-muted)',
                                 borderColor: isScaleSelected ? 'var(--fc-brand-border)' : 'var(--fc-border)'
                               }}
@@ -1059,7 +1059,7 @@ export default function InPageReviewStateBuilder({
                     </span>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                       {Array.from({ length: starScale }).map((_, idx) => (
-                        <StarIcon key={idx} size={16} style={{ color: '#eab308' }} />
+                        <StarIcon key={idx} size={16} style={{ color: 'var(--fc-warning-text)' }} />
                       ))}
                     </div>
                   </div>
@@ -1069,7 +1069,7 @@ export default function InPageReviewStateBuilder({
                     </span>
                     <span
                       className="criteria-chip"
-                      style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0', fontSize: '10.5px', fontWeight: 700 }}
+                      style={{ background: 'var(--fc-success-bg)', color: 'var(--fc-success-text)', borderColor: 'var(--fc-success-border)', fontSize: '10.5px', fontWeight: 700 }}
                     >
                       Sample: {(starScale * 0.84).toFixed(1)} / {starScale}.0
                     </span>
@@ -1083,7 +1083,7 @@ export default function InPageReviewStateBuilder({
           <div className="fc-builder-section">
             <div className="fc-builder-section-title">
               <span>3. REVIEW NOTES REQUIREMENT</span>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: '#78716c' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>
                 Determine whether written notes and critique remarks are mandatory for submitting an evaluation.
               </span>
             </div>
@@ -1110,7 +1110,7 @@ export default function InPageReviewStateBuilder({
                     <span style={{ fontSize: '11px', color: isSelected ? 'var(--fc-brand, #a82f2f)' : '#78716c', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
                       {opt.subtitle}
                     </span>
-                    <p style={{ fontSize: '11.5px', color: '#78716c', lineHeight: 1.35, margin: 0 }}>
+                    <p style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', lineHeight: 1.35, margin: 0 }}>
                       {opt.description}
                     </p>
                   </div>
@@ -1123,7 +1123,7 @@ export default function InPageReviewStateBuilder({
           <div className="fc-builder-section">
             <div className="fc-builder-section-title">
               <span>4. ASSIGN JURY FOR THIS STAGE</span>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: '#78716c' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>
                 Determine whether submissions are automatically assigned to jurors, managed manually, or require no jury (Admin-only stage).
               </span>
             </div>
@@ -1147,7 +1147,7 @@ export default function InPageReviewStateBuilder({
                     {juryAssignmentMode === 'auto' && <CheckIcon size={12} />}
                   </span>
                 </div>
-                <p style={{ fontSize: '11.5px', color: '#78716c', lineHeight: 1.4, margin: 0 }}>
+                <p style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', lineHeight: 1.4, margin: 0 }}>
                   Submissions moving into this stage are automatically assigned to jury members based on configured rules.
                 </p>
               </div>
@@ -1169,7 +1169,7 @@ export default function InPageReviewStateBuilder({
                     {juryAssignmentMode === 'manual' && <CheckIcon size={12} />}
                   </span>
                 </div>
-                <p style={{ fontSize: '11.5px', color: '#78716c', lineHeight: 1.4, margin: 0 }}>
+                <p style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', lineHeight: 1.4, margin: 0 }}>
                   Administrators will curate and assign specific jury members manually to each film submission.
                 </p>
               </div>
@@ -1194,7 +1194,7 @@ export default function InPageReviewStateBuilder({
                     {juryAssignmentMode === 'none' && <CheckIcon size={12} />}
                   </span>
                 </div>
-                <p style={{ fontSize: '11.5px', color: '#78716c', lineHeight: 1.4, margin: 0 }}>
+                <p style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', lineHeight: 1.4, margin: 0 }}>
                   Admin-only / Showcase stage (e.g. Finalist, Winner). No jury members evaluate films in this stage.
                 </p>
               </div>
@@ -1211,7 +1211,7 @@ export default function InPageReviewStateBuilder({
                 flexDirection: 'column',
                 gap: '12px'
               }}>
-                <div style={{ fontSize: '12px', fontWeight: 700, color: '#44403c', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--fc-text-secondary)', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
                   Auto-Assignment Rules
                 </div>
 
@@ -1229,11 +1229,11 @@ export default function InPageReviewStateBuilder({
                       <strong style={{ fontSize: '13px', color: juryAutoRule === 'all_jury' ? 'var(--fc-brand, #a82f2f)' : 'var(--fc-text-main, #1c1917)' }}>
                         Every jury will review all the films of that stage
                       </strong>
-                      <span className="criteria-chip" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd', fontSize: '10.5px' }}>
+                      <span className="criteria-chip" style={{ background: 'var(--fc-info-bg)', color: 'var(--fc-info-text)', borderColor: 'var(--fc-info-border)', fontSize: '10.5px' }}>
                         Full Panel Review
                       </span>
                     </div>
-                    <span style={{ fontSize: '11.5px', color: '#78716c', lineHeight: 1.35, marginTop: '2px', display: 'block' }}>
+                    <span style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', lineHeight: 1.35, marginTop: '2px', display: 'block' }}>
                       Every active jury member is automatically assigned to evaluate each film in this round upon advancement.
                     </span>
                   </div>
@@ -1253,11 +1253,11 @@ export default function InPageReviewStateBuilder({
                       <strong style={{ fontSize: '13px', color: juryAutoRule === 'n_jury' ? 'var(--fc-brand, #a82f2f)' : 'var(--fc-text-main, #1c1917)' }}>
                         Every film will be reviewed by &lt;n&gt; jury
                       </strong>
-                      <span className="criteria-chip" style={{ background: '#f5f3ff', color: '#7c3aed', borderColor: '#ddd6fe', fontSize: '10.5px' }}>
+                      <span className="criteria-chip" style={{ background: 'var(--fc-info-bg)', color: 'var(--fc-info-text)', borderColor: 'var(--fc-info-border)', fontSize: '10.5px' }}>
                         Workload Balanced
                       </span>
                     </div>
-                    <span style={{ fontSize: '11.5px', color: '#78716c', lineHeight: 1.35, marginTop: '2px', display: 'block' }}>
+                    <span style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', lineHeight: 1.35, marginTop: '2px', display: 'block' }}>
                       Each film is evenly distributed to a quota of N jurors based on least-loaded active juror workload.
                     </span>
                   </div>
@@ -1281,7 +1281,7 @@ export default function InPageReviewStateBuilder({
                         <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--fc-text-main, #1c1917)', display: 'block' }}>
                           Number of Jury Reviewers per Film (n) *
                         </label>
-                        <span style={{ fontSize: '11px', color: '#78716c' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--fc-text-secondary)' }}>
                           Each film advanced will be assigned to exactly this many jurors.
                         </span>
                       </div>
@@ -1305,7 +1305,7 @@ export default function InPageReviewStateBuilder({
                             textAlign: 'center',
                             fontWeight: 700,
                             fontSize: '14px',
-                            borderColor: (totalAvailableJury > 0 && juryCountPerFilm > totalAvailableJury) ? '#ef4444' : undefined
+                            borderColor: (totalAvailableJury > 0 && juryCountPerFilm > totalAvailableJury) ? 'var(--fc-danger)' : undefined
                           }}
                           value={juryCountPerFilm}
                           onChange={(e) => {
@@ -1334,21 +1334,21 @@ export default function InPageReviewStateBuilder({
 
                     {/* Validation & Jury Count Context */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
-                      <span style={{ fontSize: '11.5px', color: '#64748b' }}>
+                      <span style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)' }}>
                         Total active jury registered: <strong>{totalAvailableJury}</strong>
                       </span>
                       {totalAvailableJury > 0 && (
-                        <span className="criteria-chip" style={{ background: '#f0fdf4', color: '#166534', borderColor: '#bbf7d0', fontSize: '10.5px' }}>
+                        <span className="criteria-chip" style={{ background: 'var(--fc-success-bg)', color: 'var(--fc-success-text)', borderColor: 'var(--fc-success-border)', fontSize: '10.5px' }}>
                           Max allowed: {totalAvailableJury}
                         </span>
                       )}
                       {totalAvailableJury > 0 && Number(juryCountPerFilm) > totalAvailableJury && (
-                        <span style={{ fontSize: '11.5px', color: '#ef4444', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '11.5px', color: 'var(--fc-danger-text)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                           <WarningIcon size={13} /> n ({juryCountPerFilm}) cannot be greater than total number of jury ({totalAvailableJury})
                         </span>
                       )}
                       {totalAvailableJury === 0 && (
-                        <span style={{ fontSize: '11.5px', color: '#b45309', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '11.5px', color: 'var(--fc-warning-text)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                           <WarningIcon size={13} /> No jurors currently assigned to festival. You can configure now, but ensure jurors are invited before evaluating.
                         </span>
                       )}
@@ -1361,8 +1361,8 @@ export default function InPageReviewStateBuilder({
             {/* Manual Assign Notice (Condition 2.2) */}
             {juryAssignmentMode === 'manual' && (
               <div style={{
-                background: 'var(--fc-alert-bg, rgba(225, 29, 72, 0.08))',
-                border: '1.5px solid var(--fc-alert-border, rgba(225, 29, 72, 0.28))',
+                background: 'var(--fc-alert-bg, rgba(168, 47, 47, 0.08))',
+                border: '1.5px solid var(--fc-alert-border, rgba(168, 47, 47, 0.28))',
                 borderRadius: '10px',
                 padding: '16px',
                 display: 'flex',
@@ -1410,7 +1410,7 @@ export default function InPageReviewStateBuilder({
           <div className="fc-builder-section">
             <div className="fc-builder-section-title">
               <span>5. STAGE COMPLETION & AUTOMATION RULES</span>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: '#78716c' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>
                 Configure trigger conditions for concluding this round and how to handle unreviewed submissions.
               </span>
             </div>
@@ -1422,7 +1422,7 @@ export default function InPageReviewStateBuilder({
                   fontSize: '11px',
                   fontWeight: 800,
                   color: 'var(--fc-brand, #a82f2f)',
-                  background: '#fee2e2',
+                  background: 'var(--fc-danger-bg)',
                   padding: '1px 6px',
                   borderRadius: '4px',
                   letterSpacing: '0.5px'
@@ -1433,7 +1433,7 @@ export default function InPageReviewStateBuilder({
                   Stage Completion Trigger (When does this stage close?)
                 </strong>
               </div>
-              <span style={{ fontSize: '11.5px', color: '#78716c', display: 'block', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', display: 'block', marginBottom: '10px' }}>
                 Determine the milestone or condition that triggers the conclusion of jury evaluation for this round.
               </span>
 
@@ -1481,16 +1481,16 @@ export default function InPageReviewStateBuilder({
                             style={{
                               fontSize: '10px',
                               padding: '1px 6px',
-                              background: isSelected ? '#fee2e2' : '#f1f5f9',
-                              color: isSelected ? '#991b1b' : '#64748b',
-                              borderColor: isSelected ? '#fecaca' : '#e2e8f0'
+                              background: isSelected ? 'var(--fc-danger-bg)' : 'var(--fc-surface-subtle)',
+                              color: isSelected ? 'var(--fc-danger-text)' : 'var(--fc-text-secondary)',
+                              borderColor: isSelected ? 'var(--fc-danger-border)' : 'var(--fc-border)'
                             }}
                           >
                             {item.badge}
                           </span>
                         )}
                       </div>
-                      <p style={{ fontSize: '11.5px', color: '#78716c', lineHeight: 1.35, margin: 0 }}>
+                      <p style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', lineHeight: 1.35, margin: 0 }}>
                         {item.desc}
                       </p>
                     </div>
@@ -1506,7 +1506,7 @@ export default function InPageReviewStateBuilder({
                   fontSize: '11px',
                   fontWeight: 800,
                   color: 'var(--fc-brand, #a82f2f)',
-                  background: '#fee2e2',
+                  background: 'var(--fc-danger-bg)',
                   padding: '1px 6px',
                   borderRadius: '4px',
                   letterSpacing: '0.5px'
@@ -1517,7 +1517,7 @@ export default function InPageReviewStateBuilder({
                   Action on Unreviewed Films (What happens to leftovers?)
                 </strong>
               </div>
-              <span style={{ fontSize: '11.5px', color: '#78716c', display: 'block', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', display: 'block', marginBottom: '10px' }}>
                 Define the automated fallback policy for submissions that jurors did not evaluate before stage closure.
               </span>
 
@@ -1547,16 +1547,16 @@ export default function InPageReviewStateBuilder({
                             style={{
                               fontSize: '10px',
                               padding: '1px 6px',
-                              background: isSelected ? '#fee2e2' : '#f1f5f9',
-                              color: isSelected ? '#991b1b' : '#64748b',
-                              borderColor: isSelected ? '#fecaca' : '#e2e8f0'
+                              background: isSelected ? 'var(--fc-danger-bg)' : 'var(--fc-surface-subtle)',
+                              color: isSelected ? 'var(--fc-danger-text)' : 'var(--fc-text-secondary)',
+                              borderColor: isSelected ? 'var(--fc-danger-border)' : 'var(--fc-border)'
                             }}
                           >
                             {item.badge}
                           </span>
                         )}
                       </div>
-                      <p style={{ fontSize: '11.5px', color: '#78716c', lineHeight: 1.35, margin: 0 }}>
+                      <p style={{ fontSize: '11.5px', color: 'var(--fc-text-secondary)', lineHeight: 1.35, margin: 0 }}>
                         {item.desc}
                       </p>
                     </div>
@@ -1577,7 +1577,7 @@ export default function InPageReviewStateBuilder({
                 flexWrap: 'wrap'
               }}
             >
-              <FlashOnIcon size={16} style={{ color: '#d97706', flexShrink: 0 }} />
+              <FlashOnIcon size={16} style={{ color: 'var(--fc-warning-text)', flexShrink: 0 }} />
               <span style={{ fontSize: '12px', lineHeight: 1.4 }}>
                 <strong>Automation Rule:</strong> This stage concludes when <strong>{completionLogic}</strong>. Any films left unreviewed will be <strong>{actionUnreviewed}</strong>.
               </span>
@@ -1590,14 +1590,14 @@ export default function InPageReviewStateBuilder({
             <div className="fc-builder-section animate-fade-in">
               <div className="fc-builder-section-title">
                 <span>6. AWARD CATEGORIES &amp; NOMINATIONS</span>
-                <span style={{ fontSize: '12px', fontWeight: 500, color: '#78716c' }}>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>
                   Define the award categories available for nomination and voting in this stage.
                 </span>
               </div>
 
               {/* QUICK ADD PRESETS */}
               <div style={{ marginBottom: '14px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#78716c', letterSpacing: '0.5px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--fc-text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
                   QUICK ADD
                 </span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -1635,7 +1635,7 @@ export default function InPageReviewStateBuilder({
 
               {/* ACTIVE AWARD CATEGORIES */}
               <div style={{ marginBottom: '14px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#78716c', letterSpacing: '0.5px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--fc-text-secondary)', letterSpacing: '0.5px', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
                   ACTIVE AWARD CATEGORIES ({awardCriteriaList.length})
                 </span>
                 {awardCriteriaList.length > 0 ? (
@@ -1645,8 +1645,8 @@ export default function InPageReviewStateBuilder({
                         key={crit}
                         className="fc-award-chip"
                         style={{
-                          background: 'rgba(244, 63, 94, 0.12)',
-                          border: '1px solid rgba(244, 63, 94, 0.3)',
+                          background: 'rgba(168, 47, 47, 0.12)',
+                          border: '1px solid rgba(168, 47, 47, 0.3)',
                           borderRadius: '999px',
                           padding: '5px 12px',
                           fontSize: '12px',
@@ -1683,7 +1683,7 @@ export default function InPageReviewStateBuilder({
                     ))}
                   </div>
                 ) : (
-                  <p style={{ fontSize: '12.5px', color: '#78716c', margin: '4px 0', fontStyle: 'italic' }}>
+                  <p style={{ fontSize: '12.5px', color: 'var(--fc-text-secondary)', margin: '4px 0', fontStyle: 'italic' }}>
                     No award categories added yet. Click quick add presets above or add custom categories below.
                   </p>
                 )}
@@ -1729,7 +1729,7 @@ export default function InPageReviewStateBuilder({
             <div className="fc-builder-section animate-fade-in">
               <div className="fc-builder-section-title">
                 <span>6. EVALUATION CRITERIA RUBRICS</span>
-                <span style={{ fontSize: '12px', fontWeight: 500, color: '#78716c' }}>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>
                   {reviewType === 'star_rating'
                     ? `Categories weighted equally when juries submit evaluation scorecards on the ${starScale}-star scale.`
                     : 'Qualitative criteria reviewed when evaluating film submissions.'}
@@ -1784,7 +1784,7 @@ export default function InPageReviewStateBuilder({
           <div className="fc-builder-section">
             <div className="fc-builder-section-title">
               <span>7. AUTOMATED NOTIFICATION (ADVANCEMENT DISPATCH)</span>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: '#78716c' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>
                 Automatically notify filmmakers when their project advances to this round.
               </span>
             </div>
@@ -1805,7 +1805,7 @@ export default function InPageReviewStateBuilder({
 
             {notifyAcceptance && (
               <div className="fc-email-preview-box">
-                <div style={{ fontSize: '11px', fontWeight: 800, color: '#a82f2f', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--fc-brand-text)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
                   EMAIL DISPATCH TEMPLATE
                 </div>
                 <textarea
@@ -1815,8 +1815,8 @@ export default function InPageReviewStateBuilder({
                   onChange={(e) => setAcceptanceTemplate(e.target.value)}
                   style={{ width: '100%', fontSize: '12.5px', lineHeight: 1.5 }}
                 />
-                <span style={{ fontSize: '11px', color: '#78716c', marginTop: '4px', display: 'block' }}>
-                  Available merge tags: <code style={{ color: '#a82f2f' }}>{'{film_title}'}</code>, <code style={{ color: '#a82f2f' }}>{'{director_name}'}</code>, <code style={{ color: '#a82f2f' }}>{'{stage_name}'}</code>
+                <span style={{ fontSize: '11px', color: 'var(--fc-text-secondary)', marginTop: '4px', display: 'block' }}>
+                  Available merge tags: <code style={{ color: 'var(--fc-brand-text)' }}>{'{film_title}'}</code>, <code style={{ color: 'var(--fc-brand-text)' }}>{'{director_name}'}</code>, <code style={{ color: 'var(--fc-brand-text)' }}>{'{stage_name}'}</code>
                 </span>
               </div>
             )}
@@ -1826,7 +1826,7 @@ export default function InPageReviewStateBuilder({
           <div className="fc-builder-section">
             <div className="fc-builder-section-title">
               <span>9. AUTOMATED NOTIFICATION (REJECTION DISPATCH)</span>
-              <span style={{ fontSize: '12px', fontWeight: 500, color: '#78716c' }}>
+              <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>
                 Automatically notify filmmakers when their project is rejected from this round.
               </span>
             </div>
@@ -1847,7 +1847,7 @@ export default function InPageReviewStateBuilder({
 
             {notifyRejection && (
               <div className="fc-email-preview-box">
-                <div style={{ fontSize: '11px', fontWeight: 800, color: '#a82f2f', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--fc-brand-text)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
                   REJECTION EMAIL DISPATCH TEMPLATE
                 </div>
                 <textarea
@@ -1857,8 +1857,8 @@ export default function InPageReviewStateBuilder({
                   onChange={(e) => setRejectionTemplate(e.target.value)}
                   style={{ width: '100%', fontSize: '12.5px', lineHeight: 1.5 }}
                 />
-                <span style={{ fontSize: '11px', color: '#78716c', marginTop: '4px', display: 'block' }}>
-                  Available merge tags: <code style={{ color: '#a82f2f' }}>{'{film_title}'}</code>, <code style={{ color: '#a82f2f' }}>{'{director_name}'}</code>, <code style={{ color: '#a82f2f' }}>{'{stage_name}'}</code>
+                <span style={{ fontSize: '11px', color: 'var(--fc-text-secondary)', marginTop: '4px', display: 'block' }}>
+                  Available merge tags: <code style={{ color: 'var(--fc-brand-text)' }}>{'{film_title}'}</code>, <code style={{ color: 'var(--fc-brand-text)' }}>{'{director_name}'}</code>, <code style={{ color: 'var(--fc-brand-text)' }}>{'{stage_name}'}</code>
                 </span>
               </div>
             )}
@@ -1869,7 +1869,7 @@ export default function InPageReviewStateBuilder({
         {/* ── STICKY/BOTTOM ACTIONS BAR ──────────────────────────────────── */}
         <div className="fc-builder-actions-bar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', color: '#78716c' }}>
+            <span style={{ fontSize: '12px', color: 'var(--fc-text-secondary)' }}>
               {isEditMode ? `Updating Stage #${stageOrder} in the sequential pipeline.` : `Stage #${stageOrder} will be appended to the sequential review pipeline.`}
             </span>
           </div>

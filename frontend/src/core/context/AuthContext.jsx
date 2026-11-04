@@ -49,8 +49,9 @@ export function AuthProvider({ children }) {
     checkAuth();
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
+  // remember = true asks the server for a 30-day session instead of the standard 24 hours
+  const login = useCallback(async (email, password, remember = false) => {
+    const res = await api.post('/auth/login', { email, password, remember: Boolean(remember) });
     if (res.data.token) {
       localStorage.setItem('authToken', res.data.token);
     }
@@ -68,8 +69,8 @@ export function AuthProvider({ children }) {
     return res.data;
   }, []);
 
-  const loginWithGoogle = useCallback(async (credential) => {
-    const res = await api.post('/auth/google', { credential });
+  const loginWithGoogle = useCallback(async (credential, remember = false) => {
+    const res = await api.post('/auth/google', { credential, remember: Boolean(remember) });
     if (res.data.token) {
       localStorage.setItem('authToken', res.data.token);
     }

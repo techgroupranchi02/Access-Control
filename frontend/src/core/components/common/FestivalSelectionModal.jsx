@@ -46,13 +46,13 @@ export default function FestivalSelectionModal({
               <span>ffesti Plus Festival Operating System</span>
             </div>
             <h2 className="fc-festival-modal-title">
-              {currentFestival ? 'Switch Festival Workspace' : 'Select Festival Workspace'}
+              {currentFestival ? 'Switch Festival' : 'Select Festival'}
             </h2>
             <p className="fc-festival-modal-subtitle">
               {currentFestival
-                ? `Currently working in ${currentFestival.name}. Choose another festival workspace:`
+                ? `Currently working in ${currentFestival.name}. Choose another festival:`
                 : (user?.email
-                  ? `Logged in as ${user.name || user.email}. Choose which festival workspace to enter:`
+                  ? `Logged in as ${user.name || user.email}. Choose which festival to enter:`
                   : 'Choose the festival operating system you want to manage:')
               }
             </p>
@@ -87,14 +87,14 @@ export default function FestivalSelectionModal({
                   onClick={() => onSelectFestival(fest)}
                   className={`fc-festival-workspace-item ${isCurrent ? 'is-active' : ''}`}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0, flex: 1 }}>
+                  <div className="fc-festival-workspace-main">
                     {/* Visual Badge / Initials */}
                     <div className="fc-festival-avatar-box">
                       {initials}
                     </div>
 
                     {/* Metadata */}
-                    <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="fc-festival-workspace-info">
                       <div className="fc-festival-item-name">
                         {fest.name}
                       </div>
@@ -116,19 +116,27 @@ export default function FestivalSelectionModal({
                     </div>
                   </div>
 
-                  {/* Right Action Button / Status */}
-                  <div style={{ marginLeft: '16px', flexShrink: 0 }}>
+                  {/* Action Status / Chevron */}
+                  <div className="fc-festival-workspace-action">
                     {isCurrent ? (
                       <span className="fc-festival-active-pill">
                         <CheckCircleIcon size={14} /> Active
                       </span>
                     ) : (
-                      <button
-                        type="button"
-                        className="fc-festival-enter-btn"
-                      >
-                        {currentFestival ? 'Switch to →' : 'Enter →'}
-                      </button>
+                      <span className="fc-festival-chevron" aria-hidden="true">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </span>
                     )}
                   </div>
                 </div>
@@ -140,7 +148,7 @@ export default function FestivalSelectionModal({
         {/* Footer */}
         <div className="fc-festival-modal-footer">
           <span>You can switch between festivals anytime from the sidebar.</span>
-          <span className="fc-festival-modal-footer-count">{festivals.length} Workspaces Available</span>
+          <span className="fc-festival-modal-footer-count">{festivals.length} {festivals.length === 1 ? 'Festival' : 'Festivals'} Available</span>
         </div>
       </div>
     </div>,

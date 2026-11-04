@@ -18,6 +18,9 @@ const MIGRATION_SCRIPTS = [
   path.resolve(__dirname, '010_sequential_6_stages_review_workflow.js'),
   path.resolve(__dirname, '011_remove_jury_addon_module.js'),
   path.resolve(__dirname, '012_align_submissions_and_review_schema.js'),
+  path.resolve(__dirname, '013_dedup_and_constrain_review_stages.js'),
+  path.resolve(__dirname, '014_qr_credential_serial.js'),
+  path.resolve(__dirname, '015_vote_badge_link_and_kashish_receipts.js'),
   path.resolve(__dirname, '../src/scripts/migrate_kashish_integration.js'),
   path.resolve(__dirname, '../src/scripts/sync_specs_to_database.js'),
 ];

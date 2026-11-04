@@ -61,6 +61,7 @@ async function up() {
       
       \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       \`updated_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY \`uk_event_unique_name\` (\`event_id\`, \`unique_name\`),
       UNIQUE KEY \`uk_event_stage_order\` (\`event_id\`, \`stage_order\`),
       INDEX \`idx_rev_states_event\` (\`event_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -199,6 +200,12 @@ async function up() {
   ];
 
   for (const eventId of targetEventIds) {
+    const existing = await query('SELECT count(*) as cnt FROM festival_review_states WHERE event_id = ?', [eventId]);
+    if (existing[0]?.cnt >= 6) {
+      console.log(`[Migration 010] Event ${eventId} already has ${existing[0].cnt} review states. Skipping re-seed.`);
+      continue;
+    }
+
     console.log(`[Migration 010] Seeding 6 sequential stages for event_id: ${eventId}...`);
     for (const stage of stageDefinitions) {
       await query(`
@@ -208,6 +215,7 @@ async function up() {
           \`notes_requirement\`, \`auto_advance_cutoff\`, \`auto_reject_cutoff\`, \`status\`
         ) VALUES (?, ?, ?, 'jury', 'assigned', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
+          \`stage_order\` = VALUES(\`stage_order\`),
           \`unique_name\` = VALUES(\`unique_name\`),
           \`review_type\` = VALUES(\`review_type\`),
           \`star_scale\` = VALUES(\`star_scale\`),
@@ -235,8 +243,8 @@ async function up() {
 
       // Retrieve state_id
       const stateRow = await query(
-        'SELECT id FROM festival_review_states WHERE event_id = ? AND stage_order = ?',
-        [eventId, stage.order]
+        'SELECT id FROM festival_review_states WHERE event_id = ? AND unique_name = ?',
+        [eventId, stage.name]
       );
       if (stateRow.length > 0) {
         const stateId = stateRow[0].id;

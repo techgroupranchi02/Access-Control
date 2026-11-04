@@ -2,15 +2,15 @@
  * AttendancePage Component (/attendance)
  * 
  * Gate Check-In & Attendance Verification:
- * - Select current screening block/session
+ * - Select the venue (screening block) inside the Badge Scanner Deck
  * - Fast barcode/QR scanner with sound/haptic feedback
  * - Real-time duplicate scan prevention
  * - Live attendance feed with category ribbons
- * - Attendance summary metrics and CSV export
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
+import SearchInput from '../components/common/SearchInput';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
   QrCodeScannerIcon,
@@ -20,7 +20,9 @@ import {
   ScheduleIcon,
   SyncIcon,
   CameraAltIcon,
-  CloseIcon
+  CloseIcon,
+  CheckIcon,
+  ExpandMoreIcon
 } from '../components/common/Icons';
 
 export default function AttendancePage() {
@@ -30,8 +32,28 @@ export default function AttendancePage() {
   const [scanning, setScanning] = useState(false);
   const [lastScanResult, setLastScanResult] = useState(null);
   const [logs, setLogs] = useState([]);
-  const [metrics, setMetrics] = useState({ totalCheckins: 0, uniqueAttendeesCheckedIn: 0 });
+  const [logSearchInput, setLogSearchInput] = useState('');
+  const [logSearch, setLogSearch] = useState('');
+  const [logsSearching, setLogsSearching] = useState(false);
+  const logsRequestIdRef = useRef(0);
+  const logSearchRef = useRef(''); // read by scan callbacks, which may hold a stale closure
   const [loading, setLoading] = useState(true);
+  const [venueMenuOpen, setVenueMenuOpen] = useState(false);
+  const venueMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!venueMenuOpen) return undefined;
+    const onDown = (e) => {
+      if (venueMenuRef.current && !venueMenuRef.current.contains(e.target)) setVenueMenuOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setVenueMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [venueMenuOpen]);
 
   // Camera Live QR Scanner State
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -74,17 +96,31 @@ export default function AttendancePage() {
     }
   };
 
-  const fetchLogs = async (screeningId) => {
+  // Only the newest request updates the list, so a slow response can't overwrite a newer search
+  const fetchLogs = async (screeningId, searchText = logSearchRef.current) => {
+    const requestId = ++logsRequestIdRef.current;
     try {
+      setLogsSearching(true);
       const res = await api.get('/attendance/logs', {
-        params: { screening_id: screeningId || undefined, limit: 50 }
+        params: { screening_id: screeningId || undefined, limit: 50, search: searchText || undefined }
       });
+      if (requestId !== logsRequestIdRef.current) return;
       setLogs(res.data.logs || []);
-      setMetrics(res.data.metrics || { totalCheckins: 0, uniqueAttendeesCheckedIn: 0 });
     } catch (err) {
-      console.error('Failed to fetch attendance logs:', err);
+      if (requestId === logsRequestIdRef.current) console.error('Failed to fetch attendance logs:', err);
+    } finally {
+      if (requestId === logsRequestIdRef.current) setLogsSearching(false);
     }
   };
+
+  // Debounce the check-in search box
+  useEffect(() => {
+    const t = setTimeout(() => {
+      logSearchRef.current = logSearchInput.trim();
+      setLogSearch(logSearchInput.trim());
+    }, 300);
+    return () => clearTimeout(t);
+  }, [logSearchInput]);
 
   useEffect(() => {
     fetchScreenings();
@@ -92,9 +128,9 @@ export default function AttendancePage() {
 
   useEffect(() => {
     if (selectedScreening) {
-      fetchLogs(selectedScreening);
+      fetchLogs(selectedScreening, logSearch);
     }
-  }, [selectedScreening]);
+  }, [selectedScreening, logSearch]);
 
   const executeCheckin = async (rawInput, isFromCamera = false) => {
     let clean = (rawInput || '').trim();
@@ -249,70 +285,16 @@ export default function AttendancePage() {
         <div className="fc-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div>
             <h1 className="fc-page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: 'var(--fc-text-main)' }}>
-              Gate Check-In & Attendance
+              Attendance
             </h1>
             <p className="fc-page-subtitle" style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem' }}>
-              Scan delegate badge passes to verify auditorium entrance and unlock audience voting eligibility
+              Scan delegate badge passes to verify venue entry and unlock audience voting eligibility
             </p>
-          </div>
-
-          {/* Screening Session Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fc-text-secondary)' }}>ACTIVE SCREENING:</label>
-            <select
-              value={selectedScreening}
-              onChange={(e) => setSelectedScreening(e.target.value)}
-              style={{
-                padding: '10px 14px',
-                borderRadius: '8px',
-                border: '1px solid var(--fc-border)',
-                background: 'var(--fc-surface-card)',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                color: 'var(--fc-text-main)',
-                boxShadow: 'var(--shadow-sm)'
-              }}
-            >
-              {screenings.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.title} ({s.start_time} - {s.venue_name})
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Summary KPI Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-          <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '10px', padding: '16px', border: '1px solid var(--fc-border)' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--fc-text-muted)', textTransform: 'uppercase' }}>Screening Checked-In</div>
-            <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#2563eb', marginTop: '4px' }}>
-              {currentScreeningObj?.checked_in_count || logs.length}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--fc-text-muted)', marginTop: '4px' }}>
-              Venue: {currentScreeningObj?.venue_name || 'Auditorium'}
-            </div>
-          </div>
-
-          <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '10px', padding: '16px', border: '1px solid var(--fc-border)' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--fc-text-muted)', textTransform: 'uppercase' }}>Total Festival Scans</div>
-            <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#16a34a', marginTop: '4px' }}>
-              {metrics.totalCheckins}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--fc-text-muted)', marginTop: '4px' }}>Across all screening doors</div>
-          </div>
-
-          <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '10px', padding: '16px', border: '1px solid var(--fc-border)' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--fc-text-muted)', textTransform: 'uppercase' }}>Unique Delegates Attended</div>
-            <div style={{ fontSize: '1.85rem', fontWeight: 800, color: '#7c3aed', marginTop: '4px' }}>
-              {metrics.uniqueAttendeesCheckedIn}
-            </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--fc-text-muted)', marginTop: '4px' }}>Unique badge holders onsite</div>
           </div>
         </div>
 
         {/* Main Grid: Scanner Console + Live Log Feed */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 420px) 1fr', gap: '24px' }}>
+        <div className="fc-console-grid" style={{ display: 'grid', gap: '24px' }}>
 
           {/* Scanner Deck */}
           <div>
@@ -320,6 +302,127 @@ export default function AttendancePage() {
               <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <QrCodeScannerIcon size={18} /> Badge Scanner Deck
               </h2>
+
+              {/* Venue picker: which hall this gate device is checking delegates into */}
+              <div ref={venueMenuRef} style={{ marginBottom: '18px', position: 'relative' }}>
+                <div id="gate-venue-label" style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--fc-text-muted)', marginBottom: '6px' }}>
+                  Venue
+                </div>
+
+                {screenings.length === 0 ? (
+                  <div style={{ padding: '12px 14px', borderRadius: '10px', border: '1px dashed var(--fc-border)', color: 'var(--fc-text-muted)', fontSize: '0.85rem' }}>
+                    {loading ? 'Loading venues…' : 'No venues scheduled. Add screenings in Settings → Audience.'}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => screenings.length > 1 && setVenueMenuOpen(o => !o)}
+                    aria-haspopup="listbox"
+                    aria-expanded={venueMenuOpen}
+                    aria-labelledby="gate-venue-label"
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '10px',
+                      textAlign: 'left',
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      border: `1px solid ${venueMenuOpen ? 'var(--fc-brand)' : 'var(--fc-border)'}`,
+                      background: 'var(--fc-surface)',
+                      color: 'var(--fc-text-main)',
+                      cursor: screenings.length > 1 ? 'pointer' : 'default',
+                      transition: 'border-color 0.15s ease'
+                    }}
+                  >
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontWeight: 700, fontSize: '0.95rem', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
+                        {currentScreeningObj?.venue_name || 'Venue not set'}
+                      </span>
+                      <span style={{ display: 'block', color: 'var(--fc-text-secondary)', fontSize: '0.84rem', fontWeight: 500, marginTop: '2px', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
+                        {currentScreeningObj?.title}
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--fc-text-muted)', fontSize: '0.78rem', marginTop: '4px' }}>
+                        <ScheduleIcon size={13} />
+                        {currentScreeningObj?.start_time}{currentScreeningObj?.end_time ? ` – ${currentScreeningObj.end_time}` : ''}
+                        {' · '}{currentScreeningObj?.block_type === 'short_block' ? 'Short Film Block' : 'Feature Film'}
+                      </span>
+                    </span>
+                    {screenings.length > 1 && (
+                      <ExpandMoreIcon size={20} style={{ color: 'var(--fc-text-muted)', flexShrink: 0, marginTop: '1px', transform: venueMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
+                    )}
+                  </button>
+                )}
+
+                {venueMenuOpen && (
+                  <div
+                    role="listbox"
+                    aria-labelledby="gate-venue-label"
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      top: 'calc(100% + 6px)',
+                      zIndex: 40,
+                      maxHeight: '320px',
+                      overflowY: 'auto',
+                      background: 'var(--fc-surface-elevated)',
+                      border: '1px solid var(--fc-border)',
+                      borderRadius: '10px',
+                      boxShadow: 'var(--shadow-lg)',
+                      padding: '6px'
+                    }}
+                  >
+                    {screenings.map(s => {
+                      const isSelected = String(s.id) === String(selectedScreening);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={() => { setSelectedScreening(s.id); setVenueMenuOpen(false); }}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '10px',
+                            textAlign: 'left',
+                            padding: '10px 10px',
+                            border: 'none',
+                            borderRadius: '8px',
+                            background: isSelected ? 'var(--fc-brand-active-bg)' : 'transparent',
+                            color: 'var(--fc-text-main)',
+                            cursor: 'pointer'
+                          }}
+                          onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = 'var(--fc-surface-hover)'; }}
+                          onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: 'block', fontWeight: 700, fontSize: '0.88rem', lineHeight: 1.35, overflowWrap: 'anywhere', color: isSelected ? 'var(--fc-brand-text)' : 'var(--fc-text-main)' }}>
+                              {s.venue_name || 'Venue not set'}
+                            </span>
+                            <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--fc-text-secondary)', marginTop: '2px', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
+                              {s.title}
+                            </span>
+                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>
+                              {s.start_time}{s.end_time ? ` – ${s.end_time}` : ''}
+                            </span>
+                          </span>
+                          {isSelected && <CheckIcon size={16} style={{ color: 'var(--fc-brand-text)', flexShrink: 0, marginTop: '2px' }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {currentScreeningObj?.films?.length > 0 && (
+                  <div style={{ marginTop: '8px', fontSize: '0.78rem', color: 'var(--fc-text-muted)', lineHeight: 1.45 }}>
+                    <span style={{ fontWeight: 700 }}>Films ({currentScreeningObj.films.length}): </span>
+                    {currentScreeningObj.films.map(f => f.title).join(', ')}
+                  </div>
+                )}
+              </div>
 
               {/* 1. Live Camera QR Scanner Section */}
               <div style={{ marginBottom: '18px' }}>
@@ -330,9 +433,9 @@ export default function AttendancePage() {
                     style={{
                       width: '100%',
                       padding: '11px 16px',
-                      background: '#16a34a',
-                      color: '#ffffff',
-                      border: 'none',
+                      background: 'var(--fc-brand)',
+                      color: 'var(--fc-text-on-brand)',
+                      border: '1px solid var(--fc-brand)',
                       borderRadius: '8px',
                       fontWeight: 700,
                       fontSize: '0.9rem',
@@ -341,11 +444,11 @@ export default function AttendancePage() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '8px',
-                      boxShadow: '0 2px 8px rgba(22, 163, 74, 0.25)',
-                      transition: 'all 0.15s ease'
+                      boxShadow: 'var(--shadow-sm)',
+                      transition: 'background 0.15s ease, border-color 0.15s ease'
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#15803d'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = '#16a34a'}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--fc-brand-hover)'; e.currentTarget.style.borderColor = 'var(--fc-brand-hover)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--fc-brand)'; e.currentTarget.style.borderColor = 'var(--fc-brand)'; }}
                   >
                     <CameraAltIcon size={18} />
                     <span>Open Live Camera QR Scanner</span>
@@ -353,9 +456,9 @@ export default function AttendancePage() {
                 ) : (
                   <div style={{ background: '#090d16', borderRadius: '12px', padding: '14px', border: '1px solid var(--fc-border)', textAlign: 'center' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                      <div style={{ color: scanCooldown ? '#38bdf8' : '#22c55e', fontSize: '0.8rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ color: scanCooldown ? '#7dd3fc' : '#4ade80', fontSize: '0.8rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: scanCooldown ? '#38bdf8' : '#22c55e', display: 'inline-block' }}></span>
-                        {scanCooldown ? '✓ Badge Scanned!' : 'Camera Scanner Active'}
+                        {scanCooldown ? 'Badge scanned' : 'Camera scanner active'}
                       </div>
                       <button
                         type="button"
@@ -392,12 +495,12 @@ export default function AttendancePage() {
                     />
 
                     {cameraError && (
-                      <div style={{ marginTop: '10px', color: '#f87171', fontSize: '0.78rem', background: 'rgba(239, 68, 68, 0.1)', padding: '6px', borderRadius: '6px' }}>
+                      <div style={{ marginTop: '10px', color: 'var(--fc-danger-text)', fontSize: '0.78rem', background: 'rgba(239, 68, 68, 0.1)', padding: '6px', borderRadius: '6px' }}>
                         {cameraError}
                       </div>
                     )}
 
-                    <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginTop: '8px' }}>
+                    <div style={{ color: 'var(--fc-text-muted)', fontSize: '0.74rem', marginTop: '8px' }}>
                       Point camera at delegate's badge QR code or mobile screen to check in automatically.
                     </div>
                   </div>
@@ -413,33 +516,42 @@ export default function AttendancePage() {
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <input
                         type="text"
-                        placeholder="e.g. KB26-0011 or paste QR Token..."
+                        placeholder="Badge no. or scan QR"
                         value={scanInput}
                         onChange={(e) => setScanInput(e.target.value)}
                         autoFocus={!isCameraActive}
                         style={{
                           flex: 1,
+                          minWidth: 0,
                           padding: '11px 13px',
                           borderRadius: '8px',
-                          border: '2px solid #3b82f6',
+                          border: '1px solid var(--fc-border)',
                           background: 'var(--fc-surface)',
                           color: 'var(--fc-text-main)',
                           fontSize: '0.95rem',
-                          fontWeight: 600
+                          fontWeight: 600,
+                          outline: 'none',
+                          transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
                         }}
+                        onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--fc-brand)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--fc-focus-ring)'; }}
+                        onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--fc-border)'; e.currentTarget.style.boxShadow = 'none'; }}
                       />
                       <button
                         type="submit"
                         disabled={scanning}
                         style={{
-                          background: '#2563eb',
-                          color: '#fff',
-                          border: 'none',
+                          background: 'var(--fc-surface-card)',
+                          color: 'var(--fc-text-main)',
+                          border: '1px solid var(--fc-border)',
                           padding: '0 20px',
                           borderRadius: '8px',
                           fontWeight: 700,
-                          cursor: 'pointer'
+                          cursor: scanning ? 'not-allowed' : 'pointer',
+                          opacity: scanning ? 0.55 : 1,
+                          transition: 'background 0.15s ease, border-color 0.15s ease'
                         }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--fc-surface-hover)'; e.currentTarget.style.borderColor = 'var(--fc-border-hover, var(--fc-border))'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--fc-surface-card)'; e.currentTarget.style.borderColor = 'var(--fc-border)'; }}
                       >
                         {scanning ? '...' : 'Verify'}
                       </button>
@@ -458,21 +570,21 @@ export default function AttendancePage() {
                     padding: '16px',
                     borderRadius: '10px',
                     background: lastScanResult.success
-                      ? (lastScanResult.isDuplicate ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)')
-                      : 'var(--fc-alert-bg, rgba(220, 38, 38, 0.15))',
+                      ? (lastScanResult.isDuplicate ? 'var(--fc-warning-bg)' : 'var(--fc-success-bg)')
+                      : 'var(--fc-danger-bg)',
                     border: `1px solid ${lastScanResult.success
-                        ? (lastScanResult.isDuplicate ? '#f59e0b' : '#10b981')
-                        : 'var(--fc-alert-border, #ef4444)'
+                        ? (lastScanResult.isDuplicate ? 'var(--fc-warning-border)' : 'var(--fc-success-border)')
+                        : 'var(--fc-danger-border)'
                       }`
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     <span style={{ display: 'flex', alignItems: 'center' }}>
                       {lastScanResult.success
-                        ? (lastScanResult.isDuplicate ? <WarningIcon size={20} style={{ color: '#f59e0b' }} /> : <CheckCircleIcon size={20} style={{ color: '#10b981' }} />)
-                        : <CancelIcon size={20} style={{ color: '#ef4444' }} />}
+                        ? (lastScanResult.isDuplicate ? <WarningIcon size={20} style={{ color: 'var(--fc-warning-text)' }} /> : <CheckCircleIcon size={20} style={{ color: 'var(--fc-success-text)' }} />)
+                        : <CancelIcon size={20} style={{ color: 'var(--fc-danger-text)' }} />}
                     </span>
-                    <strong style={{ color: lastScanResult.success ? (lastScanResult.isDuplicate ? '#f59e0b' : '#10b981') : '#ef4444' }}>
+                    <strong style={{ color: lastScanResult.success ? (lastScanResult.isDuplicate ? 'var(--fc-warning-text)' : 'var(--fc-success-text)') : 'var(--fc-danger-text)' }}>
                       {lastScanResult.message}
                     </strong>
                   </div>
@@ -487,39 +599,29 @@ export default function AttendancePage() {
                 </div>
               )}
 
-              {/* Active Screening Details */}
-              {currentScreeningObj && (
-                <div style={{ marginTop: '20px', padding: '14px', background: 'var(--fc-surface)', borderRadius: '8px', border: '1px solid var(--fc-border)', fontSize: '0.85rem' }}>
-                  <div style={{ fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '6px' }}>SELECTED RUN-OF-SHOW</div>
-                  <div style={{ color: 'var(--fc-text-main)', fontWeight: 600 }}>{currentScreeningObj.title}</div>
-                  <div style={{ color: 'var(--fc-text-muted)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <ScheduleIcon size={14} /> {currentScreeningObj.start_time} - {currentScreeningObj.end_time} · {currentScreeningObj.block_type === 'short_block' ? 'Short Film Block' : 'Feature Film'}
-                  </div>
-                  {currentScreeningObj.films && currentScreeningObj.films.length > 0 && (
-                    <div style={{ marginTop: '8px', borderTop: '1px dashed var(--fc-border)', paddingTop: '6px' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)' }}>Films in this block ({currentScreeningObj.films.length}):</div>
-                      <ul style={{ margin: '4px 0 0 16px', padding: 0, color: 'var(--fc-text-secondary)' }}>
-                        {currentScreeningObj.films.map(f => (
-                          <li key={f.film_id}>{f.title} ({f.runtime}m - {f.director})</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
 
           {/* Live Attendance Log Feed */}
           <div>
             <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--fc-text-main)' }}>
-                  Auditorium Entrance Feed ({logs.length})
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--fc-text-main)', marginRight: 'auto' }}>
+                  Venue Checkins ({logs.length}{logSearch ? ' found' : ''})
                 </h2>
+                <SearchInput
+                  value={logSearchInput}
+                  onChange={setLogSearchInput}
+                  loading={logsSearching && Boolean(logSearchInput)}
+                  placeholder="Search name, phone or badge no."
+                  maxWidth="300px"
+                  style={{ flex: '1 1 220px' }}
+                />
                 <button
                   onClick={() => fetchLogs(selectedScreening)}
-                  style={{ background: 'var(--fc-surface)', border: '1px solid var(--fc-border)', color: 'var(--fc-text-main)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  style={{ background: 'var(--fc-surface-card)', border: '1px solid var(--fc-border)', color: 'var(--fc-text-main)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'background 0.15s ease' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--fc-surface-hover)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--fc-surface-card)'; }}
                 >
                   <SyncIcon size={13} /> Refresh
                 </button>
@@ -527,7 +629,18 @@ export default function AttendancePage() {
 
               {logs.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>
-                  No check-ins recorded yet for this screening session. Scan attendee badges to begin intake.
+                  {logSearch ? (
+                    <>
+                      <div>No check-ins at this venue match "{logSearch}".</div>
+                      <button
+                        type="button"
+                        onClick={() => setLogSearchInput('')}
+                        style={{ marginTop: '12px', background: 'var(--fc-surface-card)', border: '1px solid var(--fc-border)', color: 'var(--fc-text-main)', padding: '7px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        Clear search
+                      </button>
+                    </>
+                  ) : 'No check-ins recorded yet for this venue. Scan attendee badges to begin intake.'}
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>
@@ -546,7 +659,6 @@ export default function AttendancePage() {
                         <tr key={log.id} style={{ borderBottom: '1px solid var(--fc-border)' }}>
                           <td style={{ padding: '10px 12px' }}>
                             <div style={{ fontWeight: 600, color: 'var(--fc-text-main)' }}>{log.attendee_name}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)' }}>ID #{log.attendee_id} · {log.attendee_phone || log.attendee_email}</div>
                           </td>
                           <td style={{ padding: '10px 12px' }}>
                             <span
@@ -567,7 +679,7 @@ export default function AttendancePage() {
                             {new Date(log.scanned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                           </td>
                           <td style={{ padding: '10px 12px' }}>
-                            <span style={{ color: '#16a34a', fontWeight: 600 }}>Verified ✓</span>
+                            <span style={{ color: 'var(--fc-success-text)', fontWeight: 600 }}>Verified</span>
                           </td>
                           <td style={{ padding: '10px 12px', color: 'var(--fc-text-muted)' }}>
                             {log.scanned_by_name || 'Volunteer'}

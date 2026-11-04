@@ -4,7 +4,7 @@ import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
 import ScreenerVideoPlayer from '../components/submissions/ScreenerVideoPlayer';
-import { StarIcon, StarBorderIcon, CheckCircleIcon, CheckIcon, CloseIcon } from '../components/common/Icons';
+import { StarIcon, StarBorderIcon, CheckCircleIcon, CheckIcon, CloseIcon, LockIcon } from '../components/common/Icons';
 
 const DEFAULT_CRITERIA = [
   { key: 'screenplay', title: 'Screenplay', defaultScore: 4 },
@@ -277,7 +277,7 @@ export default function FilmReviewPage() {
     return (
       <div className="fc-review-page-wrapper">
         <div className="fc-review-card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🚫</div>
+          <div style={{ marginBottom: '16px', color: 'var(--fc-text-muted)' }}><LockIcon size={48} /></div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--fc-text-main)', marginBottom: '8px' }}>
             Unable to Load Film
           </h2>
@@ -383,7 +383,7 @@ export default function FilmReviewPage() {
                 <div className="fc-review-criterion-header">
                   <div className="fc-review-criterion-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {criterion.is_award_category && (
-                      <StarIcon size={14} style={{ color: '#d97706', flexShrink: 0 }} />
+                      <StarIcon size={14} style={{ color: 'var(--fc-warning-text)', flexShrink: 0 }} />
                     )}
                     <span>{criterion.title}</span>
                     {criterion.is_award_category && (
@@ -394,7 +394,7 @@ export default function FilmReviewPage() {
                         padding: '2px 7px',
                         borderRadius: '999px',
                         background: 'rgba(217, 119, 6, 0.12)',
-                        color: '#d97706',
+                        color: 'var(--fc-warning-text)',
                         letterSpacing: '0.04em'
                       }}>
                         Award
@@ -453,7 +453,7 @@ export default function FilmReviewPage() {
                 <button
                   type="button"
                   className="fc-btn fc-btn-sm"
-                  style={{ background: '#166534', color: '#fff', fontWeight: 700 }}
+                  style={{ background: 'var(--fc-success)', color: '#fff', fontWeight: 700 }}
                   onClick={() => navigate(`/submissions/${nextFilm.id}/review`)}
                 >
                   Review Next Film ({nextFilm.title}) →
@@ -524,7 +524,7 @@ export default function FilmReviewPage() {
             </div>
 
             <div className="fc-screener-modal-footer">
-              <span style={{ fontSize: '12px', color: '#78716c' }}>
+              <span style={{ fontSize: '12px', color: 'var(--fc-text-secondary)' }}>
                 Secure Jury Screening · Freecomers Festival Platform
               </span>
               <button

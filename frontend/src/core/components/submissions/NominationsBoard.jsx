@@ -11,8 +11,7 @@ import {
   StarIcon,
   SearchIcon,
   CloseIcon,
-  AddIcon
-} from '../common/Icons';
+  AddIcon, InfoIcon } from '../common/Icons';
 
 export default function NominationsBoard({ 
   stage, 
@@ -305,7 +304,7 @@ export default function NominationsBoard({
       {films.length === 0 && (
         <div className="fc-nom-info-banner">
           <div className="fc-nom-info-icon-box">
-            ℹ
+            <InfoIcon size={16} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="fc-nom-info-title">
@@ -524,7 +523,7 @@ export default function NominationsBoard({
                           <td style={{ textAlign: 'center' }}>
                             {film.rating && film.rating !== 'Unrated' ? (
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                <StarIcon size={13} style={{ color: '#eab308' }} />
+                                <StarIcon size={13} style={{ color: 'var(--fc-warning-text)' }} />
                                 <strong style={{ fontSize: '13px', color: 'var(--fc-text-main)' }}>
                                   {parseFloat(film.rating).toFixed(1)}
                                 </strong>
@@ -616,8 +615,8 @@ export default function NominationsBoard({
                       width: '28px',
                       height: '28px',
                       borderRadius: '6px',
-                      background: 'var(--fc-brand-tint, rgba(225, 29, 72, 0.12))',
-                      border: '1px solid var(--fc-brand-border, rgba(225, 29, 72, 0.25))',
+                      background: 'var(--fc-brand-tint, rgba(168, 47, 47, 0.12))',
+                      border: '1px solid var(--fc-brand-border, rgba(168, 47, 47, 0.25))',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -812,7 +811,7 @@ export default function NominationsBoard({
                       />
                       <span style={{ flex: 1, fontSize: '12px' }}>{cat.name}</span>
                       {isNom && (
-                        <span style={{ fontSize: '10.5px', color: '#059669', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                        <span style={{ fontSize: '10.5px', color: 'var(--fc-success-text)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
                           <CheckIcon size={11} /> Active
                         </span>
                       )}

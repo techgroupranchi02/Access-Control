@@ -35,20 +35,20 @@ export default function AnalyticsPage() {
     <div className="animate-fade-in">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 className="page-title">📊 Analytics & Reporting</h2>
+          <h2 className="page-title">Analytics & Reporting</h2>
           <p className="page-description">
             Monitor submission intake metrics, screening reservations, and jury evaluation throughput.
           </p>
         </div>
         <PermissionGate permission="analytics.export">
           <button className="btn btn-secondary" onClick={() => alert('Exporting analytics CSV...')}>
-            📥 Export Report
+            Export Report
           </button>
         </PermissionGate>
       </div>
 
       <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <span>🔑 <strong>Analytics Permissions:</strong></span>
+        <span><strong>Analytics Permissions:</strong></span>
         <span className={`badge ${can('analytics.view') ? 'badge-success' : 'badge-danger'}`}>analytics.view</span>
         <span className={`badge ${can('analytics.export') ? 'badge-success' : 'badge-danger'}`}>analytics.export</span>
       </div>

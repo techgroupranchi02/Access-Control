@@ -11,8 +11,7 @@ import {
   ViewModuleIcon,
   ViewListIcon,
   SearchIcon,
-  CloseIcon
-} from '../common/Icons';
+  CloseIcon, CheckIcon } from '../common/Icons';
 
 export default function WinnersBoard({
   stage,
@@ -385,7 +384,7 @@ export default function WinnersBoard({
               >
                 <TrophyIcon size={12} style={{ color: isActive ? '#ffffff' : (hasWin ? '#d97706' : undefined) }} />
                 <span>{cat.name}</span>
-                {hasWin && <span style={{ color: isActive ? '#ffffff' : '#16a34a', fontSize: '10px' }}>✓</span>}
+                {hasWin && <CheckIcon size={11} style={{ color: isActive ? '#ffffff' : 'var(--fc-success)' }} />}
               </button>
             );
           })}
@@ -500,7 +499,7 @@ export default function WinnersBoard({
                                 gap: '4px',
                                 background: ratingVal >= 4.5 ? '#f0fdf4' : ratingVal >= 4.0 ? '#eff6ff' : '#f8fafc',
                                 color: ratingVal >= 4.5 ? '#15803d' : ratingVal >= 4.0 ? '#1d4ed8' : '#475569',
-                                border: `1px solid ${ratingVal >= 4.5 ? '#bbf7d0' : ratingVal >= 4.0 ? '#bfdbfe' : '#e2e8f0'}`,
+                                border: `1px solid ${ratingVal >= 4.5 ? 'var(--fc-success-border)' : ratingVal >= 4.0 ? 'var(--fc-info-border)' : 'var(--fc-border)'}`,
                                 padding: '3px 9px',
                                 borderRadius: '6px',
                                 fontSize: '12px',

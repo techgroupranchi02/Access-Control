@@ -11,8 +11,7 @@ import {
   ViewListIcon,
   SearchIcon,
   CloseIcon,
-  CrownIcon
-} from '../common/Icons';
+  CrownIcon, InfoIcon } from '../common/Icons';
 
 export default function FinalistsBoard({ 
   stage,
@@ -250,8 +249,8 @@ export default function FinalistsBoard({
     if (index === 1) {
       return (
         <span className="fc-finalist-rank-2" style={{
-          background: '#f1f5f9',
-          color: '#475569',
+          background: 'var(--fc-surface-subtle)',
+          color: 'var(--fc-text-secondary)',
           padding: '3px 9px',
           borderRadius: '999px',
           fontSize: '11px',
@@ -259,7 +258,7 @@ export default function FinalistsBoard({
           display: 'inline-flex',
           alignItems: 'center',
           gap: '4px',
-          border: '1px solid #cbd5e1'
+          border: '1px solid var(--fc-border)'
         }}>
           <MedalIcon size={13} /> 2nd Place
         </span>
@@ -268,8 +267,8 @@ export default function FinalistsBoard({
     if (index === 2) {
       return (
         <span className="fc-finalist-rank-3" style={{
-          background: '#ffedd5',
-          color: '#9a3412',
+          background: 'var(--fc-warning-bg)',
+          color: 'var(--fc-warning-text)',
           padding: '3px 9px',
           borderRadius: '999px',
           fontSize: '11px',
@@ -277,7 +276,7 @@ export default function FinalistsBoard({
           display: 'inline-flex',
           alignItems: 'center',
           gap: '4px',
-          border: '1px solid #fed7aa'
+          border: '1px solid var(--fc-warning-border)'
         }}>
           <MedalIcon size={13} /> 3rd Place
         </span>
@@ -285,13 +284,13 @@ export default function FinalistsBoard({
     }
     return (
       <span className="fc-finalist-rank-default" style={{
-        background: '#f8fafc',
-        color: '#64748b',
+        background: 'var(--fc-surface-subtle)',
+        color: 'var(--fc-text-secondary)',
         padding: '3px 8px',
         borderRadius: '999px',
         fontSize: '11px',
         fontWeight: 600,
-        border: '1px solid #e2e8f0'
+        border: '1px solid var(--fc-border)'
       }}>
         #{index + 1}
       </span>
@@ -347,7 +346,7 @@ export default function FinalistsBoard({
             <div style={{
               background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.2) 0%, rgba(202, 138, 4, 0.12) 100%)',
               border: '1px solid rgba(234, 179, 8, 0.35)',
-              color: '#b45309',
+              color: 'var(--fc-warning-text)',
               borderRadius: '999px',
               padding: '5px 14px',
               fontSize: '12px',
@@ -356,7 +355,7 @@ export default function FinalistsBoard({
               alignItems: 'center',
               gap: '6px'
             }}>
-              <TrophyIcon size={14} style={{ color: '#d97706' }} /> {totalWinnersChosen} Winner{totalWinnersChosen === 1 ? '' : 's'} Selected
+              <TrophyIcon size={14} style={{ color: 'var(--fc-warning-text)' }} /> {totalWinnersChosen} Winner{totalWinnersChosen === 1 ? '' : 's'} Selected
             </div>
           )}
 
@@ -386,7 +385,7 @@ export default function FinalistsBoard({
 
       {uniqueFinalistFilms.length === 0 && (
         <div className="fc-nom-info-banner" style={{ marginBottom: '24px' }}>
-          <div className="fc-nom-info-icon-box">ℹ</div>
+          <div className="fc-nom-info-icon-box"><InfoIcon size={16} /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="fc-nom-info-title">
               No finalist films available from {prevStageName}
@@ -595,13 +594,13 @@ export default function FinalistsBoard({
                                     style={{
                                       fontSize: '11px',
                                       padding: '2px 7px',
-                                      background: a.is_winner ? '#fef3c7' : undefined,
+                                      background: a.is_winner ? 'var(--fc-warning-bg)' : undefined,
                                       borderColor: a.is_winner ? '#facc15' : undefined,
                                       color: a.is_winner ? '#713f12' : undefined,
                                       fontWeight: a.is_winner ? 800 : 600
                                     }}
                                   >
-                                    <TrophyIcon size={11} style={{ color: a.is_winner ? '#d97706' : undefined }} />
+                                    <TrophyIcon size={11} style={{ color: a.is_winner ? 'var(--fc-warning-text)' : undefined }} />
                                     <span>{a.award_name}</span>
                                     {a.is_winner && (
                                       <span style={{ fontSize: '9.5px', background: '#facc15', color: '#713f12', padding: '0 4px', borderRadius: '3px', fontWeight: 800 }}>
@@ -620,20 +619,20 @@ export default function FinalistsBoard({
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px',
-                              background: ratingVal >= 4.5 ? '#f0fdf4' : ratingVal >= 4.0 ? '#eff6ff' : '#f8fafc',
-                              color: ratingVal >= 4.5 ? '#15803d' : ratingVal >= 4.0 ? '#1d4ed8' : '#475569',
-                              border: `1px solid ${ratingVal >= 4.5 ? '#bbf7d0' : ratingVal >= 4.0 ? '#bfdbfe' : '#e2e8f0'}`,
+                              background: ratingVal >= 4.5 ? 'var(--fc-success-bg)' : ratingVal >= 4.0 ? 'var(--fc-info-bg)' : 'var(--fc-surface-subtle)',
+                              color: ratingVal >= 4.5 ? 'var(--fc-success-text)' : ratingVal >= 4.0 ? 'var(--fc-info-text)' : 'var(--fc-text-secondary)',
+                              border: `1px solid ${ratingVal >= 4.5 ? 'var(--fc-success-border)' : ratingVal >= 4.0 ? 'var(--fc-info-border)' : 'var(--fc-border)'}`,
                               padding: '3px 9px',
                               borderRadius: '6px',
                               fontSize: '12px',
                               fontWeight: 800
                             }}>
-                              <StarIcon size={12} style={{ color: '#eab308' }} />
+                              <StarIcon size={12} style={{ color: 'var(--fc-warning-text)' }} />
                               <span>{ratingVal > 0 ? ratingVal.toFixed(2) : 'Unrated'}</span>
-                              <span style={{ fontSize: '10px', fontWeight: 500, color: '#64748b' }}>/ 5.0</span>
+                              <span style={{ fontSize: '10px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>/ 5.0</span>
                             </div>
                             {film.review_count > 0 && (
-                              <div style={{ fontSize: '10.5px', color: '#64748b', marginTop: '2px' }}>
+                              <div style={{ fontSize: '10.5px', color: 'var(--fc-text-secondary)', marginTop: '2px' }}>
                                 {film.review_count} review{film.review_count === 1 ? '' : 's'}
                               </div>
                             )}
@@ -650,9 +649,9 @@ export default function FinalistsBoard({
                                   return (
                                     <div key={a.award_name} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                                       <span style={{
-                                        background: '#fef3c7',
-                                        color: '#92400e',
-                                        border: '1px solid #fde68a',
+                                        background: 'var(--fc-warning-bg)',
+                                        color: 'var(--fc-warning-text)',
+                                        border: '1px solid var(--fc-warning-border)',
                                         borderRadius: '6px',
                                         padding: '3px 8px',
                                         fontSize: '11px',
@@ -661,7 +660,7 @@ export default function FinalistsBoard({
                                         alignItems: 'center',
                                         gap: '4px'
                                       }}>
-                                        <TrophyIcon size={11} style={{ color: '#d97706' }} /> Winner: {a.award_name}
+                                        <TrophyIcon size={11} style={{ color: 'var(--fc-warning-text)' }} /> Winner: {a.award_name}
                                       </span>
                                       <button
                                         type="button"
@@ -671,7 +670,7 @@ export default function FinalistsBoard({
                                         style={{
                                           background: 'none',
                                           border: 'none',
-                                          color: '#dc2626',
+                                          color: 'var(--fc-danger-text)',
                                           fontSize: '11px',
                                           fontWeight: 700,
                                           cursor: 'pointer',
@@ -858,20 +857,20 @@ export default function FinalistsBoard({
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px',
-                                background: ratingVal >= 4.5 ? '#f0fdf4' : ratingVal >= 4.0 ? '#eff6ff' : '#f8fafc',
-                                color: ratingVal >= 4.5 ? '#15803d' : ratingVal >= 4.0 ? '#1d4ed8' : '#475569',
-                                border: `1px solid ${ratingVal >= 4.5 ? '#bbf7d0' : ratingVal >= 4.0 ? '#bfdbfe' : '#e2e8f0'}`,
+                                background: ratingVal >= 4.5 ? 'var(--fc-success-bg)' : ratingVal >= 4.0 ? 'var(--fc-info-bg)' : 'var(--fc-surface-subtle)',
+                                color: ratingVal >= 4.5 ? 'var(--fc-success-text)' : ratingVal >= 4.0 ? 'var(--fc-info-text)' : 'var(--fc-text-secondary)',
+                                border: `1px solid ${ratingVal >= 4.5 ? 'var(--fc-success-border)' : ratingVal >= 4.0 ? 'var(--fc-info-border)' : 'var(--fc-border)'}`,
                                 padding: '4px 10px',
                                 borderRadius: '6px',
                                 fontSize: '12.5px',
                                 fontWeight: 800
                               }}>
-                                <StarIcon size={12} style={{ color: '#eab308' }} />
+                                <StarIcon size={12} style={{ color: 'var(--fc-warning-text)' }} />
                                 <span>{ratingVal > 0 ? ratingVal.toFixed(2) : 'Unrated'}</span>
-                                <span style={{ fontSize: '10.5px', fontWeight: 500, color: '#64748b' }}>/ 5.0</span>
+                                <span style={{ fontSize: '10.5px', fontWeight: 500, color: 'var(--fc-text-secondary)' }}>/ 5.0</span>
                               </div>
                               {film.review_count > 0 && (
-                                <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                <span style={{ fontSize: '11px', color: 'var(--fc-text-secondary)' }}>
                                   ({film.review_count} review{film.review_count === 1 ? '' : 's'})
                                 </span>
                               )}
@@ -882,9 +881,9 @@ export default function FinalistsBoard({
                               {isWinner ? (
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                                   <span style={{
-                                    background: '#fef3c7',
-                                    color: '#92400e',
-                                    border: '1px solid #fde68a',
+                                    background: 'var(--fc-warning-bg)',
+                                    color: 'var(--fc-warning-text)',
+                                    border: '1px solid var(--fc-warning-border)',
                                     borderRadius: '8px',
                                     padding: '6px 14px',
                                     fontSize: '12px',
@@ -903,7 +902,7 @@ export default function FinalistsBoard({
                                     style={{
                                       background: 'none',
                                       border: 'none',
-                                      color: '#dc2626',
+                                      color: 'var(--fc-danger-text)',
                                       fontSize: '11px',
                                       fontWeight: 700,
                                       cursor: 'pointer',
@@ -996,9 +995,9 @@ export default function FinalistsBoard({
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--fc-text-main, #1e293b)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                        <StarIcon size={12} style={{ color: '#eab308' }} /> {parseFloat(film.jury_rating || 0).toFixed(2)} / 5.0
+                        <StarIcon size={12} style={{ color: 'var(--fc-warning-text)' }} /> {parseFloat(film.jury_rating || 0).toFixed(2)} / 5.0
                       </span>
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--fc-text-secondary)' }}>
                         Status: {film.status}
                       </span>
                     </div>

@@ -16,11 +16,11 @@ import {
 } from '../common/Icons';
 
 const STANDARD_FLAGS = [
-  { id: 'none', label: 'None', color: '#94a3b8' },
-  { id: 'flag-high-priority', label: 'High Priority', color: '#e05252' },
-  { id: 'flag-needs-review', label: 'Needs Review', color: '#d97706' },
-  { id: 'flag-strong-contender', label: 'Strong Contender', color: '#10b981' },
-  { id: 'flag-special-interest', label: 'Special Interest', color: '#3b82f6' },
+  { id: 'none', label: 'None', color: 'var(--fc-text-muted)' },
+  { id: 'flag-high-priority', label: 'High Priority', color: 'var(--fc-danger-text)' },
+  { id: 'flag-needs-review', label: 'Needs Review', color: 'var(--fc-warning-text)' },
+  { id: 'flag-strong-contender', label: 'Strong Contender', color: 'var(--fc-success-text)' },
+  { id: 'flag-special-interest', label: 'Special Interest', color: 'var(--fc-info-text)' },
 ];
 
 const LIFECYCLE_STAGES = [
@@ -98,10 +98,10 @@ const renderStarRating = (score) => {
   return (
     <span className="fc-stars-container" style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
       {Array.from({ length: filled }).map((_, i) => (
-        <StarIcon key={`f-${i}`} size={14} style={{ color: '#eab308' }} />
+        <StarIcon key={`f-${i}`} size={14} style={{ color: 'var(--fc-warning-text)' }} />
       ))}
       {Array.from({ length: empty }).map((_, i) => (
-        <StarBorderIcon key={`e-${i}`} size={14} style={{ color: '#cbd5e1' }} />
+        <StarBorderIcon key={`e-${i}`} size={14} style={{ color: 'var(--fc-text-light)' }} />
       ))}
     </span>
   );
@@ -122,7 +122,7 @@ const InteractiveStarRating = ({ value, onChange, disabled }) => {
               transform: hoverVal === star ? 'scale(1.2)' : 'none',
               display: 'inline-flex',
               alignItems: 'center',
-              color: isFilled ? '#eab308' : '#cbd5e1'
+              color: isFilled ? 'var(--fc-warning-text)' : 'var(--fc-text-light)'
             }}
             onMouseEnter={() => !disabled && setHoverVal(star)}
             onMouseLeave={() => !disabled && setHoverVal(0)}
@@ -136,7 +136,7 @@ const InteractiveStarRating = ({ value, onChange, disabled }) => {
           </span>
         );
       })}
-      <span style={{ fontSize: '11px', fontWeight: 700, color: '#b45309', marginLeft: '6px' }}>
+      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--fc-warning-text)', marginLeft: '6px' }}>
         {value ? `${value}/5` : '0/5'}
       </span>
     </div>
@@ -309,17 +309,8 @@ export default function FilmDetailDrawer({
     }
   }, [showR1AssignModal, activeFilm]);
 
-  if (!activeFilm) return null;
-
-  const isRejected = activeFilm.status === 'Rejected';
-  const hasRound2 = (activeFilm.assigned_judges || []).some((j) => (j.round_number || 1) === 2) ||
-    (activeFilm.reviews || []).some((r) => (r.round_number || 1) === 2);
-
-  const isSubmittedFilm = !isRejected && (
-    ['Submitted', 'submitted', 'New Submission', 'new submission'].includes(activeFilm.status) ||
-    ['Submitted', 'submitted', 'New Submission', 'new submission'].includes(activeFilm.current_stage_name) ||
-    (!activeFilm.review_state_id && (!activeFilm.current_stage_name || ['Submitted', 'New Submission'].includes(activeFilm.current_stage_name)))
-  );
+  // Hooks must run on every render (rules of hooks): compute null-safely, bail out after them
+  const isRejected = activeFilm?.status === 'Rejected';
 
   // Determine current lifecycle index across active stages (Step 0 = Submitted Intake)
   const activeStageIndex = useMemo(() => {
@@ -361,6 +352,18 @@ export default function FilmDetailDrawer({
     );
     return matched ? matched.label : name;
   }, [activeFilm, activeStagesList]);
+
+  if (!activeFilm) return null;
+
+  const hasRound2 = (activeFilm.assigned_judges || []).some((j) => (j.round_number || 1) === 2) ||
+    (activeFilm.reviews || []).some((r) => (r.round_number || 1) === 2);
+
+  const isSubmittedFilm = !isRejected && (
+    ['Submitted', 'submitted', 'New Submission', 'new submission'].includes(activeFilm.status) ||
+    ['Submitted', 'submitted', 'New Submission', 'new submission'].includes(activeFilm.current_stage_name) ||
+    (!activeFilm.review_state_id && (!activeFilm.current_stage_name || ['Submitted', 'New Submission'].includes(activeFilm.current_stage_name)))
+  );
+
 
   const allFlagsList = flags.length > 0 ? flags : STANDARD_FLAGS;
 
@@ -638,7 +641,7 @@ export default function FilmDetailDrawer({
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '11px', color: 'var(--fc-text-muted)' }}>Computed Avg</div>
                     <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--fc-brand)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                      <StarIcon size={14} style={{ color: '#eab308' }} /> {currentOverallScore}/5.0
+                      <StarIcon size={14} style={{ color: 'var(--fc-warning-text)' }} /> {currentOverallScore}/5.0
                     </span>
                   </div>
                 </div>
@@ -767,7 +770,7 @@ export default function FilmDetailDrawer({
                   className="fc-flag-indicator"
                   style={{
                     backgroundColor: `${activeFilm.flag_color || '#3b82f6'}20`,
-                    color: activeFilm.flag_color || '#3b82f6',
+                    color: activeFilm.flag_color || 'var(--fc-info-text)',
                     borderColor: `${activeFilm.flag_color || '#3b82f6'}40`,
                   }}
                 >
@@ -966,7 +969,7 @@ export default function FilmDetailDrawer({
             {round1Items.length === 0 ? (
               <div style={{ padding: '12px 14px', borderRadius: '8px', background: isRejected ? 'rgba(239, 68, 68, 0.1)' : 'var(--fc-surface-card)', border: isRejected ? '1px solid rgba(239, 68, 68, 0.25)' : '1px dashed var(--fc-border)', color: isRejected ? 'var(--fc-rejected-reason, #ef4444)' : 'var(--fc-text-muted)', fontSize: '0.82rem', fontWeight: isRejected ? 600 : 400 }}>
                 {isRejected
-                  ? '✕ Film is rejected — juror assignments and evaluations are closed.'
+                  ? 'Film is rejected — juror assignments and evaluations are closed.'
                   : activeStageIndex === 0
                     ? 'Film is currently in the intake queue. Advance to Round 1: Screening to begin juror review and scoring.'
                     : 'No reviewers assigned to this round yet.'}
@@ -1008,14 +1011,14 @@ export default function FilmDetailDrawer({
         {/* Drawer Footer Actions */}
         <div className="fc-drawer-footer">
           {actionSuccessMsg && (
-            <div style={{ padding: '8px 12px', marginBottom: '10px', borderRadius: '6px', background: 'rgba(22, 163, 74, 0.1)', color: '#16a34a', fontSize: '0.82rem', fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+            <div style={{ padding: '8px 12px', marginBottom: '10px', borderRadius: '6px', background: 'rgba(22, 163, 74, 0.1)', color: 'var(--fc-success-text)', fontSize: '0.82rem', fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
               <CheckCircleIcon size={14} />
               <span>{actionSuccessMsg}</span>
             </div>
           )}
 
           {scoreSuccessMsg && (
-            <div style={{ padding: '8px 12px', marginBottom: '10px', borderRadius: '6px', background: 'rgba(22, 163, 74, 0.1)', color: '#16a34a', fontSize: '0.82rem', fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+            <div style={{ padding: '8px 12px', marginBottom: '10px', borderRadius: '6px', background: 'rgba(22, 163, 74, 0.1)', color: 'var(--fc-success-text)', fontSize: '0.82rem', fontWeight: 600, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
               <CheckCircleIcon size={14} />
               <span>{scoreSuccessMsg}</span>
             </div>
@@ -1025,12 +1028,12 @@ export default function FilmDetailDrawer({
             <div style={{ padding: '8px 12px', textAlign: 'center', background: 'var(--fc-surface-hover, rgba(255, 255, 255, 0.05))', borderRadius: '6px', border: '1px solid var(--fc-border)' }}>
               <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--fc-text-main)' }}>
                 {r1Completed > 0
-                  ? '✓ Your screening review for this film has been officially submitted.'
+                  ? 'Your screening review for this film has been officially submitted.'
                   : '★ You are assigned to review and score this film. Submit your scorecard above.'}
               </div>
             </div>
           ) : isRejected ? (
-            <div style={{ fontSize: '0.85rem', color: '#dc2626', fontWeight: 500, textAlign: 'center', padding: '6px' }}>
+            <div style={{ fontSize: '0.85rem', color: 'var(--fc-danger-text)', fontWeight: 500, textAlign: 'center', padding: '6px' }}>
               Film has been rejected
             </div>
           ) : activeFilm.status === 'Admin Review' ? (
@@ -1040,7 +1043,7 @@ export default function FilmDetailDrawer({
                   <button
                     type="button"
                     className="fc-btn-advance-primary"
-                    style={{ background: '#16a34a', borderColor: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
+                    style={{ background: 'var(--fc-success)', borderColor: 'var(--fc-success)', display: 'inline-flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
                     onClick={handleDirectOfficialSelection}
                     disabled={advanceLoading}
                   >
@@ -1075,7 +1078,8 @@ export default function FilmDetailDrawer({
                     onClick={() => setShowAdvanceModal(true)}
                     disabled={advanceLoading}
                   >
-                    ✦ Advance to Round 2 Screening
+                    <FlashOnIcon size={16} />
+                    <span>Advance to Round 2 Screening</span>
                   </button>
                   <div className="fc-drawer-secondary-actions">
                     <button
@@ -1105,11 +1109,11 @@ export default function FilmDetailDrawer({
               <button
                 type="button"
                 className="fc-btn-advance-primary"
-                style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                style={{ background: 'var(--fc-success)', borderColor: 'var(--fc-success)' }}
                 onClick={handleDirectOfficialSelection}
                 disabled={advanceLoading}
               >
-                ✓ Mark Official Selection
+                Mark Official Selection
               </button>
               <div className="fc-drawer-secondary-actions">
                 <button
@@ -1139,7 +1143,14 @@ export default function FilmDetailDrawer({
                 onClick={handleDirectAdvance}
                 disabled={advanceLoading}
               >
-                {advanceLoading ? 'Advancing...' : `⚡ Advance to ${activeStagesList[1]?.label || 'Round 1: Screening'}`}
+                {advanceLoading ? (
+                  'Advancing...'
+                ) : (
+                  <>
+                    <FlashOnIcon size={16} />
+                    <span>Advance to {activeStagesList[1]?.label || 'Round 1: Screening'}</span>
+                  </>
+                )}
               </button>
               <div className="fc-drawer-secondary-actions">
                 <button
@@ -1147,8 +1158,10 @@ export default function FilmDetailDrawer({
                   className="fc-btn-action-outline"
                   onClick={() => setShowR1AssignModal(true)}
                   disabled={advanceLoading}
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                 >
-                  ⚡ Advance & Assign Jury
+                  <FlashOnIcon size={14} />
+                  <span>Advance & Assign Jury</span>
                 </button>
                 <button
                   type="button"
@@ -1163,7 +1176,7 @@ export default function FilmDetailDrawer({
               </div>
             </div>
           ) : activeFilm.status === 'Winner' ? (
-            <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(234, 88, 12, 0.1)', color: '#c2410c', borderRadius: '8px', fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+            <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(234, 88, 12, 0.1)', color: 'var(--fc-warning-text)', borderRadius: '8px', fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
               <TrophyIcon size={16} />
               <span>Winner — Festival Award Recipient</span>
             </div>
@@ -1175,11 +1188,14 @@ export default function FilmDetailDrawer({
                 onClick={handleDirectAdvance}
                 disabled={advanceLoading}
               >
-                {advanceLoading
-                  ? 'Advancing...'
-                  : activeStagesList[activeStageIndex + 1]?.label
-                    ? `⚡ Advance to ${activeStagesList[activeStageIndex + 1].label}`
-                    : '⚡ Advance to Next Stage'}
+                {advanceLoading ? (
+                  'Advancing...'
+                ) : (
+                  <>
+                    <FlashOnIcon size={16} />
+                    <span>Advance to {activeStagesList[activeStageIndex + 1]?.label || 'Next Stage'}</span>
+                  </>
+                )}
               </button>
               <button
                 type="button"
@@ -1207,7 +1223,7 @@ export default function FilmDetailDrawer({
                 className="fc-drawer-close-btn"
                 onClick={() => setShowAdvanceModal(false)}
               >
-                ✕
+                <CloseIcon size={16} />
               </button>
             </div>
 
@@ -1286,7 +1302,7 @@ export default function FilmDetailDrawer({
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => { }}
-                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#a82f2f' }}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--fc-brand)' }}
                             />
                           </div>
                         </div>
@@ -1328,7 +1344,7 @@ export default function FilmDetailDrawer({
             <div className="fc-advance-modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 {isSubmittedFilm && (
-                  <FlashOnIcon size={18} style={{ color: '#a82f2f' }} />
+                  <FlashOnIcon size={18} style={{ color: 'var(--fc-brand-text)' }} />
                 )}
                 <h3 className="fc-advance-modal-title" style={{ margin: 0 }}>
                   {isSubmittedFilm
@@ -1363,7 +1379,7 @@ export default function FilmDetailDrawer({
                   className="fc-unified-notice-banner"
                   style={{ margin: '12px 0 16px' }}
                 >
-                  <span style={{ fontSize: '16px', lineHeight: 1 }}>⚡</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center' }}><FlashOnIcon size={16} /></span>
                   <div className="fc-unified-notice-text">
                     <strong>Unified Stage Advance:</strong> Because this film is currently in <em>Submitted (Intake)</em>, assigning reviewers will automatically transition it to <strong>{activeStagesList[1]?.label || 'Round 1: Screening'}</strong> and activate each reviewer's scorecard.
                   </div>
@@ -1425,7 +1441,7 @@ export default function FilmDetailDrawer({
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => { }}
-                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#a82f2f' }}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--fc-brand)' }}
                             />
                           </div>
                         </div>
@@ -1449,16 +1465,20 @@ export default function FilmDetailDrawer({
               <button
                 type="button"
                 className="fc-btn-advance-primary"
-                style={{ width: 'auto', padding: '8px 20px' }}
+                style={{ width: 'auto', padding: '8px 20px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
                 onClick={handleAssignToRound1}
                 disabled={advanceLoading || selectedR1JudgeIds.length === 0}
               >
-                {advanceLoading
-                  ? 'Promoting & Assigning...'
-                  : isSubmittedFilm
-                    ? `⚡ Move to Round 1 & Assign (${selectedR1JudgeIds.length})`
-                    : `Assign Reviewers (${selectedR1JudgeIds.length})`
-                }
+                {advanceLoading ? (
+                  'Promoting & Assigning...'
+                ) : isSubmittedFilm ? (
+                  <>
+                    <FlashOnIcon size={16} />
+                    <span>Move to Round 1 & Assign ({selectedR1JudgeIds.length})</span>
+                  </>
+                ) : (
+                  `Assign Reviewers (${selectedR1JudgeIds.length})`
+                )}
               </button>
             </div>
           </div>

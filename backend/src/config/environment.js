@@ -62,7 +62,9 @@ const env = {
 
   // JWT
   jwtSecret: resolveSecret('JWT_SECRET_KEY', 'jwt_secret.txt'),
-  jwtExpiresIn: '8h',
+  jwtExpiresIn: '24h',
+  // Lifetime when the user ticks "Remember me" on the login page
+  jwtRememberExpiresIn: '30d',
 
   // Google OAuth
   googleClientId: process.env.GOOGLE_CLIENT_ID || '',
@@ -73,6 +75,15 @@ const env = {
   cookieName: '__Host-access-token',
   cookieSecure: process.env.NODE_ENV === 'production',
   cookieSameSite: 'lax',
+
+  // Freecomers Laravel API used to verify admin-panel JWTs (see docs/adr/0002).
+  // Defaults by environment family of FRONTEND_URL (autovertest = dev/staging).
+  freecomersAdminApiUrl: (
+    process.env.FREECOMERS_ADMIN_API_URL ||
+    ((process.env.FRONTEND_URL || '').includes('autovertest.com')
+      ? 'https://api.autovertest.com'
+      : 'https://api.freecomers.com')
+  ).replace(/\/$/, ''),
 
   // Kashish External Votes API
   kashishApiKey: process.env.KASHISH_API_KEY || 'kashish_live_sec_8f4b1e7d2a9c3b6e5a0d1f4c',

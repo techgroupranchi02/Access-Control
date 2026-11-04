@@ -4,7 +4,6 @@
  * References: Doc 4 (API Integration Guide), Doc 5 (Scoring Guide)
  */
 
-const crypto = require('crypto');
 const { query } = require('../../config/database');
 const { fetchAllKashishVotes } = require('../services/kashish-api.service');
 const { recalculateScores } = require('./audience.controller');
@@ -33,270 +32,286 @@ function normalizeTitle(str) {
     .trim();
 }
 
+// Per-event lock so the manual button and the auto-sync timer never run the same event concurrently
+const runningEvents = new Set();
+
+const RECEIPT_FINAL = new Set(['counted', 'duplicate']);
+
+async function upsertReceipt(eventId, r) {
+  await query(`
+    INSERT INTO kashish_vote_receipts (
+      event_id, kashish_vote_id, kashish_user_id, kashish_movie_id, film_id, attendee_id, qr_id,
+      screening_block_id, vote_id, stars, source, voted_at, outcome, reason, payload
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      film_id = VALUES(film_id), attendee_id = VALUES(attendee_id), qr_id = VALUES(qr_id),
+      screening_block_id = VALUES(screening_block_id), vote_id = VALUES(vote_id),
+      outcome = VALUES(outcome), reason = VALUES(reason), last_evaluated_at = CURRENT_TIMESTAMP
+  `, [
+    eventId, r.kashishVoteId, r.kUserId, r.kMovieId, r.filmId || null, r.attendeeId || null, r.qrId || null,
+    r.blockId || null, r.voteId || null, r.stars, r.source, r.votedAt, r.outcome, r.reason || null,
+    JSON.stringify(r.payload || null)
+  ]);
+}
+
 /**
- * POST /api/kashish-sync/sync-votes
- * Pulls all votes from Kashish API, auto-maps users and movies, stores votes, and recalculates scores.
+ * Pulls all Kashish votes and processes them for one event (docs/adr/0003):
+ *   - a vote counts only for a REGISTERED delegate (matched by email / phone; never auto-created)
+ *     who is CHECKED IN at a screening containing that film (or, if the film is not scheduled in
+ *     any screening block, checked in at any screening of the event);
+ *   - every vote stores the delegate's badge (audience_votes.qr_id) and the Kashish timestamp;
+ *   - every Kashish vote gets a receipt row, whatever the outcome; non-final outcomes are
+ *     re-evaluated on each sync (e.g. late registration or late check-in).
+ * Returns a summary object. Throws on API/DB failure.
  */
-async function syncKashishVotes(req, res) {
-  const eventId = getEventId(req);
-  const userId = req.user ? req.user.id : 1;
+async function syncEventVotes(eventId, { userId = null, apiKey, source = 'all' } = {}) {
+  eventId = parseInt(eventId, 10);
+  if (runningEvents.has(eventId)) {
+    return { skipped: true, reason: 'A sync for this event is already running.' };
+  }
+  runningEvents.add(eventId);
   let logId = null;
 
   try {
-    // 1. Create a sync log record
     const logRes = await query(`
       INSERT INTO kashish_sync_logs (event_id, sync_type, status, synced_by_user_id)
       VALUES (?, 'votes', 'running', ?)
     `, [eventId, userId]);
     logId = logRes.insertId;
 
-    // 2. Fetch all votes from Kashish API
-    console.log(`[KashishSync] Fetching all votes from Kashish API for event ${eventId}...`);
-    const { votes, summary } = await fetchAllKashishVotes(req.body?.apiKey, req.body?.source || 'all');
-    console.log(`[KashishSync] Retrieved ${votes.length} votes from Kashish API.`);
+    const { votes } = await fetchAllKashishVotes(apiKey, source);
 
-    // 3. Load existing movie mappings
-    const existingMovieMappings = await query(`
-      SELECT kashish_movie_id, freecomers_submission_id
-      FROM kashish_movie_mappings
-      WHERE event_id = ?
-    `, [eventId]);
+    // Existing receipts: skip votes already final
+    const receiptRows = await query('SELECT kashish_vote_id, outcome FROM kashish_vote_receipts WHERE event_id = ?', [eventId]);
+    const receiptOutcome = new Map(receiptRows.map(r => [r.kashish_vote_id, r.outcome]));
+
+    // Movie mappings + title auto-match
     const movieMap = new Map();
-    existingMovieMappings.forEach(m => movieMap.set(String(m.kashish_movie_id), m.freecomers_submission_id));
-
-    // 4. Load all submissions for this event for title auto-matching
-    const submissions = await query(`
-      SELECT id, title, director
-      FROM submissions
-      WHERE event_id = ?
-    `, [eventId]);
+    (await query('SELECT kashish_movie_id, freecomers_submission_id FROM kashish_movie_mappings WHERE event_id = ?', [eventId]))
+      .forEach(m => movieMap.set(String(m.kashish_movie_id), m.freecomers_submission_id));
     const titleToSubMap = new Map();
-    submissions.forEach(s => {
-      const norm = normalizeTitle(s.title);
-      if (norm) titleToSubMap.set(norm, s.id);
-    });
+    (await query('SELECT id, title FROM submissions WHERE event_id = ?', [eventId]))
+      .forEach(sub => { const n = normalizeTitle(sub.title); if (n) titleToSubMap.set(n, sub.id); });
 
-    // 5. Load existing user mappings
-    const existingUserMappings = await query(`
-      SELECT kashish_user_id, freecomers_attendee_id
-      FROM kashish_user_mappings
-      WHERE event_id = ?
-    `, [eventId]);
+    // User mappings (only to real, registered delegates of this event)
     const userMap = new Map();
-    existingUserMappings.forEach(u => userMap.set(String(u.kashish_user_id), u.freecomers_attendee_id));
+    (await query(`
+      SELECT m.kashish_user_id, m.freecomers_attendee_id
+      FROM kashish_user_mappings m
+      JOIN saas_attendees a ON a.attendee_id = m.freecomers_attendee_id
+      WHERE m.event_id = ? AND m.matched_by <> 'auto_created'
+    `, [eventId])).forEach(u => userMap.set(String(u.kashish_user_id), u.freecomers_attendee_id));
 
-    // 6. Process votes
-    let newVotes = 0;
-    let duplicateSkipped = 0;
-    let usersAutoMatched = 0;
-    let usersAutoCreated = 0;
-    const unmappedMovieSet = new Set();
+    const badgeCache = new Map();
+    const blocksForFilmCache = new Map();
+
+    const counts = { counted: 0, not_checked_in: 0, unregistered: 0, unmapped_film: 0, duplicate: 0, already_final: 0, users_matched: 0 };
     const unmappedMovieInfo = new Map();
 
     for (const v of votes) {
-      const kMovieId = v.movie?.id || v.movie?._id;
+      const kMovieId = String(v.movie?.id || v.movie?._id || '');
       const kMovieTitle = v.movie?.title || v.movie?.name || 'Untitled';
-      const kUserId = v.user?.id || v.user?._id;
+      const kUserId = String(v.user?.id || v.user?._id || '');
       const kUserName = v.user?.name || 'Kashish Delegate';
-      const kUserEmail = v.user?.email ? v.user.email.toLowerCase().trim() : null;
+      const kUserEmail = v.user?.email && v.user.email !== 'Anonymous' ? v.user.email.toLowerCase().trim() : null;
       const kUserMobile = v.user?.mobileNumber || v.user?.mobile || null;
+      const kashishVoteId = String(v.id || `${kUserId}_${kMovieId}`);
+      const stars = Math.max(1, Math.min(5, parseInt(v.vote?.stars ?? v.rating, 10) || 0)) || null;
+      const voteSource = (v.vote?.source || v.source || 'scan') === 'scan' ? 'scan' : 'normal';
+      const votedAt = v.vote?.timestamp ? new Date(v.vote.timestamp) : new Date();
+      const base = { kashishVoteId, kUserId, kMovieId, stars, source: voteSource, votedAt, payload: v };
 
-      // ── Step A: Resolve Movie ──────────────────────────────────────
-      let submissionId = movieMap.get(String(kMovieId));
-      if (!submissionId) {
-        // Try auto-matching by normalized title
-        const normKTitle = normalizeTitle(kMovieTitle);
-        if (normKTitle && titleToSubMap.has(normKTitle)) {
-          submissionId = titleToSubMap.get(normKTitle);
-          // Persist the auto-matched mapping
-          try {
-            await query(`
-              INSERT INTO kashish_movie_mappings (event_id, kashish_movie_id, kashish_movie_title, freecomers_submission_id)
-              VALUES (?, ?, ?, ?)
-              ON DUPLICATE KEY UPDATE freecomers_submission_id = VALUES(freecomers_submission_id)
-            `, [eventId, String(kMovieId), kMovieTitle, submissionId]);
-            movieMap.set(String(kMovieId), submissionId);
-            console.log(`[KashishSync] Auto-mapped movie "${kMovieTitle}" -> submission #${submissionId}`);
-          } catch (mErr) {
-            console.warn('[KashishSync] Movie mapping insert notice:', mErr.message);
-          }
-        }
-      }
+      if (RECEIPT_FINAL.has(receiptOutcome.get(kashishVoteId))) { counts.already_final++; continue; }
+      if (!stars) continue; // malformed record
 
-      if (!submissionId) {
-        unmappedMovieSet.add(String(kMovieId));
-        unmappedMovieInfo.set(String(kMovieId), kMovieTitle);
-        continue; // Cannot record vote for unmapped movie
-      }
-
-      // ── Step B: Resolve User / Attendee ─────────────────────────────
-      let attendeeId = userMap.get(String(kUserId));
-      if (!attendeeId && kUserId) {
-        let matchedBy = null;
-
-        // Try matching existing attendee by email
-        if (kUserEmail) {
-          const matchEmail = await query(`
-            SELECT attendee_id FROM saas_attendees 
-            WHERE event_id = ? AND LOWER(email) = ? 
-            LIMIT 1
-          `, [eventId, kUserEmail]);
-          if (matchEmail.length > 0) {
-            attendeeId = matchEmail[0].attendee_id;
-            matchedBy = 'email';
-          }
-        }
-
-        // Try matching existing attendee by mobile
-        if (!attendeeId && kUserMobile) {
-          const cleanMobile = kUserMobile.replace(/\D/g, '').slice(-10);
-          if (cleanMobile.length === 10) {
-            const matchMobile = await query(`
-              SELECT attendee_id FROM saas_attendees 
-              WHERE event_id = ? AND phone LIKE ? 
-              LIMIT 1
-            `, [eventId, `%${cleanMobile}`]);
-            if (matchMobile.length > 0) {
-              attendeeId = matchMobile[0].attendee_id;
-              matchedBy = 'phone';
-            }
-          }
-        }
-
-        if (attendeeId) {
-          usersAutoMatched++;
-        } else {
-          // Auto-create attendee
-          const qrToken = crypto.randomUUID();
-          const customMeta = JSON.stringify({
-            kashish_user_id: kUserId,
-            country_code: v.user?.countryCode || null,
-            sync_source: 'kashish_api'
-          });
-
-          const createAttendeeRes = await query(`
-            INSERT INTO saas_attendees (
-              event_id, festival_id, name, email, phone, delegate_category,
-              registration_type, registered_by_user_id, registered_by_role, status, qr_token, custom_data
-            ) VALUES (?, ?, ?, ?, ?, 'kashish_synced', 'kashish_api', ?, 'admin', 'registered', ?, ?)
-          `, [
-            eventId, eventId, kUserName, kUserEmail, kUserMobile,
-            userId, qrToken, customMeta
-          ]);
-          attendeeId = createAttendeeRes.insertId;
-
-          // Also register QR record
-          try {
-            await query(`
-              INSERT INTO saas_qr (qr_data, event_id, festival_id, attendee_id)
-              VALUES (?, ?, ?, ?)
-            `, [qrToken, eventId, eventId, attendeeId]);
-          } catch (qrErr) {
-            // non-fatal
-          }
-
-          matchedBy = 'auto_created';
-          usersAutoCreated++;
-        }
-
-        // Save mapping for future lookups
-        try {
+      // A. Film
+      let filmId = movieMap.get(kMovieId);
+      if (!filmId) {
+        const norm = normalizeTitle(kMovieTitle);
+        if (norm && titleToSubMap.has(norm)) {
+          filmId = titleToSubMap.get(norm);
           await query(`
-            INSERT INTO kashish_user_mappings (
-              event_id, kashish_user_id, kashish_user_email, kashish_user_name,
-              kashish_user_mobile, freecomers_attendee_id, matched_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-              freecomers_attendee_id = VALUES(freecomers_attendee_id),
-              matched_by = VALUES(matched_by)
-          `, [eventId, String(kUserId), kUserEmail, kUserName, kUserMobile, attendeeId, matchedBy]);
-          userMap.set(String(kUserId), attendeeId);
-        } catch (uMapErr) {
-          console.warn('[KashishSync] User mapping insert notice:', uMapErr.message);
+            INSERT INTO kashish_movie_mappings (event_id, kashish_movie_id, kashish_movie_title, freecomers_submission_id)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE freecomers_submission_id = VALUES(freecomers_submission_id)
+          `, [eventId, kMovieId, kMovieTitle, filmId]).catch(e => console.warn('[KashishSync] Movie mapping notice:', e.message));
+          movieMap.set(kMovieId, filmId);
         }
       }
-
-      if (!attendeeId) {
+      if (!filmId) {
+        unmappedMovieInfo.set(kMovieId, kMovieTitle);
+        await upsertReceipt(eventId, { ...base, outcome: 'unmapped_film', reason: `No Freecomers film mapped for "${kMovieTitle}"` });
+        counts.unmapped_film++;
         continue;
       }
 
-      // ── Step C: Insert Vote ─────────────────────────────────────────
-      const rawStars = v.vote?.stars ?? v.rating ?? 5;
-      const stars = Math.max(1, Math.min(5, parseInt(rawStars, 10) || 5));
-      const source = (v.vote?.source || v.source || 'scan') === 'scan' ? 'kashish_scan' : 'kashish_normal';
-      const voteDate = v.vote?.timestamp ? new Date(v.vote.timestamp) : new Date();
-
-      try {
-        await query(`
-          INSERT INTO audience_votes (
-            event_id, screening_block_id, film_id, attendee_id, rating,
-            is_attendance_verified, voting_method, status, created_at
-          ) VALUES (?, NULL, ?, ?, ?, 1, ?, 'valid', ?)
-        `, [eventId, submissionId, attendeeId, stars, source, voteDate]);
-        newVotes++;
-      } catch (insertErr) {
-        if (insertErr.code === 'ER_DUP_ENTRY') {
-          duplicateSkipped++;
-        } else {
-          console.error('[KashishSync] Vote insert error:', insertErr.message);
+      // B. Registered delegate (email, then phone ignoring formatting). Never auto-created.
+      let attendeeId = userMap.get(kUserId);
+      if (!attendeeId) {
+        let matchedBy = null;
+        if (kUserEmail) {
+          const r = await query(
+            'SELECT attendee_id FROM saas_attendees WHERE (event_id = ? OR festival_id = ?) AND LOWER(email) = ? LIMIT 1',
+            [eventId, eventId, kUserEmail]
+          );
+          if (r.length) { attendeeId = r[0].attendee_id; matchedBy = 'email'; }
+        }
+        const mobile10 = kUserMobile ? String(kUserMobile).replace(/\D/g, '').slice(-10) : '';
+        if (!attendeeId && mobile10.length === 10) {
+          const r = await query(`
+            SELECT attendee_id FROM saas_attendees
+            WHERE (event_id = ? OR festival_id = ?)
+              AND REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') LIKE ?
+            LIMIT 1
+          `, [eventId, eventId, `%${mobile10}`]);
+          if (r.length) { attendeeId = r[0].attendee_id; matchedBy = 'phone'; }
+        }
+        if (attendeeId) {
+          counts.users_matched++;
+          userMap.set(kUserId, attendeeId);
+          await query(`
+            INSERT INTO kashish_user_mappings (
+              event_id, kashish_user_id, kashish_user_email, kashish_user_name, kashish_user_mobile, freecomers_attendee_id, matched_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE freecomers_attendee_id = VALUES(freecomers_attendee_id), matched_by = VALUES(matched_by)
+          `, [eventId, kUserId, kUserEmail, kUserName, kUserMobile, attendeeId, matchedBy])
+            .catch(e => console.warn('[KashishSync] User mapping notice:', e.message));
         }
       }
+      if (!attendeeId) {
+        await upsertReceipt(eventId, { ...base, filmId, outcome: 'unregistered', reason: 'Voter is not a registered delegate of this festival (no email/phone match)' });
+        counts.unregistered++;
+        continue;
+      }
+
+      // C. Delegate's badge (QR / badge number captured on the vote)
+      if (!badgeCache.has(attendeeId)) {
+        const b = await query('SELECT qr_id FROM saas_qr WHERE attendee_id = ? ORDER BY qr_id DESC LIMIT 1', [attendeeId]);
+        badgeCache.set(attendeeId, b.length ? b[0].qr_id : null);
+      }
+      const qrId = badgeCache.get(attendeeId);
+
+      // D. Attendance verification
+      if (!blocksForFilmCache.has(filmId)) {
+        const b = await query(`
+          SELECT sbf.screening_block_id AS id
+          FROM screening_block_films sbf
+          JOIN screening_blocks sb ON sb.id = sbf.screening_block_id
+          WHERE sb.event_id = ? AND sbf.film_id = ?
+        `, [eventId, filmId]);
+        blocksForFilmCache.set(filmId, b.map(x => x.id));
+      }
+      const filmBlocks = blocksForFilmCache.get(filmId);
+      const checkin = filmBlocks.length
+        ? await query(
+          `SELECT screening_block_id FROM screening_checkins WHERE attendee_id = ? AND screening_block_id IN (${filmBlocks.map(() => '?').join(',')}) ORDER BY scanned_at LIMIT 1`,
+          [attendeeId, ...filmBlocks]
+        )
+        : await query('SELECT screening_block_id FROM screening_checkins WHERE attendee_id = ? AND event_id = ? ORDER BY scanned_at LIMIT 1', [attendeeId, eventId]);
+      const verified = checkin.length > 0;
+      const blockId = verified ? checkin[0].screening_block_id : null;
+      const status = verified ? 'valid' : 'flagged_suspicious';
+      const method = voteSource === 'scan' ? 'kashish_scan' : 'kashish_normal';
+
+      // E. Record the vote (or promote an earlier flagged Kashish vote once the delegate is verified)
+      let voteId = null;
+      let outcome = verified ? 'counted' : 'not_checked_in';
+      try {
+        const ins = await query(`
+          INSERT INTO audience_votes (
+            event_id, screening_block_id, film_id, attendee_id, qr_id, rating,
+            is_attendance_verified, voting_method, status, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [eventId, blockId, filmId, attendeeId, qrId, stars, verified ? 1 : 0, method, status, votedAt]);
+        voteId = ins.insertId;
+      } catch (insertErr) {
+        if (insertErr.code !== 'ER_DUP_ENTRY') throw insertErr;
+        const existing = await query(
+          'SELECT id, status, voting_method FROM audience_votes WHERE event_id = ? AND attendee_id = ? AND film_id = ? LIMIT 1',
+          [eventId, attendeeId, filmId]
+        );
+        const ex = existing[0];
+        if (ex && ex.status === 'flagged_suspicious' && String(ex.voting_method).startsWith('kashish_')) {
+          voteId = ex.id;
+          if (verified) {
+            await query(
+              'UPDATE audience_votes SET status = \'valid\', is_attendance_verified = 1, screening_block_id = ?, qr_id = COALESCE(qr_id, ?) WHERE id = ?',
+              [blockId, qrId, ex.id]
+            );
+          }
+        } else {
+          voteId = ex ? ex.id : null;
+          outcome = 'duplicate'; // already voted for this film (e.g. via /vote) — first vote is final
+        }
+      }
+
+      await upsertReceipt(eventId, {
+        ...base, filmId, attendeeId, qrId, blockId, voteId, outcome,
+        reason: outcome === 'not_checked_in' ? 'Delegate was not checked in at a screening of this film'
+          : outcome === 'duplicate' ? 'Delegate already has a vote for this film' : null
+      });
+      counts[outcome]++;
     }
 
-    // 7. Recalculate leaderboard scores immediately with new votes
     await recalculateScores(eventId);
 
-    // 8. Update sync log
     await query(`
       UPDATE kashish_sync_logs SET
-        total_fetched = ?,
-        new_votes_created = ?,
-        duplicate_skipped = ?,
-        users_auto_matched = ?,
-        users_auto_created = ?,
-        movies_unmapped = ?,
-        status = 'completed',
-        completed_at = CURRENT_TIMESTAMP
+        total_fetched = ?, new_votes_created = ?, duplicate_skipped = ?, users_auto_matched = ?,
+        users_auto_created = 0, movies_unmapped = ?, status = 'completed', completed_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `, [
-      votes.length,
-      newVotes,
-      duplicateSkipped,
-      usersAutoMatched,
-      usersAutoCreated,
-      unmappedMovieSet.size,
-      logId
-    ]);
+    `, [votes.length, counts.counted, counts.duplicate + counts.already_final, counts.users_matched, unmappedMovieInfo.size, logId]);
 
-    const unmappedList = Array.from(unmappedMovieSet).map(id => ({
-      kashish_movie_id: id,
-      kashish_movie_title: unmappedMovieInfo.get(id) || 'Unknown'
-    }));
+    return {
+      total_fetched: votes.length,
+      counted: counts.counted,
+      flagged_not_checked_in: counts.not_checked_in,
+      rejected_unregistered: counts.unregistered,
+      unmapped_film_votes: counts.unmapped_film,
+      duplicates: counts.duplicate,
+      already_processed: counts.already_final,
+      users_matched: counts.users_matched,
+      // kept for the existing UI
+      new_votes_created: counts.counted,
+      duplicate_skipped: counts.duplicate + counts.already_final,
+      users_auto_matched: counts.users_matched,
+      users_auto_created: 0,
+      movies_unmapped: unmappedMovieInfo.size,
+      unmapped_movies: [...unmappedMovieInfo].map(([id, title]) => ({ kashish_movie_id: id, kashish_movie_title: title }))
+    };
+  } catch (error) {
+    if (logId) {
+      await query(
+        "UPDATE kashish_sync_logs SET status = 'failed', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [error.message, logId]
+      ).catch(() => { });
+    }
+    throw error;
+  } finally {
+    runningEvents.delete(eventId);
+  }
+}
 
+/**
+ * POST /api/kashish-sync/sync-votes
+ * Manual sync (the auto-sync timer calls syncEventVotes directly).
+ */
+async function syncKashishVotes(req, res) {
+  try {
+    const summary = await syncEventVotes(getEventId(req), {
+      userId: req.user ? req.user.id : null,
+      source: req.body?.source || 'all'
+    });
+    if (summary.skipped) {
+      return res.status(409).json({ error: summary.reason });
+    }
     res.json({
       success: true,
-      message: `Sync completed: ${newVotes} new votes created, ${duplicateSkipped} duplicates skipped.`,
-      summary: {
-        total_fetched: votes.length,
-        new_votes_created: newVotes,
-        duplicate_skipped: duplicateSkipped,
-        users_auto_matched: usersAutoMatched,
-        users_auto_created: usersAutoCreated,
-        movies_unmapped: unmappedMovieSet.size,
-        unmapped_movies: unmappedList
-      }
+      message: `Sync completed: ${summary.counted} counted, ${summary.flagged_not_checked_in} flagged (not checked in), ${summary.rejected_unregistered} from unregistered voters, ${summary.duplicates} duplicates.`,
+      summary
     });
   } catch (error) {
     console.error('[KashishSync] syncKashishVotes error:', error.message);
-    if (logId) {
-      await query(`
-        UPDATE kashish_sync_logs SET
-          status = 'failed',
-          error_message = ?,
-          completed_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `, [error.message, logId]).catch(() => {});
-    }
     res.status(500).json({ error: `Sync failed: ${error.message}` });
   }
 }
@@ -456,7 +471,51 @@ async function getSyncLogs(req, res) {
   }
 }
 
+/**
+ * GET /api/kashish-sync/receipts?outcome=unregistered|not_checked_in|unmapped_film|duplicate|counted
+ * Every Kashish vote seen by Freecomers and what happened to it (counted or why not).
+ */
+async function listVoteReceipts(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const outcome = req.query.outcome;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const params = [eventId];
+    let where = 'r.event_id = ?';
+    if (outcome) { where += ' AND r.outcome = ?'; params.push(outcome); }
+
+    const [rows, totals] = await Promise.all([
+      query(`
+        SELECT r.id, r.kashish_vote_id, r.outcome, r.reason, r.stars, r.source, r.voted_at, r.last_evaluated_at,
+               r.film_id, s.title AS film_title, r.attendee_id, a.name AS attendee_name, q.serial_no AS badge_serial,
+               JSON_UNQUOTE(JSON_EXTRACT(r.payload, '$.user.name')) AS kashish_user_name,
+               JSON_UNQUOTE(JSON_EXTRACT(r.payload, '$.user.mobileNumber')) AS kashish_user_mobile,
+               JSON_UNQUOTE(JSON_EXTRACT(r.payload, '$.movie.title')) AS kashish_movie_title
+        FROM kashish_vote_receipts r
+        LEFT JOIN submissions s ON s.id = r.film_id
+        LEFT JOIN saas_attendees a ON a.attendee_id = r.attendee_id
+        LEFT JOIN saas_qr q ON q.qr_id = r.qr_id
+        WHERE ${where}
+        ORDER BY r.voted_at DESC
+        LIMIT ${limit}
+      `, params),
+      query('SELECT outcome, COUNT(*) AS c FROM kashish_vote_receipts WHERE event_id = ? GROUP BY outcome', [eventId])
+    ]);
+
+    res.json({
+      success: true,
+      totals: Object.fromEntries(totals.map(t => [t.outcome, Number(t.c)])),
+      receipts: rows
+    });
+  } catch (error) {
+    console.error('[KashishSync] listVoteReceipts error:', error.message);
+    res.status(500).json({ error: 'Failed to retrieve Kashish vote receipts.' });
+  }
+}
+
 module.exports = {
+  listVoteReceipts,
+  syncEventVotes,
   syncKashishVotes,
   listMovieMappings,
   createMovieMapping,

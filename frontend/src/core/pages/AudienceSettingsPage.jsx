@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
+import { useFestivalConfig } from '../hooks/useFestivalConfig';
 import {
   PaletteIcon,
   DescriptionIcon,
@@ -34,7 +35,7 @@ import {
   CheckCircleIcon,
   TuneIcon,
   SettingsIcon,
-  CalendarTodayIcon
+  CalendarTodayIcon, CloseIcon
 } from '../components/common/Icons';
 
 const DEFAULT_FAQS = [
@@ -48,7 +49,7 @@ const DEFAULT_FAQS = [
   },
   {
     question: 'Who Can Attend (Eligibility & Verification)',
-    answer: '<ul><li><strong>18+ Only:</strong> Only individuals 18 years and above (as of November 19, 2026) are permitted to attend the festival.</li><li><strong>Mandatory Registration:</strong> Registration is compulsory to access any film screenings, ceremonies, or panel discussions.</li><li><strong>Badge Access:</strong> Admission into all NGMA festival halls is reserved exclusively for pre-registered delegates holding a verified Festival Pass.</li><li><strong>Photo ID:</strong> Please carry a valid government-issued photo ID / age proof document for physical verification at the reception counter.</li></ul>'
+    answer: '<ul><li><strong>18+ Only:</strong> Only individuals 18 years and above (as of November 19, 2026) are permitted to attend the festival.</li><li><strong>Mandatory Registration:</strong> Registration is compulsory to access any film screenings, ceremonies, or panel discussions.</li><li><strong>Badge Access:</strong> Admission into all NGMA festival halls is reserved exclusively for pre-registered delegates holding a verified Festival Pass.</li><li><strong>Photo ID:</strong> Please carry a valid photo ID / age proof document for physical verification at the reception counter.</li></ul>'
   },
   {
     question: 'How to Get Your Festival Pass: Online & Spot Registration',
@@ -56,7 +57,7 @@ const DEFAULT_FAQS = [
   },
   {
     question: 'Collecting Your Festival Pass (Badge Pickup & Timing)',
-    answer: '<p>Physical Festival Passes can be picked up exclusively from the registration desk at <strong>NGMA</strong> during the following operational hours:</p><p><strong>Badge Collection Hours:</strong> November 20 – 22 | 10:15 AM – 6:00 PM</p><p><em>* Please carry your government-issued age proof document to present at the counter.</em></p>'
+    answer: '<p>Physical Festival Passes can be picked up exclusively from the registration desk at <strong>NGMA</strong> during the following operational hours:</p><p><strong>Badge Collection Hours:</strong> November 20 – 22 | 10:15 AM – 6:00 PM</p><p><em>* Please carry a valid age proof document to present at the counter.</em></p>'
   },
   {
     question: 'How Audience Choice Voting Works',
@@ -167,7 +168,7 @@ function FaqRichTextEditor({ value, onChange }) {
           title="Insert Link"
           style={{ padding: '2px 8px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface-card)', color: 'var(--fc-text-main)', cursor: 'pointer' }}
         >
-          🔗 Link
+          Link
         </button>
         <button
           type="button"
@@ -175,7 +176,7 @@ function FaqRichTextEditor({ value, onChange }) {
           title="Clear Formatting"
           style={{ padding: '2px 8px', fontSize: '0.8rem', borderRadius: '4px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface-card)', color: 'var(--fc-text-main)', cursor: 'pointer' }}
         >
-          🧹 Clear
+          Clear
         </button>
 
         <span style={{ marginLeft: 'auto' }} />
@@ -188,9 +189,9 @@ function FaqRichTextEditor({ value, onChange }) {
             padding: '2px 8px',
             fontSize: '0.75rem',
             borderRadius: '4px',
-            border: isHtmlMode ? '1px solid #e11d48' : '1px solid var(--fc-border)',
-            background: isHtmlMode ? 'rgba(225,29,72,0.1)' : 'var(--fc-surface-card)',
-            color: isHtmlMode ? '#e11d48' : 'var(--fc-text-muted)',
+            border: isHtmlMode ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
+            background: isHtmlMode ? 'rgba(168, 47, 47,0.1)' : 'var(--fc-surface-card)',
+            color: isHtmlMode ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
             cursor: 'pointer',
             fontWeight: 600
           }}
@@ -314,7 +315,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
           backgroundImage: `url(${bannerUrl})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center top',
-          borderBottom: '3px solid #e11d48',
+          borderBottom: '3px solid var(--fc-brand)',
           display: 'flex',
           alignItems: 'flex-end',
           justifyContent: 'center',
@@ -342,7 +343,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
             color: 'var(--fc-text-muted)',
             textTransform: 'uppercase'
           }}>
-            <span style={{ color: '#e11d48', fontSize: '1rem' }}>📊</span> MINIBOXOFFICE PRESENTS
+            MINIBOXOFFICE PRESENTS
           </div>
 
           {/* Close Button top-right */}
@@ -369,7 +370,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
               fontWeight: 700
             }}
           >
-            ✕
+            <CloseIcon size={16} />
           </button>
 
           {/* Circular Logo top-right */}
@@ -381,7 +382,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
             width: '46px',
             height: '46px',
             borderRadius: '50%',
-            background: '#fff',
+            background: 'var(--fc-surface-card)',
             padding: '3px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
             border: '2px solid #fff',
@@ -406,7 +407,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
           }}>
             <div style={{
               fontWeight: 900,
-              color: '#1c1917',
+              color: 'var(--fc-text-main)',
               letterSpacing: '0.04em',
               textTransform: 'uppercase',
               fontSize: '0.98rem',
@@ -444,7 +445,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
                 <h4 style={{
                   fontWeight: 800,
                   fontSize: '1.15rem',
-                  color: 'var(--fc-brand, #e11d48)',
+                  color: 'var(--fc-brand, var(--fc-brand-text))',
                   lineHeight: 1.3,
                   margin: '0 0 10px 0'
                 }}>
@@ -466,12 +467,12 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
               <div style={{
                 padding: '14px 16px',
                 borderRadius: '8px',
-                background: 'rgba(225, 29, 72, 0.1)',
-                border: '1px solid rgba(225, 29, 72, 0.3)'
+                background: 'rgba(168, 47, 47, 0.1)',
+                border: '1px solid rgba(168, 47, 47, 0.3)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  <InfoIcon size={16} style={{ color: '#f43f5e' }} />
-                  <span style={{ fontWeight: 800, color: '#f43f5e', textTransform: 'uppercase', letterSpacing: '0.03em', fontSize: '0.78rem' }}>
+                  <InfoIcon size={16} style={{ color: 'var(--fc-brand-text)' }} />
+                  <span style={{ fontWeight: 800, color: 'var(--fc-brand-text)', textTransform: 'uppercase', letterSpacing: '0.03em', fontSize: '0.78rem' }}>
                     {policyItem.question}
                   </span>
                 </div>
@@ -527,7 +528,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
                     gap: '4px',
                     fontSize: '0.78rem',
                     fontWeight: 700,
-                    color: '#f43f5e',
+                    color: 'var(--fc-brand-text)',
                     marginTop: '4px',
                     textDecoration: 'none'
                   }}
@@ -579,9 +580,9 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
                   textTransform: 'uppercase',
                   letterSpacing: '0.04em',
                   fontSize: '0.88rem',
-                  color: 'var(--fc-brand, #e11d48)',
+                  color: 'var(--fc-brand, var(--fc-brand-text))',
                   marginBottom: '10px',
-                  borderBottom: '2px solid rgba(225, 29, 72, 0.3)',
+                  borderBottom: '2px solid rgba(168, 47, 47, 0.3)',
                   paddingBottom: '4px'
                 }}>
                   {howToGetItem.question}
@@ -601,9 +602,9 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
                   textTransform: 'uppercase',
                   letterSpacing: '0.04em',
                   fontSize: '0.88rem',
-                  color: 'var(--fc-brand, #e11d48)',
+                  color: 'var(--fc-brand, var(--fc-brand-text))',
                   marginBottom: '10px',
-                  borderBottom: '2px solid rgba(225, 29, 72, 0.3)',
+                  borderBottom: '2px solid rgba(168, 47, 47, 0.3)',
                   paddingBottom: '4px'
                 }}>
                   {collectingPassItem.question}
@@ -624,8 +625,8 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
                 padding: '14px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  <HowToVoteIcon size={16} style={{ color: '#eab308' }} />
-                  <span style={{ fontWeight: 900, color: '#eab308', textTransform: 'uppercase', letterSpacing: '0.03em', fontSize: '0.82rem' }}>
+                  <HowToVoteIcon size={16} style={{ color: 'var(--fc-warning-text)' }} />
+                  <span style={{ fontWeight: 900, color: 'var(--fc-warning-text)', textTransform: 'uppercase', letterSpacing: '0.03em', fontSize: '0.82rem' }}>
                     {votingItem.question}
                   </span>
                 </div>
@@ -660,7 +661,7 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
             {/* Additional Custom Questions */}
             {additionalFaqs.length > 0 && (
               <div style={{ borderTop: '1px dashed var(--fc-border)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <span style={{ fontWeight: 800, color: 'var(--fc-brand, #e11d48)', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <span style={{ fontWeight: 800, color: 'var(--fc-brand, var(--fc-brand-text))', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   ADDITIONAL QUESTIONS:
                 </span>
                 {additionalFaqs.map((af, aIdx) => (
@@ -692,10 +693,10 @@ function DelegateFaqPreviewModal({ open, onClose, formSchema }) {
             onClick={onClose}
             style={{
               padding: '6px 24px',
-              border: '1.5px solid #e11d48',
+              border: '1.5px solid var(--fc-brand)',
               borderRadius: '20px',
               background: 'transparent',
-              color: '#e11d48',
+              color: 'var(--fc-brand-text)',
               fontWeight: 700,
               fontSize: '0.84rem',
               cursor: 'pointer'
@@ -784,13 +785,13 @@ function LiveFormPreviewContent({
         color: 'var(--fc-text-main)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: isCompact ? '6px' : '12px' }}>
-          <ConfirmationNumberIcon size={isCompact ? 14 : 18} style={{ color: '#e11d48' }} />
+          <ConfirmationNumberIcon size={isCompact ? 14 : 18} style={{ color: 'var(--fc-brand-text)' }} />
           <span style={{
             fontWeight: 800,
             fontSize: isCompact ? '0.68rem' : '0.82rem',
             letterSpacing: '0.04em',
             textTransform: 'uppercase',
-            color: '#e11d48',
+            color: 'var(--fc-brand-text)',
             lineHeight: 1.2
           }}>
             {formSchema?.policy_info?.title || 'DELEGATE PASS POLICY'}
@@ -815,7 +816,7 @@ function LiveFormPreviewContent({
               ]
           ).map((pt, pIdx) => (
             <div key={pIdx} style={{ display: 'flex', gap: '5px' }}>
-              <span style={{ color: '#e11d48', fontWeight: 800 }}>•</span>
+              <span style={{ color: 'var(--fc-brand-text)', fontWeight: 800 }}>•</span>
               <span>{pt}</span>
             </div>
           ))}
@@ -825,7 +826,7 @@ function LiveFormPreviewContent({
           <span
             onClick={onOpenFaqModal}
             style={{
-              color: '#f43f5e',
+              color: 'var(--fc-brand-text)',
               fontWeight: 700,
               fontSize: isCompact ? '0.7rem' : '0.82rem',
               cursor: 'pointer',
@@ -834,26 +835,26 @@ function LiveFormPreviewContent({
               gap: '4px'
             }}
           >
-            <HelpIcon size={isCompact ? 12 : 14} style={{ color: '#f43f5e' }} /> {formSchema?.policy_info?.faq_text || 'Read all FAQs →'}
+            <HelpIcon size={isCompact ? 12 : 14} style={{ color: 'var(--fc-brand-text)' }} /> {formSchema?.policy_info?.faq_text || 'Read all FAQs →'}
           </span>
         </div>
       </div>
 
       {/* Venue Pickup Card */}
       <div style={{
-        background: 'rgba(225, 29, 72, 0.08)',
-        border: '1px dashed rgba(225, 29, 72, 0.35)',
+        background: 'rgba(168, 47, 47, 0.08)',
+        border: '1px dashed rgba(168, 47, 47, 0.35)',
         borderRadius: isCompact ? '8px' : '10px',
         padding: isCompact ? '10px' : '14px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-          <PlaceIcon size={isCompact ? 13 : 15} style={{ color: '#f43f5e' }} />
+          <PlaceIcon size={isCompact ? 13 : 15} style={{ color: 'var(--fc-brand-text)' }} />
           <span style={{
             fontWeight: 800,
             fontSize: isCompact ? '0.66rem' : '0.78rem',
             letterSpacing: '0.03em',
             textTransform: 'uppercase',
-            color: '#f43f5e'
+            color: 'var(--fc-brand-text)'
           }}>
             {formSchema?.venue_info?.card_title || 'PASS COLLECTION AT VENUE:'}
           </span>
@@ -869,7 +870,7 @@ function LiveFormPreviewContent({
         <div style={{ fontSize: isCompact ? '0.68rem' : '0.78rem', color: 'var(--fc-text-secondary)', marginTop: '2px' }}>
           Between <strong>{formSchema?.venue_info?.dates || 'Festival Dates'}</strong>
         </div>
-        <div style={{ fontSize: isCompact ? '0.68rem' : '0.78rem', color: '#f43f5e', fontWeight: 700, marginTop: '2px' }}>
+        <div style={{ fontSize: isCompact ? '0.68rem' : '0.78rem', color: 'var(--fc-brand-text)', fontWeight: 700, marginTop: '2px' }}>
           {formSchema?.venue_info?.timing || '10:00 AM to 6:00 PM'}
         </div>
       </div>
@@ -889,7 +890,7 @@ function LiveFormPreviewContent({
       <div style={{
         background: 'var(--fc-surface-card)',
         padding: isCompact ? '12px 14px' : '16px 24px',
-        borderBottom: '3px solid #e11d48',
+        borderBottom: '3px solid var(--fc-brand)',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
@@ -960,7 +961,7 @@ function LiveFormPreviewContent({
                 e.currentTarget.style.background = 'var(--fc-surface)';
               }}
             >
-              ✕
+              <CloseIcon size={16} />
             </button>
           )}
         </div>
@@ -982,19 +983,19 @@ function LiveFormPreviewContent({
         {/* Right Column: Form Fields */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: isCompact ? '10px' : '14px', minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: isCompact ? '0.7rem' : '0.82rem', color: 'var(--fc-text-muted)' }}>
-            Already a member? <span style={{ color: '#f43f5e', fontWeight: 700, cursor: 'pointer', marginLeft: '4px' }}>Sign in →</span>
+            Already a member? <span style={{ color: 'var(--fc-brand-text)', fontWeight: 700, cursor: 'pointer', marginLeft: '4px' }}>Sign in →</span>
           </div>
 
           {/* Full Name */}
           {nameField && (
             <div>
               <label style={{ display: 'block', fontSize: isCompact ? '0.72rem' : '0.78rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '3px' }}>
-                {nameField.label || 'Full Name'} {nameField.required && <span style={{ color: '#e11d48' }}>*</span>}
+                {nameField.label || 'Full Name'} {nameField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
               </label>
               <input
                 type="text"
                 disabled
-                placeholder={nameField.placeholder || 'Enter your full name as per Govt ID'}
+                placeholder={nameField.placeholder || 'Enter your full name as per Photo ID'}
                 style={{ width: '100%', padding: isCompact ? '7px 10px' : '9px 16px', borderRadius: '8px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: isCompact ? '0.78rem' : '0.88rem', boxSizing: 'border-box' }}
               />
             </div>
@@ -1010,7 +1011,7 @@ function LiveFormPreviewContent({
               {emailField && (
                 <div>
                   <label style={{ display: 'block', fontSize: isCompact ? '0.72rem' : '0.78rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '3px' }}>
-                    {emailField.label || 'Email Address'} {emailField.required && <span style={{ color: '#e11d48' }}>*</span>}
+                    {emailField.label || 'Email Address'} {emailField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
                   </label>
                   <input
                     type="email"
@@ -1023,7 +1024,7 @@ function LiveFormPreviewContent({
               {phoneField && (
                 <div>
                   <label style={{ display: 'block', fontSize: isCompact ? '0.72rem' : '0.78rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '3px' }}>
-                    {phoneField.label || 'Mobile / WhatsApp Number'} {phoneField.required && <span style={{ color: '#e11d48' }}>*</span>}
+                    {phoneField.label || 'Mobile / WhatsApp Number'} {phoneField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
                   </label>
                   <input
                     type="tel"
@@ -1047,7 +1048,7 @@ function LiveFormPreviewContent({
               {dobField && (
                 <div>
                   <label style={{ display: 'block', fontSize: isCompact ? '0.72rem' : '0.78rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '3px' }}>
-                    {dobField.label || 'Date of Birth'} {dobField.required && <span style={{ color: '#e11d48' }}>*</span>}
+                    {dobField.label || 'Date of Birth'} {dobField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -1081,7 +1082,7 @@ function LiveFormPreviewContent({
                           name="preview_gender"
                           checked={previewGender === g}
                           onChange={() => setPreviewGender(g)}
-                          style={{ accentColor: '#e11d48', cursor: 'pointer' }}
+                          style={{ accentColor: 'var(--fc-brand)', cursor: 'pointer' }}
                         />
                         <span>{g}</span>
                       </label>
@@ -1113,8 +1114,8 @@ function LiveFormPreviewContent({
                     key={opt}
                     onClick={() => setPreviewPassType(opt)}
                     style={{
-                      border: isActive ? '1px solid #e11d48' : '1px solid var(--fc-border)',
-                      background: isActive ? 'rgba(225, 29, 72, 0.12)' : 'var(--fc-surface)',
+                      border: isActive ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
+                      background: isActive ? 'rgba(168, 47, 47, 0.12)' : 'var(--fc-surface)',
                       borderRadius: '8px',
                       padding: isCompact ? '7px 10px' : '10px 14px',
                       marginBottom: oIdx < passOptions.length - 1 ? '6px' : '0',
@@ -1130,7 +1131,7 @@ function LiveFormPreviewContent({
                       name="preview_pass_type"
                       checked={isActive}
                       onChange={() => setPreviewPassType(opt)}
-                      style={{ accentColor: '#e11d48', width: '14px', height: '14px', cursor: 'pointer' }}
+                      style={{ accentColor: 'var(--fc-brand)', width: '14px', height: '14px', cursor: 'pointer' }}
                     />
                     <div>
                       <div style={{ fontWeight: 700, fontSize: isCompact ? '0.76rem' : '0.88rem', color: 'var(--fc-text-main)' }}>{opt}</div>
@@ -1158,7 +1159,7 @@ function LiveFormPreviewContent({
                             if (e.target.checked) setPreviewDays([...previewDays, d]);
                             else setPreviewDays(previewDays.filter(x => x !== d));
                           }}
-                          style={{ accentColor: '#e11d48', cursor: 'pointer' }}
+                          style={{ accentColor: 'var(--fc-brand)', cursor: 'pointer' }}
                         />
                         <span>{d}</span>
                       </label>
@@ -1173,7 +1174,7 @@ function LiveFormPreviewContent({
           {delegateCatField && (
             <div>
               <label style={{ display: 'block', fontSize: isCompact ? '0.72rem' : '0.78rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '3px' }}>
-                {delegateCatField.label || 'Delegate Category'} {delegateCatField.required && <span style={{ color: '#e11d48' }}>*</span>}
+                {delegateCatField.label || 'Delegate Category'} {delegateCatField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
               </label>
               <select
                 disabled
@@ -1213,7 +1214,7 @@ function LiveFormPreviewContent({
                           name="preview_comm"
                           checked={previewCommunity === item}
                           onChange={() => setPreviewCommunity(item)}
-                          style={{ accentColor: '#e11d48', cursor: 'pointer' }}
+                          style={{ accentColor: 'var(--fc-brand)', cursor: 'pointer' }}
                         />
                         <span>{item}</span>
                       </label>
@@ -1235,7 +1236,7 @@ function LiveFormPreviewContent({
                           name="preview_mumbai"
                           checked={previewMumbai === ans}
                           onChange={() => setPreviewMumbai(ans)}
-                          style={{ accentColor: '#e11d48', cursor: 'pointer' }}
+                          style={{ accentColor: 'var(--fc-brand)', cursor: 'pointer' }}
                         />
                         <span>{ans}</span>
                       </label>
@@ -1249,15 +1250,14 @@ function LiveFormPreviewContent({
           {/* Additional Dynamic / Custom Questions */}
           {customOrOtherFields && customOrOtherFields.length > 0 && (
             <div style={{ background: 'var(--fc-surface-subtle)', border: '1px solid var(--fc-border)', borderRadius: isCompact ? '8px' : '12px', padding: isCompact ? '10px' : '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: isCompact ? '0.7rem' : '0.8rem', fontWeight: 800, color: '#f43f5e', marginBottom: '8px' }}>
-                <span>✨</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: isCompact ? '0.7rem' : '0.8rem', fontWeight: 800, color: 'var(--fc-brand-text)', marginBottom: '8px' }}>
                 <span>ADDITIONAL ACCREDITATION QUESTIONS:</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: (!isMobile && !isCompact) ? 'repeat(auto-fit, minmax(200px, 1fr))' : '1fr', gap: isCompact ? '8px' : '12px' }}>
                 {customOrOtherFields.map(field => (
                   <div key={field.key || field.id}>
                     <label style={{ display: 'block', fontSize: isCompact ? '0.68rem' : '0.78rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '3px' }}>
-                      {field.label} {field.required && <span style={{ color: '#e11d48' }}>*</span>}
+                      {field.label} {field.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
                     </label>
 
                     {field.type === 'select' ? (
@@ -1273,7 +1273,7 @@ function LiveFormPreviewContent({
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '2px' }}>
                         {(field.options || []).map(opt => (
                           <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: isCompact ? '0.7rem' : '0.8rem', color: 'var(--fc-text-main)' }}>
-                            <input type="radio" disabled name={`preview_custom_${field.key}`} style={{ accentColor: '#e11d48' }} />
+                            <input type="radio" disabled name={`preview_custom_${field.key}`} style={{ accentColor: 'var(--fc-brand)' }} />
                             <span>{opt}</span>
                           </label>
                         ))}
@@ -1282,7 +1282,7 @@ function LiveFormPreviewContent({
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingTop: '2px' }}>
                         {(field.options || []).map(opt => (
                           <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: isCompact ? '0.7rem' : '0.8rem', color: 'var(--fc-text-main)' }}>
-                            <input type="checkbox" disabled style={{ accentColor: '#e11d48' }} />
+                            <input type="checkbox" disabled style={{ accentColor: 'var(--fc-brand)' }} />
                             <span>{opt}</span>
                           </label>
                         ))}
@@ -1350,22 +1350,22 @@ function LiveFormPreviewContent({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: isCompact ? '5px' : '8px', fontSize: isCompact ? '0.7rem' : '0.82rem', color: 'var(--fc-text-secondary)' }}>
                   {updatesField && (
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', cursor: 'pointer' }}>
-                      <input type="checkbox" disabled style={{ marginTop: '2px', accentColor: '#e11d48' }} />
-                      <span>{updatesField.label} {updatesField.required ? <span style={{ color: '#e11d48' }}>*</span> : '(Optional)'}</span>
+                      <input type="checkbox" disabled style={{ marginTop: '2px', accentColor: 'var(--fc-brand)' }} />
+                      <span>{updatesField.label} {updatesField.required ? <span style={{ color: 'var(--fc-brand-text)' }}>*</span> : '(Optional)'}</span>
                     </label>
                   )}
 
                   {directoryField && (
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', cursor: 'pointer' }}>
-                      <input type="checkbox" disabled style={{ marginTop: '2px', accentColor: '#e11d48' }} />
-                      <span>{directoryField.label} {directoryField.required ? <span style={{ color: '#e11d48' }}>*</span> : '(Optional)'}</span>
+                      <input type="checkbox" disabled style={{ marginTop: '2px', accentColor: 'var(--fc-brand)' }} />
+                      <span>{directoryField.label} {directoryField.required ? <span style={{ color: 'var(--fc-brand-text)' }}>*</span> : '(Optional)'}</span>
                     </label>
                   )}
 
                   {certifyField && (
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', cursor: 'pointer', borderTop: (updatesField || directoryField) ? '1px dashed var(--fc-border)' : 'none', paddingTop: (updatesField || directoryField) ? (isCompact ? '5px' : '8px') : '0', fontWeight: 600 }}>
-                      <input type="checkbox" disabled checked readOnly style={{ marginTop: '2px', accentColor: '#e11d48' }} />
-                      <span>{certifyField.label} {certifyField.required && <span style={{ color: '#e11d48' }}>*</span>}</span>
+                      <input type="checkbox" disabled checked readOnly style={{ marginTop: '2px', accentColor: 'var(--fc-brand)' }} />
+                      <span>{certifyField.label} {certifyField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}</span>
                     </label>
                   )}
                 </div>
@@ -1408,7 +1408,7 @@ function LiveFormPreviewContent({
             padding: isCompact ? '7px 18px' : '10px 26px',
             borderRadius: '24px',
             border: 'none',
-            background: '#a82f2f',
+            background: 'var(--fc-brand)',
             color: '#ffffff',
             fontWeight: 700,
             fontSize: isCompact ? '0.74rem' : '0.88rem',
@@ -1424,6 +1424,7 @@ function LiveFormPreviewContent({
 }
 
 export default function AudienceSettingsPage() {
+  const { currentFestival } = useFestivalConfig();
   const [activeTab, setActiveTab] = useState('form_builder'); // 'form_builder' | 'categories' | 'voting_rules' | 'venues'
 
   const [categories, setCategories] = useState([]);
@@ -1433,8 +1434,8 @@ export default function AudienceSettingsPage() {
     adjustment_number: 10,
     require_screening_checkin: true,
     enable_did_not_watch_skip: true,
-    delegate_registration_enabled: true,
-    festival_name: 'Kashish Pride Film Festival (Bangalore Edition)'
+    delegate_registration_enabled: false,
+    festival_name: ''
   });
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -1526,7 +1527,9 @@ export default function AudienceSettingsPage() {
 
       setCategories(catRes.data.categories || []);
       setVenues(venueRes.data.venues || []);
-      if (setRes.data?.settings) setSettings(setRes.data.settings);
+      if (setRes.data?.settings) {
+        setSettings(setRes.data.settings);
+      }
 
       if (formRes.data?.schema) {
         const schema = formRes.data.schema;
@@ -1573,7 +1576,7 @@ export default function AudienceSettingsPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentFestival?.id]);
 
   // --- Category Handlers ---
   const handleCreateCategory = async (e) => {
@@ -2029,7 +2032,7 @@ export default function AudienceSettingsPage() {
               className="fc-btn fc-btn-primary" 
               onClick={() => setShowCatModal(true)}
               style={{
-                background: '#a82f2f',
+                background: 'var(--fc-brand)',
                 color: '#fff',
                 border: 'none',
                 padding: '10px 18px',
@@ -2042,8 +2045,8 @@ export default function AudienceSettingsPage() {
                 boxShadow: '0 4px 12px rgba(168, 47, 47, 0.25)',
                 transition: 'background 0.15s ease'
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--fc-brand)')}
             >
               <span>+ Add Delegate Category</span>
             </button>
@@ -2072,7 +2075,7 @@ export default function AudienceSettingsPage() {
                 onClick={handleSaveFormSchema}
                 disabled={savingForm}
                 style={{
-                  background: '#a82f2f',
+                  background: 'var(--fc-brand)',
                   color: '#fff',
                   border: 'none',
                   padding: '10px 20px',
@@ -2086,8 +2089,8 @@ export default function AudienceSettingsPage() {
                   transition: 'background 0.15s ease',
                   opacity: savingForm ? 0.7 : 1
                 }}
-                onMouseEnter={(e) => !savingForm && (e.currentTarget.style.background = '#922828')}
-                onMouseLeave={(e) => !savingForm && (e.currentTarget.style.background = '#a82f2f')}
+                onMouseEnter={(e) => !savingForm && (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+                onMouseLeave={(e) => !savingForm && (e.currentTarget.style.background = 'var(--fc-brand)')}
               >
                 <SaveIcon size={16} /> {savingForm ? 'Saving Schema...' : 'Save & Publish Schema'}
               </button>
@@ -2104,8 +2107,8 @@ export default function AudienceSettingsPage() {
             padding: '12px 20px',
             background: 'none',
             border: 'none',
-            borderBottom: activeTab === 'form_builder' ? '3px solid #a82f2f' : '3px solid transparent',
-            color: activeTab === 'form_builder' ? '#a82f2f' : 'var(--fc-text-secondary)',
+            borderBottom: activeTab === 'form_builder' ? '3px solid var(--fc-brand)' : '3px solid transparent',
+            color: activeTab === 'form_builder' ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)',
             fontWeight: 700,
             fontSize: '0.95rem',
             cursor: 'pointer',
@@ -2125,8 +2128,8 @@ export default function AudienceSettingsPage() {
             padding: '12px 20px',
             background: 'none',
             border: 'none',
-            borderBottom: activeTab === 'categories' ? '3px solid #a82f2f' : '3px solid transparent',
-            color: activeTab === 'categories' ? '#a82f2f' : 'var(--fc-text-secondary)',
+            borderBottom: activeTab === 'categories' ? '3px solid var(--fc-brand)' : '3px solid transparent',
+            color: activeTab === 'categories' ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)',
             fontWeight: 700,
             fontSize: '0.95rem',
             cursor: 'pointer',
@@ -2146,8 +2149,8 @@ export default function AudienceSettingsPage() {
             padding: '12px 20px',
             background: 'none',
             border: 'none',
-            borderBottom: activeTab === 'voting_rules' ? '3px solid #a82f2f' : '3px solid transparent',
-            color: activeTab === 'voting_rules' ? '#a82f2f' : 'var(--fc-text-secondary)',
+            borderBottom: activeTab === 'voting_rules' ? '3px solid var(--fc-brand)' : '3px solid transparent',
+            color: activeTab === 'voting_rules' ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)',
             fontWeight: 700,
             fontSize: '0.95rem',
             cursor: 'pointer',
@@ -2167,8 +2170,8 @@ export default function AudienceSettingsPage() {
             padding: '12px 20px',
             background: 'none',
             border: 'none',
-            borderBottom: activeTab === 'venues' ? '3px solid #a82f2f' : '3px solid transparent',
-            color: activeTab === 'venues' ? '#a82f2f' : 'var(--fc-text-secondary)',
+            borderBottom: activeTab === 'venues' ? '3px solid var(--fc-brand)' : '3px solid transparent',
+            color: activeTab === 'venues' ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)',
             fontWeight: 700,
             fontSize: '0.95rem',
             cursor: 'pointer',
@@ -2184,9 +2187,9 @@ export default function AudienceSettingsPage() {
       </div>
 
       {formSuccessMsg && (
-        <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#166534', padding: '12px 18px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 600 }}>
+        <div style={{ background: 'var(--fc-success-bg)', border: '1px solid var(--fc-success-border)', color: 'var(--fc-success-text)', padding: '12px 18px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 600 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><CheckCircleIcon size={16} /> {formSuccessMsg}</span>
-          <button onClick={() => setFormSuccessMsg('')} style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer', fontSize: '1.1rem' }}>×</button>
+          <button onClick={() => setFormSuccessMsg('')} style={{ background: 'none', border: 'none', color: 'var(--fc-success-text)', cursor: 'pointer', fontSize: '1.1rem' }}>×</button>
         </div>
       )}
 
@@ -2211,17 +2214,17 @@ export default function AudienceSettingsPage() {
             gap: '12px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <PaletteIcon size={20} style={{ color: '#a82f2f' }} />
+              <PaletteIcon size={20} style={{ color: 'var(--fc-brand-text)' }} />
               <div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--fc-text-muted)', fontWeight: 600 }}>Active Preset: </span>
-                <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#a82f2f' }}>
+                <span style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--fc-brand-text)' }}>
                   {formSchema?.name || formSchema?.template_key || 'KASHISH / LGBTQ+ Festival Template'}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <span style={{
                   background: 'rgba(168, 47, 47, 0.1)',
-                  color: '#a82f2f',
+                  color: 'var(--fc-brand-text)',
                   border: '1px solid rgba(168, 47, 47, 0.25)',
                   fontSize: '0.72rem',
                   fontWeight: 700,
@@ -2310,7 +2313,7 @@ export default function AudienceSettingsPage() {
                 width: '42px',
                 height: '42px',
                 borderRadius: '10px',
-                background: settings.delegate_registration_enabled ? '#10b981' : 'var(--fc-surface-hover)',
+                background: settings.delegate_registration_enabled ? 'var(--fc-success)' : 'var(--fc-surface-hover)',
                 color: settings.delegate_registration_enabled ? '#fff' : 'var(--fc-text-muted)',
                 display: 'flex',
                 alignItems: 'center',
@@ -2332,7 +2335,7 @@ export default function AudienceSettingsPage() {
                     letterSpacing: '0.04em',
                     textTransform: 'uppercase',
                     background: settings.delegate_registration_enabled ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.15)',
-                    color: settings.delegate_registration_enabled ? '#10b981' : 'var(--fc-text-muted)'
+                    color: settings.delegate_registration_enabled ? 'var(--fc-success-text)' : 'var(--fc-text-muted)'
                   }}>
                     {settings.delegate_registration_enabled ? '● Live on Website' : '○ Registration Closed'}
                   </span>
@@ -2371,7 +2374,7 @@ export default function AudienceSettingsPage() {
                   position: 'absolute',
                   cursor: 'pointer',
                   top: 0, left: 0, right: 0, bottom: 0,
-                  backgroundColor: settings.delegate_registration_enabled ? '#10b981' : 'var(--fc-border-strong, #cbd5e1)',
+                  backgroundColor: settings.delegate_registration_enabled ? 'var(--fc-success)' : 'var(--fc-border-strong, #cbd5e1)',
                   borderRadius: '34px',
                   transition: 'background-color 0.25s ease'
                 }}>
@@ -2381,7 +2384,7 @@ export default function AudienceSettingsPage() {
                     width: '22px',
                     left: settings.delegate_registration_enabled ? '27px' : '3px',
                     bottom: '3px',
-                    backgroundColor: '#fff',
+                    backgroundColor: 'var(--fc-surface-card)',
                     borderRadius: '50%',
                     transition: 'left 0.25s ease',
                     boxShadow: '0 2px 5px rgba(0,0,0,0.25)'
@@ -2395,8 +2398,8 @@ export default function AudienceSettingsPage() {
           <div className="fc-card" style={{
             background: 'var(--fc-surface-card)',
             borderRadius: '12px',
-            border: accordionState.templates ? '1px solid #e11d48' : '1px solid var(--fc-border)',
-            boxShadow: accordionState.templates ? '0 4px 16px rgba(225, 29, 72, 0.08)' : 'var(--shadow-sm)',
+            border: accordionState.templates ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
+            boxShadow: accordionState.templates ? '0 4px 16px rgba(168, 47, 47, 0.08)' : 'var(--shadow-sm)',
             overflow: 'hidden',
             transition: 'all 0.15s ease'
           }}>
@@ -2404,7 +2407,7 @@ export default function AudienceSettingsPage() {
               onClick={() => toggleAccordion('templates')}
               style={{
                 padding: '14px 18px',
-                background: accordionState.templates ? 'rgba(225, 29, 72, 0.04)' : 'var(--fc-surface-card)',
+                background: accordionState.templates ? 'rgba(168, 47, 47, 0.04)' : 'var(--fc-surface-card)',
                 borderBottom: accordionState.templates ? '1px solid var(--fc-border)' : 'none',
                 display: 'flex',
                 alignItems: 'center',
@@ -2418,14 +2421,14 @@ export default function AudienceSettingsPage() {
                   width: '36px',
                   height: '36px',
                   borderRadius: '8px',
-                  background: accordionState.templates ? 'rgba(225, 29, 72, 0.12)' : 'var(--fc-surface)',
+                  background: accordionState.templates ? 'rgba(168, 47, 47, 0.12)' : 'var(--fc-surface)',
                   border: '1px solid var(--fc-border)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '1.15rem'
                 }}>
-                  <PaletteIcon size={20} style={{ color: accordionState.templates ? '#e11d48' : 'var(--fc-text-secondary)' }} />
+                  <PaletteIcon size={20} style={{ color: accordionState.templates ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)' }} />
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -2433,8 +2436,8 @@ export default function AudienceSettingsPage() {
                       Step 1: Choose Pre-Built Industry Template
                     </h3>
                     <span style={{
-                      background: 'rgba(225, 29, 72, 0.1)',
-                      color: '#e11d48',
+                      background: 'rgba(168, 47, 47, 0.1)',
+                      color: 'var(--fc-brand-text)',
                       fontSize: '0.72rem',
                       fontWeight: 700,
                       padding: '2px 8px',
@@ -2452,7 +2455,7 @@ export default function AudienceSettingsPage() {
               <span style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: accordionState.templates ? '#e11d48' : 'var(--fc-text-muted)',
+                color: accordionState.templates ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
                 background: 'var(--fc-surface)',
                 border: '1px solid var(--fc-border)',
                 padding: '4px 10px',
@@ -2477,10 +2480,10 @@ export default function AudienceSettingsPage() {
                         key={tplKey}
                         onClick={() => handleSelectTemplate(tplKey)}
                         style={{
-                          border: isSelected ? '2px solid #e11d48' : '1px solid var(--fc-border)',
+                          border: isSelected ? '2px solid var(--fc-brand)' : '1px solid var(--fc-border)',
                           borderRadius: '10px',
                           padding: '16px',
-                          background: isSelected ? 'rgba(225, 29, 72, 0.05)' : 'var(--fc-surface)',
+                          background: isSelected ? 'rgba(168, 47, 47, 0.05)' : 'var(--fc-surface)',
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
                           display: 'flex',
@@ -2490,7 +2493,7 @@ export default function AudienceSettingsPage() {
                       >
                         <div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                            <span style={{ background: isSelected ? '#e11d48' : 'var(--fc-border)', color: isSelected ? '#fff' : 'var(--fc-text-secondary)', fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
+                            <span style={{ background: isSelected ? 'var(--fc-brand)' : 'var(--fc-border)', color: isSelected ? '#fff' : 'var(--fc-text-secondary)', fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
                               {tpl.badge_label}
                             </span>
                             <span style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)' }}>
@@ -2513,7 +2516,7 @@ export default function AudienceSettingsPage() {
                               handleSelectTemplate(tplKey);
                             }}
                             style={{
-                              background: isSelected ? '#059669' : '#a82f2f',
+                              background: isSelected ? 'var(--fc-success)' : 'var(--fc-brand)',
                               color: '#ffffff',
                               border: 'none',
                               padding: '5px 12px',
@@ -2523,12 +2526,12 @@ export default function AudienceSettingsPage() {
                               cursor: 'pointer',
                               transition: 'background 0.15s ease'
                             }}
-                            onMouseEnter={(e) => !isSelected && (e.currentTarget.style.background = '#922828')}
-                            onMouseLeave={(e) => !isSelected && (e.currentTarget.style.background = '#a82f2f')}
+                            onMouseEnter={(e) => !isSelected && (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+                            onMouseLeave={(e) => !isSelected && (e.currentTarget.style.background = 'var(--fc-brand)')}
                           >
-                            {isSelected ? '✓ Active' : 'Load Preset →'}
+                            {isSelected ? 'Active' : 'Load Preset →'}
                           </button>
-                          <span style={{ fontSize: '0.72rem', color: isSelected ? '#059669' : 'var(--fc-text-muted)', fontWeight: isSelected ? 700 : 400 }}>
+                          <span style={{ fontSize: '0.72rem', color: isSelected ? 'var(--fc-success-text)' : 'var(--fc-text-muted)', fontWeight: isSelected ? 700 : 400 }}>
                             {isSelected ? 'Currently Active' : 'Click to apply'}
                           </span>
                         </div>
@@ -2544,8 +2547,8 @@ export default function AudienceSettingsPage() {
           <div className="fc-card" style={{
             background: 'var(--fc-surface-card)',
             borderRadius: '12px',
-            border: accordionState.header ? '1px solid #e11d48' : '1px solid var(--fc-border)',
-            boxShadow: accordionState.header ? '0 4px 16px rgba(225, 29, 72, 0.08)' : 'var(--shadow-sm)',
+            border: accordionState.header ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
+            boxShadow: accordionState.header ? '0 4px 16px rgba(168, 47, 47, 0.08)' : 'var(--shadow-sm)',
             overflow: 'hidden',
             transition: 'all 0.15s ease'
           }}>
@@ -2553,7 +2556,7 @@ export default function AudienceSettingsPage() {
               onClick={() => toggleAccordion('header')}
               style={{
                 padding: '14px 18px',
-                background: accordionState.header ? 'rgba(225, 29, 72, 0.04)' : 'var(--fc-surface-card)',
+                background: accordionState.header ? 'rgba(168, 47, 47, 0.04)' : 'var(--fc-surface-card)',
                 borderBottom: accordionState.header ? '1px solid var(--fc-border)' : 'none',
                 display: 'flex',
                 alignItems: 'center',
@@ -2567,14 +2570,14 @@ export default function AudienceSettingsPage() {
                   width: '36px',
                   height: '36px',
                   borderRadius: '8px',
-                  background: accordionState.header ? 'rgba(225, 29, 72, 0.12)' : 'var(--fc-surface)',
+                  background: accordionState.header ? 'rgba(168, 47, 47, 0.12)' : 'var(--fc-surface)',
                   border: '1px solid var(--fc-border)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '1.15rem'
                 }}>
-                  <DescriptionIcon size={20} style={{ color: accordionState.header ? '#e11d48' : 'var(--fc-text-secondary)' }} />
+                  <DescriptionIcon size={20} style={{ color: accordionState.header ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)' }} />
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -2601,7 +2604,7 @@ export default function AudienceSettingsPage() {
               <span style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: accordionState.header ? '#e11d48' : 'var(--fc-text-muted)',
+                color: accordionState.header ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
                 background: 'var(--fc-surface)',
                 border: '1px solid var(--fc-border)',
                 padding: '4px 10px',
@@ -2652,8 +2655,8 @@ export default function AudienceSettingsPage() {
           <div className="fc-card" style={{
             background: 'var(--fc-surface-card)',
             borderRadius: '12px',
-            border: accordionState.policy ? '1px solid #e11d48' : '1px solid var(--fc-border)',
-            boxShadow: accordionState.policy ? '0 4px 16px rgba(225, 29, 72, 0.08)' : 'var(--shadow-sm)',
+            border: accordionState.policy ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
+            boxShadow: accordionState.policy ? '0 4px 16px rgba(168, 47, 47, 0.08)' : 'var(--shadow-sm)',
             overflow: 'hidden',
             transition: 'all 0.15s ease'
           }}>
@@ -2661,7 +2664,7 @@ export default function AudienceSettingsPage() {
               onClick={() => toggleAccordion('policy')}
               style={{
                 padding: '14px 18px',
-                background: accordionState.policy ? 'rgba(225, 29, 72, 0.04)' : 'var(--fc-surface-card)',
+                background: accordionState.policy ? 'rgba(168, 47, 47, 0.04)' : 'var(--fc-surface-card)',
                 borderBottom: accordionState.policy ? '1px solid var(--fc-border)' : 'none',
                 display: 'flex',
                 alignItems: 'center',
@@ -2675,14 +2678,14 @@ export default function AudienceSettingsPage() {
                   width: '36px',
                   height: '36px',
                   borderRadius: '8px',
-                  background: accordionState.policy ? 'rgba(225, 29, 72, 0.12)' : 'var(--fc-surface)',
+                  background: accordionState.policy ? 'rgba(168, 47, 47, 0.12)' : 'var(--fc-surface)',
                   border: '1px solid var(--fc-border)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '1.15rem'
                 }}>
-                  <ConfirmationNumberIcon size={20} style={{ color: accordionState.policy ? '#e11d48' : 'var(--fc-text-secondary)' }} />
+                  <ConfirmationNumberIcon size={20} style={{ color: accordionState.policy ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)' }} />
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -2709,7 +2712,7 @@ export default function AudienceSettingsPage() {
               <span style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: accordionState.policy ? '#e11d48' : 'var(--fc-text-muted)',
+                color: accordionState.policy ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
                 background: 'var(--fc-surface)',
                 border: '1px solid var(--fc-border)',
                 padding: '4px 10px',
@@ -2776,7 +2779,7 @@ export default function AudienceSettingsPage() {
                       type="button"
                       onClick={handleAddPolicyPoint}
                       style={{
-                        background: '#a82f2f',
+                        background: 'var(--fc-brand)',
                         color: '#fff',
                         border: 'none',
                         padding: '4px 10px',
@@ -2786,8 +2789,8 @@ export default function AudienceSettingsPage() {
                         cursor: 'pointer',
                         transition: 'background 0.15s ease'
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--fc-brand)')}
                     >
                       + Add Policy Rule
                     </button>
@@ -2804,7 +2807,7 @@ export default function AudienceSettingsPage() {
                         ]
                     ).map((point, pIdx) => (
                       <div key={pIdx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span style={{ color: '#e11d48', fontWeight: 700, fontSize: '0.9rem' }}>•</span>
+                        <span style={{ color: 'var(--fc-brand-text)', fontWeight: 700, fontSize: '0.9rem' }}>•</span>
                         <input
                           type="text"
                           value={point}
@@ -2818,7 +2821,7 @@ export default function AudienceSettingsPage() {
                           title="Remove Policy Rule"
                           style={{
                             background: 'rgba(239, 68, 68, 0.1)',
-                            color: '#f87171',
+                            color: 'var(--fc-danger-text)',
                             border: '1px solid rgba(239, 68, 68, 0.25)',
                             borderRadius: '4px',
                             padding: '4px 8px',
@@ -2827,7 +2830,7 @@ export default function AudienceSettingsPage() {
                             fontSize: '0.78rem'
                           }}
                         >
-                          ✕
+                          <CloseIcon size={16} />
                         </button>
                       </div>
                     ))}
@@ -2841,8 +2844,8 @@ export default function AudienceSettingsPage() {
           <div className="fc-card" style={{
             background: 'var(--fc-surface-card)',
             borderRadius: '12px',
-            border: accordionState.venue ? '1px solid #e11d48' : '1px solid var(--fc-border)',
-            boxShadow: accordionState.venue ? '0 4px 16px rgba(225, 29, 72, 0.08)' : 'var(--shadow-sm)',
+            border: accordionState.venue ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
+            boxShadow: accordionState.venue ? '0 4px 16px rgba(168, 47, 47, 0.08)' : 'var(--shadow-sm)',
             overflow: 'hidden',
             transition: 'all 0.15s ease'
           }}>
@@ -2850,7 +2853,7 @@ export default function AudienceSettingsPage() {
               onClick={() => toggleAccordion('venue')}
               style={{
                 padding: '14px 18px',
-                background: accordionState.venue ? 'rgba(225, 29, 72, 0.04)' : 'var(--fc-surface-card)',
+                background: accordionState.venue ? 'rgba(168, 47, 47, 0.04)' : 'var(--fc-surface-card)',
                 borderBottom: accordionState.venue ? '1px solid var(--fc-border)' : 'none',
                 display: 'flex',
                 alignItems: 'center',
@@ -2864,14 +2867,14 @@ export default function AudienceSettingsPage() {
                   width: '36px',
                   height: '36px',
                   borderRadius: '8px',
-                  background: accordionState.venue ? 'rgba(225, 29, 72, 0.12)' : 'var(--fc-surface)',
+                  background: accordionState.venue ? 'rgba(168, 47, 47, 0.12)' : 'var(--fc-surface)',
                   border: '1px solid var(--fc-border)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '1.15rem'
                 }}>
-                  <PlaceIcon size={20} style={{ color: accordionState.venue ? '#e11d48' : 'var(--fc-text-secondary)' }} />
+                  <PlaceIcon size={20} style={{ color: accordionState.venue ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)' }} />
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -2898,7 +2901,7 @@ export default function AudienceSettingsPage() {
               <span style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: accordionState.venue ? '#e11d48' : 'var(--fc-text-muted)',
+                color: accordionState.venue ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
                 background: 'var(--fc-surface)',
                 border: '1px solid var(--fc-border)',
                 padding: '4px 10px',
@@ -2976,7 +2979,7 @@ export default function AudienceSettingsPage() {
                     rows={2}
                     value={formSchema?.venue_info?.instructions || ''}
                     onChange={(e) => handleUpdateVenueInfo('instructions', e.target.value)}
-                    placeholder="Present this Serial Number along with a valid Government Photo ID at the NGMA Registration Desk..."
+                    placeholder="Present this Serial Number along with a valid Photo ID at the NGMA Registration Desk..."
                     style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
                   />
                 </div>
@@ -2988,8 +2991,8 @@ export default function AudienceSettingsPage() {
           <div className="fc-card" style={{
             background: 'var(--fc-surface-card)',
             borderRadius: '12px',
-            border: accordionState.faqs ? '1px solid #e11d48' : '1px solid var(--fc-border)',
-            boxShadow: accordionState.faqs ? '0 4px 16px rgba(225, 29, 72, 0.08)' : 'var(--shadow-sm)',
+            border: accordionState.faqs ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
+            boxShadow: accordionState.faqs ? '0 4px 16px rgba(168, 47, 47, 0.08)' : 'var(--shadow-sm)',
             overflow: 'hidden',
             transition: 'all 0.15s ease'
           }}>
@@ -2997,7 +3000,7 @@ export default function AudienceSettingsPage() {
               onClick={() => toggleAccordion('faqs')}
               style={{
                 padding: '14px 18px',
-                background: accordionState.faqs ? 'rgba(225, 29, 72, 0.04)' : 'var(--fc-surface-card)',
+                background: accordionState.faqs ? 'rgba(168, 47, 47, 0.04)' : 'var(--fc-surface-card)',
                 borderBottom: accordionState.faqs ? '1px solid var(--fc-border)' : 'none',
                 display: 'flex',
                 alignItems: 'center',
@@ -3011,14 +3014,14 @@ export default function AudienceSettingsPage() {
                   width: '36px',
                   height: '36px',
                   borderRadius: '8px',
-                  background: accordionState.faqs ? 'rgba(225, 29, 72, 0.12)' : 'var(--fc-surface)',
+                  background: accordionState.faqs ? 'rgba(168, 47, 47, 0.12)' : 'var(--fc-surface)',
                   border: '1px solid var(--fc-border)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '1.15rem'
                 }}>
-                  <HelpIcon size={20} style={{ color: accordionState.faqs ? '#e11d48' : 'var(--fc-text-secondary)' }} />
+                  <HelpIcon size={20} style={{ color: accordionState.faqs ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)' }} />
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -3026,8 +3029,8 @@ export default function AudienceSettingsPage() {
                       Step 5: Custom FAQ Questions &amp; Answers
                     </h3>
                     <span style={{
-                      background: 'rgba(225, 29, 72, 0.1)',
-                      color: '#e11d48',
+                      background: 'rgba(168, 47, 47, 0.1)',
+                      color: 'var(--fc-brand-text)',
                       fontSize: '0.72rem',
                       fontWeight: 700,
                       padding: '2px 8px',
@@ -3045,7 +3048,7 @@ export default function AudienceSettingsPage() {
               <span style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: accordionState.faqs ? '#e11d48' : 'var(--fc-text-muted)',
+                color: accordionState.faqs ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
                 background: 'var(--fc-surface)',
                 border: '1px solid var(--fc-border)',
                 padding: '4px 10px',
@@ -3087,9 +3090,9 @@ export default function AudienceSettingsPage() {
                       type="button"
                       onClick={() => setShowPreviewFaqModal(true)}
                       style={{
-                        background: 'rgba(225, 29, 72, 0.08)',
-                        color: '#e11d48',
-                        border: '1px solid rgba(225, 29, 72, 0.25)',
+                        background: 'rgba(168, 47, 47, 0.08)',
+                        color: 'var(--fc-brand-text)',
+                        border: '1px solid rgba(168, 47, 47, 0.25)',
                         padding: '6px 12px',
                         borderRadius: '6px',
                         fontSize: '0.76rem',
@@ -3106,7 +3109,7 @@ export default function AudienceSettingsPage() {
                       type="button"
                       onClick={handleAddFaqItem}
                       style={{
-                        background: '#a82f2f',
+                        background: 'var(--fc-brand)',
                         color: '#fff',
                         border: 'none',
                         padding: '6px 14px',
@@ -3117,8 +3120,8 @@ export default function AudienceSettingsPage() {
                         boxShadow: '0 2px 6px rgba(168, 47, 47, 0.25)',
                         transition: 'background 0.15s ease'
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--fc-brand)')}
                     >
                       + Add FAQ Question
                     </button>
@@ -3135,9 +3138,9 @@ export default function AudienceSettingsPage() {
                       <button
                         type="button"
                         onClick={handleResetDefaultFaqs}
-                        style={{ background: '#a82f2f', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s ease' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
+                        style={{ background: 'var(--fc-brand)', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s ease' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--fc-brand)')}
                       >
                         ↺ Load Full Festival FAQs
                       </button>
@@ -3152,10 +3155,10 @@ export default function AudienceSettingsPage() {
                         <div
                           key={fIdx}
                           style={{
-                            border: isFaqExpanded ? '1px solid #e11d48' : '1px solid var(--fc-border)',
+                            border: isFaqExpanded ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
                             borderRadius: '8px',
                             background: 'var(--fc-surface)',
-                            boxShadow: isFaqExpanded ? '0 2px 8px rgba(225, 29, 72, 0.1)' : 'none',
+                            boxShadow: isFaqExpanded ? '0 2px 8px rgba(168, 47, 47, 0.1)' : 'none',
                             overflow: 'hidden',
                             transition: 'all 0.15s ease'
                           }}
@@ -3168,14 +3171,14 @@ export default function AudienceSettingsPage() {
                               alignItems: 'center',
                               gap: '10px',
                               cursor: 'pointer',
-                              background: isFaqExpanded ? 'rgba(225, 29, 72, 0.04)' : 'transparent'
+                              background: isFaqExpanded ? 'rgba(168, 47, 47, 0.04)' : 'transparent'
                             }}
                           >
                             <span style={{
                               fontSize: '0.72rem',
                               fontWeight: 800,
-                              color: isFaqExpanded ? '#fff' : '#e11d48',
-                              background: isFaqExpanded ? '#e11d48' : 'rgba(225, 29, 72, 0.1)',
+                              color: isFaqExpanded ? '#fff' : 'var(--fc-brand-text)',
+                              background: isFaqExpanded ? 'var(--fc-brand)' : 'rgba(168, 47, 47, 0.1)',
                               padding: '2px 6px',
                               borderRadius: '4px'
                             }}>
@@ -3249,8 +3252,8 @@ export default function AudienceSettingsPage() {
                                 title="Delete Question"
                                 style={{
                                   background: 'rgba(239, 68, 68, 0.08)',
-                                  color: '#dc2626',
-                                  border: '1px solid #fca5a5',
+                                  color: 'var(--fc-danger-text)',
+                                  border: '1px solid var(--fc-danger-border)',
                                   borderRadius: '4px',
                                   padding: '4px 8px',
                                   cursor: 'pointer',
@@ -3259,11 +3262,11 @@ export default function AudienceSettingsPage() {
                                   marginLeft: '3px'
                                 }}
                               >
-                                ✕
+                                <CloseIcon size={16} />
                               </button>
                             </div>
 
-                            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: isFaqExpanded ? '#e11d48' : 'var(--fc-text-muted)', marginLeft: '4px', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: isFaqExpanded ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)', marginLeft: '4px', whiteSpace: 'nowrap' }}>
                               {isFaqExpanded ? (
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}><ExpandLessIcon size={13} /> Collapse</span>
                               ) : (
@@ -3296,8 +3299,8 @@ export default function AudienceSettingsPage() {
           <div className="fc-card" style={{
             background: 'var(--fc-surface-card)',
             borderRadius: '12px',
-            border: accordionState.fields ? '1px solid #e11d48' : '1px solid var(--fc-border)',
-            boxShadow: accordionState.fields ? '0 4px 16px rgba(225, 29, 72, 0.08)' : 'var(--shadow-sm)',
+            border: accordionState.fields ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
+            boxShadow: accordionState.fields ? '0 4px 16px rgba(168, 47, 47, 0.08)' : 'var(--shadow-sm)',
             overflow: 'hidden',
             transition: 'all 0.15s ease'
           }}>
@@ -3305,7 +3308,7 @@ export default function AudienceSettingsPage() {
               onClick={() => toggleAccordion('fields')}
               style={{
                 padding: '14px 18px',
-                background: accordionState.fields ? 'rgba(225, 29, 72, 0.04)' : 'var(--fc-surface-card)',
+                background: accordionState.fields ? 'rgba(168, 47, 47, 0.04)' : 'var(--fc-surface-card)',
                 borderBottom: accordionState.fields ? '1px solid var(--fc-border)' : 'none',
                 display: 'flex',
                 alignItems: 'center',
@@ -3319,14 +3322,14 @@ export default function AudienceSettingsPage() {
                   width: '36px',
                   height: '36px',
                   borderRadius: '8px',
-                  background: accordionState.fields ? 'rgba(225, 29, 72, 0.12)' : 'var(--fc-surface)',
+                  background: accordionState.fields ? 'rgba(168, 47, 47, 0.12)' : 'var(--fc-surface)',
                   border: '1px solid var(--fc-border)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '1.15rem'
                 }}>
-                  <TuneIcon size={20} style={{ color: accordionState.fields ? '#e11d48' : 'var(--fc-text-secondary)' }} />
+                  <TuneIcon size={20} style={{ color: accordionState.fields ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)' }} />
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -3334,8 +3337,8 @@ export default function AudienceSettingsPage() {
                       Step 6: Form Questions &amp; Custom Add-ons
                     </h3>
                     <span style={{
-                      background: 'rgba(225, 29, 72, 0.1)',
-                      color: '#e11d48',
+                      background: 'rgba(168, 47, 47, 0.1)',
+                      color: 'var(--fc-brand-text)',
                       fontSize: '0.72rem',
                       fontWeight: 700,
                       padding: '2px 8px',
@@ -3353,7 +3356,7 @@ export default function AudienceSettingsPage() {
               <span style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: accordionState.fields ? '#e11d48' : 'var(--fc-text-muted)',
+                color: accordionState.fields ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
                 background: 'var(--fc-surface)',
                 border: '1px solid var(--fc-border)',
                 padding: '4px 10px',
@@ -3379,7 +3382,7 @@ export default function AudienceSettingsPage() {
                     type="button"
                     onClick={handleOpenAddFieldModal}
                     style={{
-                      background: '#a82f2f',
+                      background: 'var(--fc-brand)',
                       color: '#fff',
                       border: 'none',
                       padding: '8px 16px',
@@ -3393,8 +3396,8 @@ export default function AudienceSettingsPage() {
                       boxShadow: '0 2px 6px rgba(168, 47, 47, 0.25)',
                       transition: 'background 0.15s ease'
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--fc-brand)')}
                   >
                     + Add Custom Question
                   </button>
@@ -3471,12 +3474,12 @@ export default function AudienceSettingsPage() {
                               </span>
                               <code>{field.key}</code>
                               {isNameCore && (
-                                <span style={{ color: '#059669', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <span style={{ color: 'var(--fc-success-text)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                                   <LockIcon size={12} /> Primary ID
                                 </span>
                               )}
                               {isContactCore && (
-                                <span style={{ color: '#2563eb', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                <span style={{ color: 'var(--fc-info-text)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                                   <BadgeIcon size={12} /> Core Contact
                                 </span>
                               )}
@@ -3495,20 +3498,20 @@ export default function AudienceSettingsPage() {
                               checked={isRequired}
                               disabled={isNameCore}
                               onChange={() => handleToggleFieldRequired(index)}
-                              style={{ cursor: isNameCore ? 'not-allowed' : 'pointer', accentColor: '#e11d48' }}
+                              style={{ cursor: isNameCore ? 'not-allowed' : 'pointer', accentColor: 'var(--fc-brand)' }}
                             />
                             <span style={{ fontWeight: isRequired ? 600 : 400, color: isRequired ? 'var(--fc-text-main)' : 'var(--fc-text-muted)' }}>
                               {isRequired ? 'Required' : 'Optional'}
                             </span>
                           </label>
 
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.82rem', cursor: isNameCore ? 'not-allowed' : 'pointer', color: isEnabled ? '#059669' : '#6b7280', fontWeight: 600 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.82rem', cursor: isNameCore ? 'not-allowed' : 'pointer', color: isEnabled ? 'var(--fc-success-text)' : 'var(--fc-text-secondary)', fontWeight: 600 }}>
                             <input
                               type="checkbox"
                               checked={isEnabled}
                               disabled={isNameCore}
                               onChange={() => handleToggleFieldEnabled(index)}
-                              style={{ cursor: isNameCore ? 'not-allowed' : 'pointer', accentColor: '#059669' }}
+                              style={{ cursor: isNameCore ? 'not-allowed' : 'pointer', accentColor: 'var(--fc-success)' }}
                             />
                             <span>{isEnabled ? 'Enabled' : 'Disabled'}</span>
                           </label>
@@ -3540,7 +3543,7 @@ export default function AudienceSettingsPage() {
                               type="button"
                               onClick={() => handleDeleteField(index)}
                               title="Remove field"
-                              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', padding: '4px 6px', display: 'flex', alignItems: 'center' }}
+                              style={{ background: 'none', border: 'none', color: 'var(--fc-danger-text)', cursor: 'pointer', fontSize: '1rem', padding: '4px 6px', display: 'flex', alignItems: 'center' }}
                             >
                               <DeleteIcon size={16} />
                             </button>
@@ -3620,7 +3623,7 @@ export default function AudienceSettingsPage() {
                   <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--fc-border)', paddingTop: '8px' }}>
                     <button
                       onClick={() => handleDeleteCategory(cat.id)}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--fc-danger-text)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
                     >
                       Remove
                     </button>
@@ -3703,7 +3706,7 @@ export default function AudienceSettingsPage() {
                 style={{
                   width: '100%',
                   padding: '10px',
-                  background: '#a82f2f',
+                  background: 'var(--fc-brand)',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '6px',
@@ -3711,8 +3714,8 @@ export default function AudienceSettingsPage() {
                   cursor: 'pointer',
                   transition: 'background 0.15s ease'
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--fc-brand)')}
               >
                 {savingSettings ? 'Saving Settings...' : 'Save Settings'}
               </button>
@@ -3774,7 +3777,7 @@ export default function AudienceSettingsPage() {
                   }}
                   style={{ background: 'none', border: 'none', fontSize: '1.1rem', cursor: 'pointer', color: 'var(--fc-text-muted)' }}
                 >
-                  ✕
+                  <CloseIcon size={16} />
                 </button>
               </div>
               <p style={{ margin: '0 0 16px 0', fontSize: '0.82rem', color: 'var(--fc-text-muted)' }}>
@@ -3902,9 +3905,9 @@ export default function AudienceSettingsPage() {
                   </button>
                   <button
                     type="submit"
-                    style={{ padding: '8px 18px', background: '#a82f2f', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, transition: 'background 0.15s ease' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
+                    style={{ padding: '8px 18px', background: 'var(--fc-brand)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, transition: 'background 0.15s ease' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--fc-brand)')}
                   >
                     {isEditing ? 'Save Changes' : 'Add Field to Form'}
                   </button>
@@ -4046,9 +4049,9 @@ export default function AudienceSettingsPage() {
                 </button>
                 <button 
                   type="submit" 
-                  style={{ padding: '8px 16px', background: '#a82f2f', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, transition: 'background 0.15s ease' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
+                  style={{ padding: '8px 16px', background: 'var(--fc-brand)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, transition: 'background 0.15s ease' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--fc-brand)')}
                 >
                   Create Category
                 </button>
@@ -4100,8 +4103,8 @@ export default function AudienceSettingsPage() {
                   width: '54px', 
                   height: '54px', 
                   borderRadius: '50%', 
-                  background: toggleConfirmModal.nextValue ? 'rgba(16, 185, 129, 0.12)' : 'rgba(225, 29, 72, 0.12)', 
-                  color: toggleConfirmModal.nextValue ? '#10b981' : '#e11d48', 
+                  background: toggleConfirmModal.nextValue ? 'rgba(16, 185, 129, 0.12)' : 'rgba(168, 47, 47, 0.12)', 
+                  color: toggleConfirmModal.nextValue ? 'var(--fc-success-text)' : 'var(--fc-brand-text)', 
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center', 
@@ -4138,7 +4141,7 @@ export default function AudienceSettingsPage() {
               {toggleConfirmModal.nextValue ? (
                 <>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <span style={{ color: '#10b981', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>●</span>
+                    <span style={{ color: 'var(--fc-success-text)', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>●</span>
                     <div>
                       <strong style={{ color: 'var(--fc-text-main)' }}>Public Website Access:</strong>
                       <div style={{ color: 'var(--fc-text-muted)', marginTop: '2px' }}>
@@ -4147,7 +4150,7 @@ export default function AudienceSettingsPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <span style={{ color: '#10b981', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>●</span>
+                    <span style={{ color: 'var(--fc-success-text)', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>●</span>
                     <div>
                       <strong style={{ color: 'var(--fc-text-main)' }}>Automatic Pass Issuance:</strong>
                       <div style={{ color: 'var(--fc-text-muted)', marginTop: '2px' }}>
@@ -4156,7 +4159,7 @@ export default function AudienceSettingsPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <span style={{ color: '#10b981', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>●</span>
+                    <span style={{ color: 'var(--fc-success-text)', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>●</span>
                     <div>
                       <strong style={{ color: 'var(--fc-text-main)' }}>Active Question Builder Schema:</strong>
                       <div style={{ color: 'var(--fc-text-muted)', marginTop: '2px' }}>
@@ -4168,7 +4171,7 @@ export default function AudienceSettingsPage() {
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <span style={{ color: '#e11d48', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>■</span>
+                    <span style={{ color: 'var(--fc-brand-text)', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>■</span>
                     <div>
                       <strong style={{ color: 'var(--fc-text-main)' }}>Public Portal Closed:</strong>
                       <div style={{ color: 'var(--fc-text-muted)', marginTop: '2px' }}>
@@ -4177,7 +4180,7 @@ export default function AudienceSettingsPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <span style={{ color: '#10b981', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>✓</span>
+                    <CheckCircleIcon size={16} style={{ color: 'var(--fc-success-text)', marginTop: '2px' }} />
                     <div>
                       <strong style={{ color: 'var(--fc-text-main)' }}>Existing Passes Unaffected:</strong>
                       <div style={{ color: 'var(--fc-text-muted)', marginTop: '2px' }}>
@@ -4186,7 +4189,7 @@ export default function AudienceSettingsPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <span style={{ color: '#3b82f6', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>●</span>
+                    <span style={{ color: 'var(--fc-info-text)', fontSize: '1.1rem', lineHeight: '1rem', marginTop: '2px' }}>●</span>
                     <div>
                       <strong style={{ color: 'var(--fc-text-main)' }}>Onsite Staff Intake Active:</strong>
                       <div style={{ color: 'var(--fc-text-muted)', marginTop: '2px' }}>
@@ -4227,8 +4230,8 @@ export default function AudienceSettingsPage() {
                   borderRadius: '8px',
                   border: 'none',
                   background: toggleConfirmModal.nextValue 
-                    ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' 
-                    : '#a82f2f',
+                    ? 'var(--fc-success)' 
+                    : 'var(--fc-brand)',
                   color: '#fff',
                   fontWeight: 700,
                   fontSize: '0.9rem',

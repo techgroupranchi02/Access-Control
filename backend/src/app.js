@@ -154,6 +154,8 @@ async function start() {
     console.log(`[App] URL: http://${host}:${env.port}`);
     console.log(`[App] Frontend: ${env.frontendUrl}`);
     console.log(`[App] ══════════════════════════════════════════\n`);
+    // Pull Kashish votes automatically while any voting window is open (docs/adr/0003)
+    require('./core/services/kashishSyncScheduler').startKashishAutoSync();
   });
 }
 

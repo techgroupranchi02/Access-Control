@@ -201,8 +201,8 @@ export default function BulkAssignModal({
                         gap: '12px',
                         padding: '9px 12px',
                         borderRadius: '6px',
-                        background: isChecked ? 'rgba(225, 29, 72, 0.12)' : 'var(--fc-surface-card)',
-                        border: isChecked ? '1px solid rgba(225, 29, 72, 0.35)' : '1px solid var(--fc-border)',
+                        background: isChecked ? 'rgba(168, 47, 47, 0.12)' : 'var(--fc-surface-card)',
+                        border: isChecked ? '1px solid rgba(168, 47, 47, 0.35)' : '1px solid var(--fc-border)',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease'
                       }}

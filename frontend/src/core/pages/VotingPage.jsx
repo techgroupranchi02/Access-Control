@@ -12,17 +12,17 @@
 
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { 
-  MovieIcon, 
-  TrophyIcon, 
-  ShieldIcon, 
-  SyncIcon, 
-  PlaceIcon, 
-  ScheduleIcon, 
-  PlayArrowIcon, 
-  QrCodeScannerIcon, 
-  StopIcon, 
-  CheckCircleIcon, 
+import {
+  MovieIcon,
+  TrophyIcon,
+  ShieldIcon,
+  SyncIcon,
+  PlaceIcon,
+  ScheduleIcon,
+  PlayArrowIcon,
+  QrCodeScannerIcon,
+  StopIcon,
+  CheckCircleIcon,
   WarningIcon,
   StarIcon,
   DeleteIcon,
@@ -99,7 +99,7 @@ export default function VotingPage() {
         .then(res => {
           if (res.data?.reviews) setPendingReviewsCount(res.data.reviews.length);
         })
-        .catch(() => {});
+        .catch(() => { });
     } catch (err) {
       console.error('Failed to load voting data:', err);
     } finally {
@@ -149,6 +149,20 @@ export default function VotingPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Live leaderboard: refresh silently every 15s while the tab is open (Kashish auto-sync feeds new votes)
+  useEffect(() => {
+    if (activeTab !== 'leaderboard') return undefined;
+    const t = setInterval(() => {
+      api.get('/voting/leaderboard')
+        .then(res => {
+          setLeaderboard(res.data.leaderboard || []);
+          setApprovalStatus(res.data.approval || { is_approved: false });
+        })
+        .catch(() => { });
+    }, 15000);
+    return () => clearInterval(t);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'kashish') {
@@ -284,7 +298,7 @@ export default function VotingPage() {
       <div className="fc-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 className="fc-page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: 'var(--fc-text-main)' }}>
-            Audience Choice Voting & Awards
+            Voting
           </h1>
           <p className="fc-page-subtitle" style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem' }}>
             Auditorium voting window triggers, cinema screen QR projector, Bayesian statistical scoring, Kashish API sync & Delegate Reviews
@@ -293,7 +307,7 @@ export default function VotingPage() {
 
         {/* Tab Switcher */}
         <div style={{ display: 'flex', background: 'var(--fc-surface-hover)', padding: '4px', borderRadius: '8px', border: '1px solid var(--fc-border)', flexWrap: 'wrap', gap: '4px' }}>
-          <button 
+          <button
             type="button"
             onClick={() => setActiveTab('controller')}
             style={{
@@ -314,7 +328,7 @@ export default function VotingPage() {
             <MovieIcon size={14} />
             <span>Screening Windows</span>
           </button>
-          <button 
+          <button
             type="button"
             onClick={() => setActiveTab('leaderboard')}
             style={{
@@ -335,7 +349,7 @@ export default function VotingPage() {
             <TrophyIcon size={14} />
             <span>Live Leaderboard ({leaderboard.length})</span>
           </button>
-          <button 
+          <button
             type="button"
             onClick={() => setActiveTab('fraud')}
             style={{
@@ -356,7 +370,7 @@ export default function VotingPage() {
             <ShieldIcon size={14} />
             <span>Fraud Audit ({flaggedVotes.length})</span>
           </button>
-          <button 
+          <button
             type="button"
             onClick={() => setActiveTab('kashish')}
             style={{
@@ -377,7 +391,7 @@ export default function VotingPage() {
             <SyncIcon size={14} />
             <span>Kashish Sync</span>
           </button>
-          <button 
+          <button
             type="button"
             onClick={() => setActiveTab('reviews')}
             style={{
@@ -395,11 +409,11 @@ export default function VotingPage() {
               gap: '6px'
             }}
           >
-            <StarIcon size={14} style={{ color: activeTab === 'reviews' ? '#f59e0b' : 'inherit' }} />
+            <StarIcon size={14} style={{ color: activeTab === 'reviews' ? 'var(--fc-warning-text)' : 'inherit' }} />
             <span>Delegate Reviews</span>
             {pendingReviewsCount > 0 && (
               <span style={{
-                background: '#e05252',
+                background: 'var(--fc-danger)',
                 color: '#fff',
                 fontSize: '0.7rem',
                 fontWeight: 700,
@@ -422,9 +436,9 @@ export default function VotingPage() {
             const isClosed = s.voting_status === 'closed';
 
             return (
-              <div 
-                key={s.id} 
-                className="fc-card" 
+              <div
+                key={s.id}
+                className="fc-card"
                 style={{
                   background: 'var(--fc-surface-card)',
                   borderRadius: '12px',
@@ -434,7 +448,7 @@ export default function VotingPage() {
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  borderTop: isOpen ? '4px solid #16a34a' : isClosed ? '4px solid #94a3b8' : '4px solid #f59e0b'
+                  borderTop: isOpen ? '4px solid var(--fc-success)' : isClosed ? '4px solid var(--fc-border-strong)' : '4px solid var(--fc-warning)'
                 }}
               >
                 <div>
@@ -449,8 +463,8 @@ export default function VotingPage() {
                       fontWeight: 700,
                       textTransform: 'uppercase',
                       background: isOpen ? 'rgba(22, 163, 74, 0.15)' : isClosed ? 'var(--fc-surface-hover)' : 'rgba(245, 158, 11, 0.15)',
-                      color: isOpen ? '#16a34a' : isClosed ? 'var(--fc-text-muted)' : '#f59e0b',
-                      border: isOpen ? '1px solid #16a34a' : 'none'
+                      color: isOpen ? 'var(--fc-success-text)' : isClosed ? 'var(--fc-text-muted)' : 'var(--fc-warning-text)',
+                      border: isOpen ? '1px solid var(--fc-success)' : 'none'
                     }}>
                       {isOpen ? 'Live · Voting Open' : isClosed ? 'Window Closed' : 'Scheduled'}
                     </span>
@@ -487,13 +501,13 @@ export default function VotingPage() {
                 {/* Window Actions */}
                 <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
                   {!isOpen && !isClosed && (
-                    <button 
+                    <button
                       type="button"
                       onClick={() => handleOpenVoting(s.id)}
                       style={{
                         flex: 1,
                         padding: '10px',
-                        background: '#16a34a',
+                        background: 'var(--fc-success)',
                         color: '#fff',
                         border: 'none',
                         borderRadius: '8px',
@@ -511,14 +525,14 @@ export default function VotingPage() {
 
                   {isOpen && (
                     <>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setProjectorModal(s)}
                         style={{
                           flex: 1,
                           padding: '10px',
-                          background: '#1e293b',
-                          color: '#fff',
+                          background: 'var(--fc-text-main)',
+                          color: 'var(--fc-surface-card)',
                           border: 'none',
                           borderRadius: '8px',
                           fontWeight: 700,
@@ -531,12 +545,12 @@ export default function VotingPage() {
                       >
                         <QrCodeScannerIcon size={15} /> Project Screen QR
                       </button>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => handleCloseVoting(s.id)}
                         style={{
                           padding: '10px 16px',
-                          background: '#ef4444',
+                          background: 'var(--fc-danger)',
                           color: '#fff',
                           border: 'none',
                           borderRadius: '8px',
@@ -554,7 +568,7 @@ export default function VotingPage() {
                   )}
 
                   {isClosed && (
-                    <button 
+                    <button
                       type="button"
                       onClick={() => handleOpenVoting(s.id)}
                       style={{
@@ -585,7 +599,7 @@ export default function VotingPage() {
       {/* ── TAB 2: AUDIENCE CHOICE LEADERBOARD ─────────────────────────────── */}
       {activeTab === 'leaderboard' && (
         <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
-          
+
           {/* Approval Banner */}
           <div style={{
             display: 'flex',
@@ -595,25 +609,45 @@ export default function VotingPage() {
             borderRadius: '10px',
             marginBottom: '20px',
             background: approvalStatus.is_approved ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-            border: approvalStatus.is_approved ? '1px solid #10b981' : '1px solid #f59e0b',
+            border: approvalStatus.is_approved ? '1px solid var(--fc-success)' : '1px solid var(--fc-warning)',
             flexWrap: 'wrap',
             gap: '12px'
           }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center' }}>
-                  {approvalStatus.is_approved ? <CheckCircleIcon size={20} style={{ color: '#059669' }} /> : <WarningIcon size={20} style={{ color: '#d97706' }} />}
+                  {approvalStatus.is_approved ? <CheckCircleIcon size={20} style={{ color: 'var(--fc-success-text)' }} /> : <WarningIcon size={20} style={{ color: 'var(--fc-warning-text)' }} />}
                 </span>
-                <strong style={{ fontSize: '0.95rem', color: approvalStatus.is_approved ? '#059669' : '#d97706' }}>
+                <strong style={{ fontSize: '0.95rem', color: approvalStatus.is_approved ? 'var(--fc-success-text)' : 'var(--fc-warning-text)' }}>
                   {approvalStatus.is_approved ? 'OFFICIAL RESULTS PUBLISHED & CERTIFIED' : 'DRAFT STANDINGS — PENDING APPROVAL'}
                 </strong>
               </div>
               <p style={{ margin: '4px 0 0 28px', fontSize: '0.8rem', color: 'var(--fc-text-secondary)' }}>
-                {approvalStatus.is_approved 
+                {approvalStatus.is_approved
                   ? `Certified by ${approvalStatus.approved_by || 'Festival Administration'} at ${new Date(approvalStatus.approved_at).toLocaleString()}`
                   : 'Tabulation is live and subject to change. Click "Approve & Publish" to certify official festival winners.'}
               </p>
             </div>
+
+            {approvalStatus.is_approved && (
+              <a
+                href={`/results/${(() => { try { return localStorage.getItem('currentEditionId') || localStorage.getItem('currentFestivalId') || ''; } catch { return ''; } })()}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  background: 'var(--fc-brand)',
+                  color: '#fff',
+                  padding: '8px 18px',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  textDecoration: 'none',
+                  boxShadow: 'var(--shadow-sm)'
+                }}
+              >
+                Open Winners Screen ↗
+              </a>
+            )}
 
             {!approvalStatus.is_approved && (
               <button
@@ -621,7 +655,7 @@ export default function VotingPage() {
                 onClick={handleApproveResults}
                 disabled={approving}
                 style={{
-                  background: '#059669',
+                  background: 'var(--fc-success)',
                   color: '#fff',
                   border: 'none',
                   padding: '8px 18px',
@@ -646,7 +680,7 @@ export default function VotingPage() {
                 Ranked by Bayesian Adjusted Score (adjustment parameter m = 10) · Tie-break: total votes → raw average
               </p>
             </div>
-            <button 
+            <button
               type="button"
               onClick={fetchData}
               style={{ background: 'var(--fc-surface)', color: 'var(--fc-text-main)', border: '1px solid var(--fc-border)', padding: '6px 14px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
@@ -674,8 +708,8 @@ export default function VotingPage() {
                   const isTop3 = idx < 3;
                   return (
                     <tr key={item.film_id} style={{ borderBottom: '1px solid var(--fc-border-subtle, var(--fc-border))', background: idx === 0 ? 'var(--fc-brand-active-bg, rgba(220, 38, 38, 0.12))' : 'transparent' }}>
-                      <td style={{ padding: '12px 14px', fontWeight: 800, fontSize: '1.1rem', color: idx === 0 ? '#f59e0b' : 'var(--fc-text-secondary)' }}>
-                        {idx === 0 ? '🥇 #1' : idx === 1 ? '🥈 #2' : idx === 2 ? '🥉 #3' : `#${idx + 1}`}
+                      <td style={{ padding: '12px 14px', fontWeight: 800, fontSize: '1.1rem', color: idx === 0 ? 'var(--fc-warning-text)' : 'var(--fc-text-secondary)' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>{isTop3 && <TrophyIcon size={16} style={{ color: ['var(--fc-warning)', 'var(--fc-text-muted)', 'var(--fc-warning-text)'][idx] }} />}#{idx + 1}</span>
                       </td>
                       <td style={{ padding: '12px 14px' }}>
                         <div style={{ fontWeight: 700, color: 'var(--fc-text-main)', fontSize: '0.95rem' }}>{item.film_title}</div>
@@ -693,7 +727,7 @@ export default function VotingPage() {
                         {parseFloat(item.raw_average).toFixed(2)} ★
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        <strong style={{ fontSize: '1.1rem', color: isTop3 ? '#10b981' : 'var(--fc-text-main)' }}>
+                        <strong style={{ fontSize: '1.1rem', color: isTop3 ? 'var(--fc-success-text)' : 'var(--fc-text-main)' }}>
                           {parseFloat(item.bayesian_score).toFixed(3)}
                         </strong>
                       </td>
@@ -703,8 +737,8 @@ export default function VotingPage() {
                         </span>
                       </td>
                       <td style={{ padding: '12px 14px' }}>
-                        <span style={{ color: '#16a34a', fontWeight: 700, fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)', padding: '3px 8px', borderRadius: '4px' }}>
-                          Eligible ✓
+                        <span style={{ color: 'var(--fc-success-text)', fontWeight: 700, fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)', padding: '3px 8px', borderRadius: '4px' }}>
+                          Eligible
                         </span>
                       </td>
                     </tr>
@@ -723,8 +757,8 @@ export default function VotingPage() {
             Suspicious & Flagged Votes Audit
           </h2>
           {flaggedVotes.length === 0 ? (
-            <div style={{ padding: '30px', textAlign: 'center', color: '#10b981', fontWeight: 600 }}>
-              ✓ No suspicious voting activity detected. Voting integrity is healthy.
+            <div style={{ padding: '30px', textAlign: 'center', color: 'var(--fc-success-text)', fontWeight: 600 }}>
+              No suspicious voting activity detected. Voting integrity is healthy.
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
@@ -743,14 +777,14 @@ export default function VotingPage() {
                   <tr key={v.vote_id} style={{ borderBottom: '1px solid var(--fc-border-subtle, var(--fc-border))' }}>
                     <td style={{ padding: '10px', fontWeight: 600, color: 'var(--fc-text-main)' }}>{v.film_title}</td>
                     <td style={{ padding: '10px', color: 'var(--fc-text-secondary)' }}>{v.attendee_name} ({v.attendee_phone})</td>
-                    <td style={{ padding: '10px', fontWeight: 700, color: '#f59e0b' }}>{v.rating} ★</td>
-                    <td style={{ padding: '10px', color: '#ef4444' }}>{v.status}</td>
+                    <td style={{ padding: '10px', fontWeight: 700, color: 'var(--fc-warning-text)' }}>{v.rating} ★</td>
+                    <td style={{ padding: '10px', color: 'var(--fc-danger-text)' }}>{v.status}</td>
                     <td style={{ padding: '10px', color: 'var(--fc-text-muted)', fontSize: '0.75rem' }}>{v.ip_address}</td>
                     <td style={{ padding: '10px' }}>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => handleVoidVote(v.vote_id)}
-                        style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                        style={{ background: 'var(--fc-danger)', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
                       >
                         Void Vote
                       </button>
@@ -783,7 +817,7 @@ export default function VotingPage() {
                 onClick={handleSyncKashishVotes}
                 disabled={syncing}
                 style={{
-                  background: 'var(--color-primary, #2563eb)',
+                  background: 'var(--color-primary, var(--fc-info))',
                   color: '#fff',
                   border: 'none',
                   padding: '10px 22px',
@@ -820,7 +854,7 @@ export default function VotingPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>New Votes Created</div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#10b981' }}>+{syncResult.new_votes_created}</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--fc-success-text)' }}>+{syncResult.new_votes_created}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Duplicates Skipped</div>
@@ -828,15 +862,15 @@ export default function VotingPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Users Auto-Matched</div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#6366f1' }}>{syncResult.users_auto_matched}</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--fc-info-text)' }}>{syncResult.users_auto_matched}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Users Auto-Created</div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0ea5e9' }}>{syncResult.users_auto_created}</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--fc-info-text)' }}>{syncResult.users_auto_created}</div>
                 </div>
                 <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Unmapped Movies</div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: syncResult.movies_unmapped > 0 ? '#ef4444' : '#10b981' }}>{syncResult.movies_unmapped}</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: syncResult.movies_unmapped > 0 ? 'var(--fc-danger-text)' : 'var(--fc-success-text)' }}>{syncResult.movies_unmapped}</div>
                 </div>
               </div>
             )}
@@ -906,7 +940,7 @@ export default function VotingPage() {
                   style={{
                     width: '100%',
                     padding: '8px 14px',
-                    background: '#10b981',
+                    background: 'var(--fc-success)',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '6px',
@@ -952,7 +986,7 @@ export default function VotingPage() {
                           <button
                             type="button"
                             onClick={() => handleDeleteMovieMapping(m.id)}
-                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }}
+                            style={{ background: 'none', border: 'none', color: 'var(--fc-danger-text)', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem' }}
                           >
                             Remove
                           </button>
@@ -1002,13 +1036,13 @@ export default function VotingPage() {
                             fontWeight: 700,
                             textTransform: 'uppercase',
                             background: log.status === 'completed' ? 'rgba(16, 185, 129, 0.15)' : log.status === 'failed' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                            color: log.status === 'completed' ? '#10b981' : log.status === 'failed' ? '#ef4444' : '#f59e0b'
+                            color: log.status === 'completed' ? 'var(--fc-success-text)' : log.status === 'failed' ? 'var(--fc-danger-text)' : 'var(--fc-warning-text)'
                           }}>
                             {log.status}
                           </span>
                         </td>
                         <td style={{ padding: '10px 12px', fontWeight: 600 }}>{log.total_fetched}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: 700, color: '#10b981' }}>+{log.new_votes_created}</td>
+                        <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--fc-success-text)' }}>+{log.new_votes_created}</td>
                         <td style={{ padding: '10px 12px', color: 'var(--fc-text-secondary)' }}>{log.duplicate_skipped}</td>
                         <td style={{ padding: '10px 12px' }}>{log.users_auto_matched}</td>
                         <td style={{ padding: '10px 12px' }}>{log.users_auto_created}</td>
@@ -1049,7 +1083,7 @@ export default function VotingPage() {
                         <td style={{ padding: '10px 12px', fontWeight: 600 }}>{u.kashish_user_name || '—'}</td>
                         <td style={{ padding: '10px 12px' }}>{u.kashish_user_email || '—'}</td>
                         <td style={{ padding: '10px 12px' }}>{u.kashish_user_mobile || '—'}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--fc-brand, #a82f2f)' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--fc-brand, var(--fc-brand-text))' }}>
                           #{u.freecomers_attendee_id}
                         </td>
                         <td style={{ padding: '10px 12px' }}>
@@ -1058,7 +1092,7 @@ export default function VotingPage() {
                             borderRadius: '4px',
                             fontSize: '0.75rem',
                             background: u.matched_by === 'email' ? 'rgba(99, 102, 241, 0.12)' : u.matched_by === 'phone' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(14, 165, 233, 0.12)',
-                            color: u.matched_by === 'email' ? '#6366f1' : u.matched_by === 'phone' ? '#10b981' : '#0ea5e9'
+                            color: u.matched_by === 'email' ? 'var(--fc-info-text)' : u.matched_by === 'phone' ? 'var(--fc-success-text)' : 'var(--fc-text-muted)'
                           }}>
                             {u.matched_by}
                           </span>
@@ -1076,13 +1110,13 @@ export default function VotingPage() {
       {/* ── TAB 5: DELEGATE REVIEWS MODERATION (PHASE 7) ─────────────────────── */}
       {activeTab === 'reviews' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
+
           {/* Policy Banner */}
-          <div style={{ 
-            background: 'var(--fc-surface-card)', 
-            border: '1px solid var(--fc-border)', 
-            borderLeft: '4px solid #f59e0b',
-            borderRadius: '12px', 
+          <div style={{
+            background: 'var(--fc-surface-card)',
+            border: '1px solid var(--fc-border)',
+            borderLeft: '4px solid var(--fc-warning)',
+            borderRadius: '12px',
             padding: '16px 20px',
             display: 'flex',
             alignItems: 'center',
@@ -1092,7 +1126,7 @@ export default function VotingPage() {
           }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--fc-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <StarIcon size={16} style={{ color: '#f59e0b' }} />
+                <StarIcon size={16} style={{ color: 'var(--fc-warning-text)' }} />
                 <span>Delegate Reviews & Community Moderation (Phase 7)</span>
               </div>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.825rem', color: 'var(--fc-text-muted)', lineHeight: 1.4 }}>
@@ -1103,13 +1137,13 @@ export default function VotingPage() {
               </p>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span style={{ 
-                padding: '6px 12px', 
-                borderRadius: '8px', 
-                fontSize: '0.8rem', 
+              <span style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
                 fontWeight: 700,
                 background: pendingReviewsCount > 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-                color: pendingReviewsCount > 0 ? '#ef4444' : '#10b981',
+                color: pendingReviewsCount > 0 ? 'var(--fc-danger-text)' : 'var(--fc-success-text)',
                 border: pendingReviewsCount > 0 ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(16, 185, 129, 0.25)'
               }}>
                 {pendingReviewsCount} Pending Moderation
@@ -1149,7 +1183,7 @@ export default function VotingPage() {
                   <span>{tab.label}</span>
                   {tab.count !== undefined && tab.count > 0 && (
                     <span style={{
-                      background: '#ef4444',
+                      background: 'var(--fc-danger)',
                       color: '#fff',
                       fontSize: '0.65rem',
                       borderRadius: '999px',
@@ -1216,8 +1250,8 @@ export default function VotingPage() {
                 <StarIcon size={32} style={{ color: 'var(--fc-border)', marginBottom: '8px' }} />
                 <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>No reviews found</div>
                 <div style={{ fontSize: '0.825rem', marginTop: '4px' }}>
-                  {reviewStatusFilter === 'pending' 
-                    ? 'All delegate reviews have been moderated. Good job!' 
+                  {reviewStatusFilter === 'pending'
+                    ? 'All delegate reviews have been moderated. Good job!'
                     : 'No delegate reviews match the current status filter.'}
                 </div>
               </div>
@@ -1242,10 +1276,10 @@ export default function VotingPage() {
                       const isRejected = rev.status === 'rejected';
 
                       return (
-                        <tr 
-                          key={rev.id} 
-                          style={{ 
-                            borderBottom: '1px solid var(--fc-border)', 
+                        <tr
+                          key={rev.id}
+                          style={{
+                            borderBottom: '1px solid var(--fc-border)',
                             background: isPending ? 'rgba(245, 158, 11, 0.03)' : 'transparent',
                             transition: 'background-color 0.12s ease'
                           }}
@@ -1284,7 +1318,7 @@ export default function VotingPage() {
                               {rev.is_anonymous === 1 && (
                                 <span style={{
                                   background: 'rgba(99, 102, 241, 0.1)',
-                                  color: '#6366f1',
+                                  color: 'var(--fc-info-text)',
                                   fontSize: '0.7rem',
                                   fontWeight: 700,
                                   padding: '1px 6px',
@@ -1304,7 +1338,7 @@ export default function VotingPage() {
                           {/* Star Rating */}
                           <td style={{ padding: '14px', verticalAlign: 'top', whiteSpace: 'nowrap' }}>
                             {rev.review_stars ? (
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#f59e0b' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: 'var(--fc-warning-text)' }}>
                                 {[1, 2, 3, 4, 5].map((star) => (
                                   <span key={star} style={{ fontSize: '13px' }}>
                                     {star <= rev.review_stars ? '★' : '☆'}
@@ -1321,9 +1355,9 @@ export default function VotingPage() {
 
                           {/* Review Text */}
                           <td style={{ padding: '14px', verticalAlign: 'top', maxWidth: '380px' }}>
-                            <div style={{ 
-                              color: 'var(--fc-text-main)', 
-                              lineHeight: 1.45, 
+                            <div style={{
+                              color: 'var(--fc-text-main)',
+                              lineHeight: 1.45,
                               fontSize: '0.825rem',
                               whiteSpace: 'pre-wrap',
                               wordBreak: 'break-word',
@@ -1355,16 +1389,16 @@ export default function VotingPage() {
                               fontWeight: 700,
                               textTransform: 'uppercase',
                               letterSpacing: '0.04em',
-                              background: isApproved 
-                                ? 'rgba(16, 185, 129, 0.15)' 
-                                : isRejected 
-                                  ? 'rgba(239, 68, 68, 0.15)' 
+                              background: isApproved
+                                ? 'rgba(16, 185, 129, 0.15)'
+                                : isRejected
+                                  ? 'rgba(239, 68, 68, 0.15)'
                                   : 'rgba(245, 158, 11, 0.15)',
-                              color: isApproved ? '#10b981' : isRejected ? '#ef4444' : '#f59e0b',
-                              border: isApproved 
-                                ? '1px solid rgba(16, 185, 129, 0.3)' 
-                                : isRejected 
-                                  ? '1px solid rgba(239, 68, 68, 0.3)' 
+                              color: isApproved ? 'var(--fc-success-text)' : isRejected ? 'var(--fc-danger-text)' : 'var(--fc-warning-text)',
+                              border: isApproved
+                                ? '1px solid rgba(16, 185, 129, 0.3)'
+                                : isRejected
+                                  ? '1px solid rgba(239, 68, 68, 0.3)'
                                   : '1px solid rgba(245, 158, 11, 0.3)'
                             }}>
                               {rev.status}
@@ -1382,9 +1416,9 @@ export default function VotingPage() {
                                   style={{
                                     padding: '5px 10px',
                                     borderRadius: '5px',
-                                    border: '1px solid #10b981',
+                                    border: '1px solid var(--fc-success)',
                                     background: 'rgba(16, 185, 129, 0.1)',
-                                    color: '#10b981',
+                                    color: 'var(--fc-success-text)',
                                     fontSize: '0.775rem',
                                     fontWeight: 700,
                                     cursor: 'pointer'
@@ -1401,9 +1435,9 @@ export default function VotingPage() {
                                   style={{
                                     padding: '5px 10px',
                                     borderRadius: '5px',
-                                    border: '1px solid #f59e0b',
+                                    border: '1px solid var(--fc-warning)',
                                     background: 'rgba(245, 158, 11, 0.1)',
-                                    color: '#d97706',
+                                    color: 'var(--fc-warning-text)',
                                     fontSize: '0.775rem',
                                     fontWeight: 700,
                                     cursor: 'pointer'
@@ -1445,7 +1479,7 @@ export default function VotingPage() {
       {projectorModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ background: '#0f172a', border: '2px solid #334155', borderRadius: '16px', maxWidth: '640px', width: '90%', padding: '36px', textAlign: 'center', color: '#fff', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-            <div style={{ fontSize: '0.85rem', letterSpacing: '0.15em', fontWeight: 800, color: '#e11d48', textTransform: 'uppercase', marginBottom: '8px' }}>
+            <div style={{ fontSize: '0.85rem', letterSpacing: '0.15em', fontWeight: 800, color: '#fca5a5', textTransform: 'uppercase', marginBottom: '8px' }}>
               KASHISH PRIDE FILM FESTIVAL · AUDIENCE CHOICE AWARD
             </div>
             <h2 style={{ fontSize: '1.75rem', fontWeight: 800, margin: '0 0 4px 0' }}>
@@ -1456,23 +1490,23 @@ export default function VotingPage() {
             </p>
 
             {/* Simulated Clean QR Code Graphic for Projection */}
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', display: 'inline-block', boxShadow: '0 10px 25px rgba(0,0,0,0.3)', marginBottom: '20px' }}>
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(window.location.origin + '/vote/' + projectorModal.qr_token)}`} 
-                alt="Audience Voting QR Code" 
+            <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', display: 'inline-block', boxShadow: '0 10px 25px rgba(0,0,0,0.3)', marginBottom: '20px' }}>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(window.location.origin + '/vote/' + projectorModal.qr_token)}`}
+                alt="Audience Voting QR Code"
                 style={{ width: '240px', height: '240px', display: 'block' }}
               />
             </div>
 
             <div style={{ background: '#1e293b', padding: '14px', borderRadius: '10px', maxWidth: '440px', margin: '0 auto 24px auto', fontSize: '0.9rem', color: '#cbd5e1' }}>
-              <div>📱 <strong>Scan with your phone camera</strong> to open ballot</div>
-              <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>Enter your Badge # or Mobile to cast verified vote</div>
+              <div><strong>Scan with your phone camera</strong> to open ballot</div>
+              <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>Enter your 6-digit badge number and the last 4 digits of your mobile</div>
               <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #334155' }}>
-                <a 
+                <a
                   href={`/vote/${projectorModal.qr_token}`}
-                  target="_blank" 
+                  target="_blank"
                   rel="noreferrer"
-                  style={{ color: '#38bdf8', fontSize: '0.85rem', textDecoration: 'underline', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  style={{ color: '#7dd3fc', fontSize: '0.85rem', textDecoration: 'underline', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 >
                   ↗ Open Voter Ballot Directly in New Tab
                 </a>
@@ -1480,7 +1514,7 @@ export default function VotingPage() {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: '14px' }}>
-              <button 
+              <button
                 type="button"
                 onClick={() => setProjectorModal(null)}
                 style={{ padding: '10px 24px', background: '#334155', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer' }}

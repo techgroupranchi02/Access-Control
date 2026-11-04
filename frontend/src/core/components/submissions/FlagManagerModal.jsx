@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../services/api';
-import { CloseIcon, CheckIcon, AddIcon } from '../common/Icons';
+import { CloseIcon, CheckIcon, AddIcon, LocalOfferIcon } from '../common/Icons';
 
 const FESTIVAL_PALETTE = [
   { name: 'Crimson Red', hex: '#e05252' },
@@ -32,7 +32,7 @@ export default function FlagManagerModal({
     mode: 'add', // 'add' | 'edit'
     item: null,
     label: '',
-    color: '#e05252',
+    color: 'var(--fc-danger-text)',
     is_active: true
   });
   const [saving, setSaving] = useState(false);
@@ -77,7 +77,7 @@ export default function FlagManagerModal({
       mode: 'add',
       item: null,
       label: '',
-      color: '#e05252',
+      color: 'var(--fc-danger-text)',
       is_active: true
     });
   };
@@ -90,7 +90,7 @@ export default function FlagManagerModal({
       mode: 'edit',
       item: flag,
       label: flag.label,
-      color: flag.color || '#e05252',
+      color: flag.color || 'var(--fc-danger-text)',
       is_active: flagIsActive
     });
   };
@@ -189,7 +189,7 @@ export default function FlagManagerModal({
         if (onFlagsUpdated) onFlagsUpdated(updatedList);
         notify(`Flag "${updated.label}" updated.`);
       }
-      setFormModal({ open: false, mode: 'add', item: null, label: '', color: '#e05252', is_active: true });
+      setFormModal({ open: false, mode: 'add', item: null, label: '', color: 'var(--fc-danger-text)', is_active: true });
     } catch (err) {
       console.error('Failed to save flag:', err);
       notify(err.response?.data?.error || 'Failed to save flag.', 'error');
@@ -231,7 +231,7 @@ export default function FlagManagerModal({
         >
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '18px' }}>🏷</span>
+              <LocalOfferIcon size={18} />
               <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--fc-text-main)' }}>
                 Film Flags Settings
               </h2>
@@ -386,7 +386,7 @@ export default function FlagManagerModal({
                                 <div className="fc-color-rainbow-disc">
                                   <div className="fc-color-rainbow-inner" style={{ backgroundColor: flag.color || '#e05252' }} />
                                 </div>
-                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>Custom</span>
+                                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--fc-text-secondary)' }}>Custom</span>
                                 <input
                                   type="color"
                                   value={flag.color || '#e05252'}
@@ -441,7 +441,7 @@ export default function FlagManagerModal({
                           style={{
                             fontSize: '11px',
                             fontWeight: 700,
-                            color: isActive ? '#15803d' : '#94a3b8',
+                            color: isActive ? 'var(--fc-success-text)' : 'var(--fc-text-muted)',
                             width: '46px',
                             userSelect: 'none',
                             cursor: 'pointer',
@@ -467,7 +467,7 @@ export default function FlagManagerModal({
                         type="button"
                         className="fc-btn-subtle"
                         onClick={() => handleDeleteFlag(flag)}
-                        style={{ fontSize: '12px', padding: '3px 8px', color: '#b91c1c' }}
+                        style={{ fontSize: '12px', padding: '3px 8px', color: 'var(--fc-danger-text)' }}
                       >
                         Delete
                       </button>
@@ -509,7 +509,7 @@ export default function FlagManagerModal({
           <div
             className="fc-modal-overlay"
             style={{ zIndex: 1200 }}
-            onClick={() => setFormModal({ open: false, mode: 'add', item: null, label: '', color: '#e05252', is_active: true })}
+            onClick={() => setFormModal({ open: false, mode: 'add', item: null, label: '', color: 'var(--fc-danger-text)', is_active: true })}
           >
             <div
               className="fc-settings-modal-card animate-scale-up"
@@ -552,7 +552,7 @@ export default function FlagManagerModal({
                             alignItems: 'center',
                             justifyContent: 'center',
                             borderRadius: '50%',
-                            border: isSelected ? '2px solid #0f172a' : '2px solid transparent',
+                            border: isSelected ? '2px solid var(--fc-text-main)' : '2px solid transparent',
                             cursor: 'pointer'
                           }}
                           onClick={() => setFormModal(prev => ({ ...prev, color: item.hex }))}
@@ -620,7 +620,7 @@ export default function FlagManagerModal({
                   <button
                     type="button"
                     className="fc-btn fc-btn-outline fc-btn-sm"
-                    onClick={() => setFormModal({ open: false, mode: 'add', item: null, label: '', color: '#e05252', is_active: true })}
+                    onClick={() => setFormModal({ open: false, mode: 'add', item: null, label: '', color: 'var(--fc-danger-text)', is_active: true })}
                   >
                     Cancel
                   </button>

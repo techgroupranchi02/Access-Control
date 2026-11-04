@@ -3,6 +3,7 @@
  * Handles registration, credential login, Google OAuth login, logout, and profile endpoints.
  */
 
+const jwt = require('jsonwebtoken');
 const authService = require('../services/auth.service');
 const env = require('../../config/environment');
 
@@ -14,11 +15,14 @@ const env = require('../../config/environment');
  */
 function setAuthCookies(req, res, token) {
   const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  // Cookie lives exactly as long as the token (24h normally, 30 days with "Remember me")
+  const exp = jwt.decode(token)?.exp;
+  const maxAge = exp ? Math.max(0, exp * 1000 - Date.now()) : 24 * 60 * 60 * 1000;
   const cookieOptions = {
     httpOnly: true,
     secure: isHttps,
     sameSite: env.cookieSameSite,
-    maxAge: 8 * 60 * 60 * 1000, // 8 hours
+    maxAge,
     path: '/',
   };
 
@@ -48,8 +52,8 @@ async function register(req, res) {
  */
 async function login(req, res) {
   try {
-    const { email, password } = req.body;
-    const { token, user } = await authService.login(email, password);
+    const { email, password, remember } = req.body;
+    const { token, user } = await authService.login(email, password, { remember: remember === true });
 
     setAuthCookies(req, res, token);
     res.json({ message: 'Login successful.', user, token });
@@ -65,14 +69,14 @@ async function login(req, res) {
  */
 async function googleLogin(req, res) {
   try {
-    const { credential, id_token } = req.body;
+    const { credential, id_token, remember } = req.body;
     const tokenToVerify = credential || id_token;
 
     if (!tokenToVerify) {
       return res.status(400).json({ error: 'Google credential / ID token is required.' });
     }
 
-    const { token, user } = await authService.loginWithGoogle(tokenToVerify);
+    const { token, user } = await authService.loginWithGoogle(tokenToVerify, { remember: remember === true });
 
     setAuthCookies(req, res, token);
     res.json({ message: 'Google login successful.', user, token });
@@ -124,6 +128,8 @@ async function googleRedirect(req, res) {
     scope: 'openid email profile',
     access_type: 'online',
     prompt: 'select_account',
+    // Carries the "Remember me" choice through Google and back to the callback
+    state: req.query.remember === '1' ? 'remember' : 'session',
   });
 
   return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
@@ -135,7 +141,8 @@ async function googleRedirect(req, res) {
  */
 async function googleCallback(req, res) {
   const frontendUrl = (env.frontendUrl || 'https://ffestiplus.autovertest.com').replace(/\/$/, '');
-  const { code, error: oauthError } = req.query;
+  const { code, error: oauthError, state } = req.query;
+  const remember = state === 'remember';
 
   if (oauthError || !code) {
     return res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(oauthError || 'Google authentication was cancelled.')}`);
@@ -161,7 +168,7 @@ async function googleCallback(req, res) {
 
     let authResult;
     if (tokenData.id_token) {
-      authResult = await authService.loginWithGoogle(tokenData.id_token);
+      authResult = await authService.loginWithGoogle(tokenData.id_token, { remember });
     } else {
       const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: `Bearer ${tokenData.access_token}` },

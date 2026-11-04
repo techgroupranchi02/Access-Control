@@ -11,6 +11,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 
+import { CloseIcon } from '../components/common/Icons';
 export default function TasksPage() {
   const [tasks, setTasks] = useState([]);
   const [metrics, setMetrics] = useState({});
@@ -80,11 +81,11 @@ export default function TasksPage() {
     return t.status === statusFilter;
   });
 
-  const priorityColor = (p) => {
-    if (p === 'urgent') return '#dc2626';
-    if (p === 'high') return '#ea580c';
-    if (p === 'medium') return '#d97706';
-    return '#64748b';
+  // [text, background] from status tokens (docs/design.md §3.5)
+  const priorityTone = (p) => {
+    if (p === 'urgent') return ['var(--fc-danger-text)', 'var(--fc-danger-bg)'];
+    if (p === 'high' || p === 'medium') return ['var(--fc-warning-text)', 'var(--fc-warning-bg)'];
+    return ['var(--fc-text-secondary)', 'var(--fc-surface-hover)'];
   };
 
   return (
@@ -95,13 +96,13 @@ export default function TasksPage() {
           to="/tasks"
           style={{ textDecoration: 'none', background: 'var(--color-primary)', color: '#fff', borderRadius: '6px', padding: '6px 16px', fontWeight: 600, fontSize: '0.875rem' }}
         >
-          📋 Tasks Board
+          Tasks Board
         </Link>
         <Link
           to="/schedule"
           style={{ textDecoration: 'none', background: 'transparent', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', borderRadius: '6px', padding: '6px 16px', fontWeight: 500, fontSize: '0.875rem' }}
         >
-          🗓️ Festival Schedule (Sub-Page)
+          Festival Schedule (Sub-Page)
         </Link>
       </div>
 
@@ -202,8 +203,8 @@ export default function TasksPage() {
                         fontSize: '0.725rem',
                         fontWeight: 700,
                         textTransform: 'uppercase',
-                        color: priorityColor(task.priority),
-                        backgroundColor: `${priorityColor(task.priority)}15`,
+                        color: priorityTone(task.priority)[0],
+                        backgroundColor: priorityTone(task.priority)[1],
                         padding: '2px 8px',
                         borderRadius: '4px'
                       }}
@@ -219,7 +220,7 @@ export default function TasksPage() {
                         {task.assigneeList.join(', ')}
                       </span>
                     ) : (
-                      <span style={{ fontSize: '0.75rem', color: '#b91c1c', fontWeight: 600 }}>Unassigned</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--fc-danger-text)', fontWeight: 600 }}>Unassigned</span>
                     )}
                   </td>
 
@@ -234,8 +235,8 @@ export default function TasksPage() {
                         fontSize: '0.75rem',
                         fontWeight: 600,
                         border: '1px solid var(--fc-border)',
-                        background: task.status === 'Done' ? '#dcfce7' : task.status === 'In Progress' ? '#fef3c7' : '#f0ece6',
-                        color: task.status === 'Done' ? '#166534' : task.status === 'In Progress' ? '#92400e' : '#57534e'
+                        background: task.status === 'Done' ? 'var(--fc-success-bg)' : task.status === 'In Progress' ? 'var(--fc-warning-bg)' : 'var(--fc-surface-hover)',
+                        color: task.status === 'Done' ? 'var(--fc-success-text)' : task.status === 'In Progress' ? 'var(--fc-warning-text)' : 'var(--fc-text-secondary)'
                       }}
                     >
                       <option value="To Do">To Do</option>
@@ -254,7 +255,7 @@ export default function TasksPage() {
                         {task.status === 'To Do' ? 'Start' : 'Mark Done'}
                       </button>
                     ) : (
-                      <span style={{ color: '#16a34a', fontSize: '0.75rem', fontWeight: 600 }}>✓ Completed</span>
+                      <span style={{ color: 'var(--fc-success-text)', fontSize: '0.75rem', fontWeight: 600 }}>Completed</span>
                     )}
                   </td>
                 </tr>
@@ -270,7 +271,7 @@ export default function TasksPage() {
           <div className="fc-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="fc-modal-header">
               <h2>Create Operational Task</h2>
-              <button className="fc-modal-close" onClick={() => setShowModal(false)}>✕</button>
+              <button className="fc-modal-close" onClick={() => setShowModal(false)}><CloseIcon size={16} /></button>
             </div>
             <form onSubmit={handleCreateTask}>
               <div className="fc-modal-body">

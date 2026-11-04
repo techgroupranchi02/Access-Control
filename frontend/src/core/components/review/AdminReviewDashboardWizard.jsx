@@ -355,7 +355,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
 
       {loading ? (
         <div style={{ padding: '60px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>
-          Loading review workspace...
+          Loading review dashboard...
         </div>
       ) : filmsInRound.length === 0 ? (
         <div className="fc-card" style={{ padding: '48px', textAlign: 'center', marginTop: '16px' }}>
@@ -386,7 +386,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
                           className="fc-flag-indicator"
                           style={{
                             backgroundColor: `${film.flag_color || '#3b82f6'}20`,
-                            color: film.flag_color || '#3b82f6',
+                            color: film.flag_color || 'var(--fc-info-text)',
                             borderColor: `${film.flag_color || '#3b82f6'}40`,
                           }}
                         >
@@ -701,7 +701,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
                           <button
                             type="button"
                             className="fc-btn-decision selection"
-                            style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                            style={{ background: 'var(--fc-success)', borderColor: 'var(--fc-success)' }}
                             onClick={() => handleMakeDecision('official_selection')}
                           >
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>

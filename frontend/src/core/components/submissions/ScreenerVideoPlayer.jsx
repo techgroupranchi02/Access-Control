@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
+import { MovieIcon, LockIcon } from '../common/Icons';
 /**
  * Parses and extracts embed information from various video hosting platforms.
  * Supports: YouTube, Vimeo, Google Drive, direct HTML5 video files (mp4/webm).
@@ -180,7 +181,7 @@ export default function ScreenerVideoPlayer({
                   border: '1px solid rgba(251, 191, 36, 0.3)',
                 }}
               >
-                🔒 DRM Protected
+                <LockIcon size={11} /> DRM Protected
               </div>
             </div>
 
@@ -239,7 +240,7 @@ export default function ScreenerVideoPlayer({
                 color: '#e2e8f0',
               }}
             >
-              🎬
+              <MovieIcon size={22} />
             </div>
             <strong style={{ fontSize: '13px', color: '#f1f5f9', marginBottom: '4px' }}>
               {loadError ? 'Playback Preview Unavailable' : 'No Watch Link Attached'}
@@ -292,7 +293,7 @@ export default function ScreenerVideoPlayer({
               }}
             >
               <code>{password}</code>
-              <span style={{ fontSize: '10px', opacity: 0.7 }}>{copiedPass ? '✓ Copied' : '📋'}</span>
+              <span style={{ fontSize: '10px', opacity: 0.7 }}>{copiedPass ? 'Copied' : 'Copy'}</span>
             </button>
           ) : (
             <span style={{ color: 'var(--fc-text-muted, #94a3b8)', fontStyle: 'italic', fontSize: '11.5px' }}>
@@ -342,7 +343,7 @@ export default function ScreenerVideoPlayer({
               opacity: url ? 1 : 0.5,
             }}
           >
-            {copiedLink ? '✓ Copied!' : 'Copy Link'}
+            {copiedLink ? 'Copied' : 'Copy Link'}
           </button>
         </div>
       </div>

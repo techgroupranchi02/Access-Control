@@ -134,7 +134,7 @@ export default function ChatPage() {
                   </div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                      <span style={{ fontWeight: 700, fontSize: '0.825rem', color: '#1a1a1a' }}>{m.sender_name}</span>
+                      <span style={{ fontWeight: 700, fontSize: '0.825rem', color: 'var(--fc-text-main)' }}>{m.sender_name}</span>
                       <span style={{ fontSize: '0.7rem', color: 'var(--fc-text-muted)' }}>
                         {m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                       </span>

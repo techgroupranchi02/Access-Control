@@ -3,16 +3,15 @@
  * Matches https://ffestiplus.autovertest.com/payouts with full data fidelity,
  * metric cards, tab navigation, search/sort, CSV export, and PDF Tax Invoice downloads.
  */
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import api from '../services/api';
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
 import { useTheme } from '../context/ThemeContext';
+import SearchInput from '../components/common/SearchInput';
 import {
-  SearchIcon,
   FileDownloadIcon,
   PeopleIcon,
   CheckCircleIcon,
-  CloseIcon,
 } from '../components/common/Icons';
 
 // Crisp SVG Icons matching FestEase / Material Icons
@@ -92,12 +91,18 @@ export default function PaymentsPage() {
   // Tabs: 0: Settled, 1: Pending, 2: Refunded
   const [tabIndex, setTabIndex] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searching, setSearching] = useState(false);
+  const requestIdRef = useRef(0);
+  const searchDidMountRef = useRef(false);
   const [sortBy, setSortBy] = useState('recent');
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
 
   // Fetch Payouts data based on current tab & search
-  const fetchPayoutsData = useCallback(async (tabIdx, searchVal = '', pageNum = 1, sortVal = 'recent') => {
-    setLoading(true);
+  // `quiet` keeps the current table on screen (used while typing a search) instead of the full loader.
+  // Only the newest request may update state, so out-of-order responses can't overwrite fresher results.
+  const fetchPayoutsData = useCallback(async (tabIdx, searchVal = '', pageNum = 1, sortVal = 'recent', { quiet = false } = {}) => {
+    const requestId = ++requestIdRef.current;
+    if (quiet) setSearching(true); else setLoading(true);
     try {
       let status = 'settled';
       if (tabIdx === 1) status = 'pending';
@@ -113,6 +118,7 @@ export default function PaymentsPage() {
         },
       });
 
+      if (requestId !== requestIdRef.current) return;
       const payload = res.data?.data || {};
       if (payload.kpis) {
         setKpis(payload.kpis);
@@ -125,9 +131,12 @@ export default function PaymentsPage() {
         setTotalItems(payload.ledger.total || 0);
       }
     } catch (err) {
-      console.error('Failed to load payouts:', err);
+      if (requestId === requestIdRef.current) console.error('Failed to load payouts:', err);
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setSearching(false);
+      }
     }
   }, []);
 
@@ -165,22 +174,26 @@ export default function PaymentsPage() {
   const handleTabChange = (newIndex) => {
     setTabIndex(newIndex);
     setPage(1);
-    fetchPayoutsData(newIndex, searchTerm, 1, sortBy);
+    fetchPayoutsData(newIndex, searchTerm.trim(), 1, sortBy);
   };
 
-  // Search input handler
-  const handleSearchChange = (e) => {
-    const val = e.target.value;
-    setSearchTerm(val);
-    setPage(1);
-    fetchPayoutsData(tabIndex, val, 1, sortBy);
-  };
+  // Search: debounced server search (name, email, phone, film, category, transfer / payment ID)
+  useEffect(() => {
+    if (!searchDidMountRef.current) { searchDidMountRef.current = true; return undefined; }
+    const t = setTimeout(() => {
+      setPage(1);
+      fetchPayoutsData(tabIndex, searchTerm.trim(), 1, sortBy, { quiet: true });
+    }, 300);
+    return () => clearTimeout(t);
+    // Only re-run when the search text changes; tab / sort changes fetch on their own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   // Sort dropdown
   const handleSortChange = (e) => {
     const val = e.target.value;
     setSortBy(val);
-    fetchPayoutsData(tabIndex, searchTerm, page, val);
+    fetchPayoutsData(tabIndex, searchTerm.trim(), page, val);
   };
 
   // CSV Export handler
@@ -252,10 +265,10 @@ export default function PaymentsPage() {
     <div className="animate-fade-in" style={{ width: '100%', padding: '0 0 32px 0' }}>
       {/* ── Page Header ────────────────────────────────────────────── */}
       <div style={{ marginBottom: '20px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 4px 0', color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 800, margin: '0 0 4px 0', color: 'var(--fc-text-main, #0f172a)' }}>
           Payouts
         </h1>
-        <p style={{ margin: 0, fontSize: '14px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+        <p style={{ margin: 0, fontSize: '14px', color: 'var(--fc-text-muted, #64748b)' }}>
           Manage your festival finances and payout settlements efficiently.
         </p>
       </div>
@@ -263,12 +276,12 @@ export default function PaymentsPage() {
       {/* ── Festival & Bank Settlement Banner Card ──────────────────── */}
       <div
         style={{
-          border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid var(--fc-border, #e2e8f0)',
+          border: '1px solid var(--fc-border, #e2e8f0)',
           borderRadius: '16px',
-          background: isDark ? '#111420' : 'var(--fc-surface-card, #ffffff)',
+          background: 'var(--fc-surface-card, #ffffff)',
           padding: '16px 24px',
           marginBottom: '20px',
-          boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.02)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
@@ -282,7 +295,7 @@ export default function PaymentsPage() {
               width: '46px',
               height: '46px',
               borderRadius: '50%',
-              background: '#a82f2f',
+              background: 'var(--fc-brand)',
               color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
@@ -296,10 +309,10 @@ export default function PaymentsPage() {
             {festivalName.charAt(0).toUpperCase()}
           </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: '16px', color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)', lineHeight: 1.25 }}>
+            <div style={{ fontWeight: 800, fontSize: '16px', color: 'var(--fc-text-main, #0f172a)', lineHeight: 1.25 }}>
               {festivalName}
             </div>
-            <div style={{ fontSize: '13px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)', fontWeight: 500, marginTop: '2px' }}>
+            <div style={{ fontSize: '13px', color: 'var(--fc-text-muted, #64748b)', fontWeight: 500, marginTop: '2px' }}>
               Festival Dashboard • Payouts & Settlement Ledger
             </div>
           </div>
@@ -311,11 +324,11 @@ export default function PaymentsPage() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: '8px',
-              background: isDark ? 'rgba(255, 255, 255, 0.05)' : '#f8fafc',
+              background: 'var(--fc-surface-subtle)',
               padding: '7px 16px',
               borderRadius: '20px',
-              border: isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid #e2e8f0',
-              color: isDark ? '#e2e8f0' : '#334155',
+              border: '1px solid var(--fc-border)',
+              color: 'var(--fc-text-secondary)',
               fontWeight: 650,
               fontSize: '13px',
             }}
@@ -340,23 +353,23 @@ export default function PaymentsPage() {
         <div
           style={{
             borderRadius: '16px',
-            border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid var(--fc-border, #e2e8f0)',
-            background: isDark ? '#111420' : 'var(--fc-surface-card, #ffffff)',
+            border: '1px solid var(--fc-border, #e2e8f0)',
+            background: 'var(--fc-surface-card, #ffffff)',
             padding: '20px',
-            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.02)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
           }}
         >
           <div>
-            <div style={{ fontSize: '13px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)', fontWeight: 500 }}>
+            <div style={{ fontSize: '13px', color: 'var(--fc-text-muted, #64748b)', fontWeight: 500 }}>
               Total Submissions
             </div>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)', margin: '4px 0' }}>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--fc-text-main, #0f172a)', margin: '4px 0' }}>
               {Number(kpis.total_submissions || 0).toLocaleString()}
             </div>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: isDark ? '#4ade80' : '#16a34a' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--fc-success-text)' }}>
               100% Completed
             </div>
           </div>
@@ -365,9 +378,9 @@ export default function PaymentsPage() {
               width: '38px',
               height: '38px',
               borderRadius: '10px',
-              background: isDark ? 'rgba(255, 255, 255, 0.06)' : '#f8fafc',
-              border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e2e8f0',
-              color: isDark ? '#cbd5e1' : '#475569',
+              background: 'var(--fc-surface-subtle)',
+              border: '1px solid var(--fc-border)',
+              color: 'var(--fc-text-secondary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -382,23 +395,23 @@ export default function PaymentsPage() {
         <div
           style={{
             borderRadius: '16px',
-            border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid var(--fc-border, #e2e8f0)',
-            background: isDark ? '#111420' : 'var(--fc-surface-card, #ffffff)',
+            border: '1px solid var(--fc-border, #e2e8f0)',
+            background: 'var(--fc-surface-card, #ffffff)',
             padding: '20px',
-            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.02)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
           }}
         >
           <div>
-            <div style={{ fontSize: '13px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)', fontWeight: 500 }}>
+            <div style={{ fontSize: '13px', color: 'var(--fc-text-muted, #64748b)', fontWeight: 500 }}>
               Gross Revenue
             </div>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)', margin: '4px 0' }}>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--fc-text-main, #0f172a)', margin: '4px 0' }}>
               ₹{Number(kpis.gross_revenue || 0).toLocaleString('en-IN')}
             </div>
-            <div style={{ fontSize: '12px', fontWeight: 500, color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-muted, #64748b)' }}>
               {Number(kpis.refunded_count || 0) > 0
                 ? `Excl. ₹${Number(kpis.total_refunded_amount || 0).toLocaleString('en-IN')} Refunded`
                 : 'Total Submissions Fees'}
@@ -409,9 +422,9 @@ export default function PaymentsPage() {
               width: '38px',
               height: '38px',
               borderRadius: '10px',
-              background: isDark ? 'rgba(255, 255, 255, 0.06)' : '#f8fafc',
-              border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e2e8f0',
-              color: isDark ? '#cbd5e1' : '#475569',
+              background: 'var(--fc-surface-subtle)',
+              border: '1px solid var(--fc-border)',
+              color: 'var(--fc-text-secondary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -426,23 +439,23 @@ export default function PaymentsPage() {
         <div
           style={{
             borderRadius: '16px',
-            border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid var(--fc-border, #e2e8f0)',
-            background: isDark ? '#111420' : 'var(--fc-surface-card, #ffffff)',
+            border: '1px solid var(--fc-border, #e2e8f0)',
+            background: 'var(--fc-surface-card, #ffffff)',
             padding: '20px',
-            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.02)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
           }}
         >
           <div>
-            <div style={{ fontSize: '13px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)', fontWeight: 500 }}>
+            <div style={{ fontSize: '13px', color: 'var(--fc-text-muted, #64748b)', fontWeight: 500 }}>
               Total Deductions
             </div>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: isDark ? '#f87171' : '#dc2626', margin: '4px 0' }}>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--fc-danger-text)', margin: '4px 0' }}>
               -₹{Number(kpis.total_deductions || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <div style={{ fontSize: '12px', fontWeight: 500, color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-muted, #64748b)' }}>
               ffesti Plus Fee, Gateway & Taxes
             </div>
           </div>
@@ -451,9 +464,9 @@ export default function PaymentsPage() {
               width: '38px',
               height: '38px',
               borderRadius: '10px',
-              background: isDark ? 'rgba(255, 255, 255, 0.06)' : '#f8fafc',
-              border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e2e8f0',
-              color: isDark ? '#cbd5e1' : '#475569',
+              background: 'var(--fc-surface-subtle)',
+              border: '1px solid var(--fc-border)',
+              color: 'var(--fc-text-secondary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -468,23 +481,23 @@ export default function PaymentsPage() {
         <div
           style={{
             borderRadius: '16px',
-            border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid var(--fc-border, #e2e8f0)',
-            background: isDark ? '#111420' : 'var(--fc-surface-card, #ffffff)',
+            border: '1px solid var(--fc-border, #e2e8f0)',
+            background: 'var(--fc-surface-card, #ffffff)',
             padding: '20px',
-            boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.02)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
           }}
         >
           <div>
-            <div style={{ fontSize: '13px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)', fontWeight: 500 }}>
+            <div style={{ fontSize: '13px', color: 'var(--fc-text-muted, #64748b)', fontWeight: 500 }}>
               Net Settled to Bank
             </div>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: isDark ? '#4ade80' : '#16a34a', margin: '4px 0' }}>
+            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--fc-success-text)', margin: '4px 0' }}>
               ₹{Number(kpis.net_settled_to_bank || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
-            <div style={{ fontSize: '12px', fontWeight: 500, color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-muted, #64748b)' }}>
               {hasBank ? `${bankName} ${maskedAcc}` : 'No bank account linked'}
             </div>
           </div>
@@ -493,9 +506,9 @@ export default function PaymentsPage() {
               width: '38px',
               height: '38px',
               borderRadius: '10px',
-              background: isDark ? 'rgba(255, 255, 255, 0.06)' : '#f8fafc',
-              border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e2e8f0',
-              color: isDark ? '#cbd5e1' : '#475569',
+              background: 'var(--fc-surface-subtle)',
+              border: '1px solid var(--fc-border)',
+              color: 'var(--fc-text-secondary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -513,7 +526,7 @@ export default function PaymentsPage() {
           style={{
             display: 'inline-flex',
             gap: '8px',
-            borderBottom: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid var(--fc-border, #e2e8f0)',
+            borderBottom: '1px solid var(--fc-border, #e2e8f0)',
             paddingBottom: '2px',
           }}
         >
@@ -527,8 +540,8 @@ export default function PaymentsPage() {
               cursor: 'pointer',
               fontWeight: tabIndex === 0 ? 800 : 600,
               fontSize: '14px',
-              color: tabIndex === 0 ? '#a82f2f' : (isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)'),
-              borderBottom: tabIndex === 0 ? '2.5px solid #a82f2f' : '2.5px solid transparent',
+              color: tabIndex === 0 ? 'var(--fc-brand-text)' : ('var(--fc-text-muted, #64748b)'),
+              borderBottom: tabIndex === 0 ? '2.5px solid var(--fc-brand)' : '2.5px solid transparent',
               transition: 'all 0.15s ease',
             }}
           >
@@ -545,8 +558,8 @@ export default function PaymentsPage() {
               cursor: 'pointer',
               fontWeight: tabIndex === 1 ? 800 : 600,
               fontSize: '14px',
-              color: tabIndex === 1 ? '#a82f2f' : (isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)'),
-              borderBottom: tabIndex === 1 ? '2.5px solid #a82f2f' : '2.5px solid transparent',
+              color: tabIndex === 1 ? 'var(--fc-brand-text)' : ('var(--fc-text-muted, #64748b)'),
+              borderBottom: tabIndex === 1 ? '2.5px solid var(--fc-brand)' : '2.5px solid transparent',
               transition: 'all 0.15s ease',
             }}
           >
@@ -563,8 +576,8 @@ export default function PaymentsPage() {
               cursor: 'pointer',
               fontWeight: tabIndex === 2 ? 800 : 600,
               fontSize: '14px',
-              color: tabIndex === 2 ? (isDark ? '#f87171' : '#dc2626') : (isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)'),
-              borderBottom: tabIndex === 2 ? (isDark ? '2.5px solid #f87171' : '2.5px solid #dc2626') : '2.5px solid transparent',
+              color: tabIndex === 2 ? ('var(--fc-danger-text)') : ('var(--fc-text-muted, #64748b)'),
+              borderBottom: tabIndex === 2 ? ('2.5px solid var(--fc-danger)') : '2.5px solid transparent',
               transition: 'all 0.15s ease',
               display: 'inline-flex',
               alignItems: 'center',
@@ -575,9 +588,9 @@ export default function PaymentsPage() {
             {Number(kpis.refunded_count || 0) > 0 && (
               <span
                 style={{
-                  background: isDark ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2',
-                  color: isDark ? '#fca5a5' : '#dc2626',
-                  border: isDark ? '1px solid rgba(239, 68, 68, 0.4)' : 'none',
+                  background: 'var(--fc-danger-bg)',
+                  color: 'var(--fc-danger-text)',
+                  border: 'none',
                   fontSize: '10px',
                   fontWeight: 800,
                   borderRadius: '4px',
@@ -595,9 +608,9 @@ export default function PaymentsPage() {
       <div
         style={{
           borderRadius: '16px',
-          border: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid var(--fc-border, #e2e8f0)',
-          background: isDark ? '#111420' : 'var(--fc-surface-card, #ffffff)',
-          boxShadow: isDark ? '0 4px 20px rgba(0, 0, 0, 0.35)' : '0 1px 3px rgba(0,0,0,0.02)',
+          border: '1px solid var(--fc-border, #e2e8f0)',
+          background: 'var(--fc-surface-card, #ffffff)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
           overflow: 'hidden',
           width: '100%',
         }}
@@ -606,7 +619,7 @@ export default function PaymentsPage() {
         <div
           style={{
             padding: '20px 24px',
-            borderBottom: isDark ? '1px solid rgba(255, 255, 255, 0.06)' : '1px solid var(--fc-border, #f1f5f9)',
+            borderBottom: '1px solid var(--fc-border, #f1f5f9)',
             display: 'flex',
             flexWrap: 'wrap',
             justifyContent: 'space-between',
@@ -616,14 +629,14 @@ export default function PaymentsPage() {
         >
           {/* Section Title */}
           <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 2px 0', color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 2px 0', color: 'var(--fc-text-main, #0f172a)' }}>
               {tabIndex === 0
                 ? 'Settled Submissions & Payouts'
                 : tabIndex === 1
                 ? 'Pending Submission Transfers'
                 : 'Refunded Submissions & Transfer Reversals'}
             </h3>
-            <div style={{ fontSize: '13px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+            <div style={{ fontSize: '13px', color: 'var(--fc-text-muted, #64748b)' }}>
               {tabIndex === 0
                 ? `Total Settled Payouts: ₹${Number(kpis.net_settled_to_bank || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
                 : tabIndex === 1
@@ -635,49 +648,14 @@ export default function PaymentsPage() {
           {/* Controls: Search, Sort, CSV Export, View Toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             {/* Search Input */}
-            <div style={{ position: 'relative', width: '260px' }}>
-              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: isDark ? '#64748b' : 'var(--fc-text-muted, #94a3b8)', display: 'flex' }}>
-                <SearchIcon size={16} />
-              </span>
-              <input
-                type="text"
-                placeholder="Search by name, email, or phone"
-                value={searchTerm}
-                onChange={handleSearchChange}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px 8px 36px',
-                  borderRadius: '30px',
-                  border: isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid var(--fc-border, #e2e8f0)',
-                  background: isDark ? '#181c2b' : 'var(--fc-surface-card, #ffffff)',
-                  fontSize: '13px',
-                  outline: 'none',
-                  color: isDark ? '#f1f5f9' : 'var(--fc-text-main, #0f172a)',
-                }}
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchTerm('');
-                    fetchPayoutsData(tabIndex, '', 1, sortBy);
-                  }}
-                  style={{
-                    position: 'absolute',
-                    right: '10px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #94a3b8)',
-                    padding: 0,
-                  }}
-                >
-                  <CloseIcon size={14} />
-                </button>
-              )}
-            </div>
+            <SearchInput
+              value={searchTerm}
+              onChange={setSearchTerm}
+              loading={searching}
+              placeholder="Search name, email, phone, film, transfer ID…"
+              maxWidth="320px"
+              style={{ flex: '1 1 260px' }}
+            />
 
             {/* Sort Dropdown */}
             <select
@@ -685,12 +663,12 @@ export default function PaymentsPage() {
               onChange={handleSortChange}
               style={{
                 borderRadius: '30px',
-                border: isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid var(--fc-border, #e2e8f0)',
-                background: isDark ? '#181c2b' : 'var(--fc-surface-card, #ffffff)',
+                border: '1px solid var(--fc-border, #e2e8f0)',
+                background: 'var(--fc-surface-card, #ffffff)',
                 padding: '8px 16px',
                 fontSize: '13px',
                 outline: 'none',
-                color: isDark ? '#f1f5f9' : 'var(--fc-text-main, #0f172a)',
+                color: 'var(--fc-text-main, #0f172a)',
                 cursor: 'pointer',
                 fontWeight: 600,
               }}
@@ -705,7 +683,7 @@ export default function PaymentsPage() {
               type="button"
               onClick={handleExportCsv}
               style={{
-                background: '#a82f2f',
+                background: 'var(--fc-brand)',
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: '30px',
@@ -719,8 +697,8 @@ export default function PaymentsPage() {
                 boxShadow: '0 2px 8px rgba(168, 47, 47, 0.3)',
                 transition: 'background 0.15s ease',
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#922828')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '#a82f2f')}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--fc-brand-hover)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--fc-brand)')}
             >
               <FileDownloadIcon size={16} />
               <span>CSV Export</span>
@@ -730,8 +708,8 @@ export default function PaymentsPage() {
             <div
               style={{
                 display: 'flex',
-                background: isDark ? '#181c2b' : '#f8fafc',
-                border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid var(--fc-border, #e2e8f0)',
+                background: 'var(--fc-surface-subtle)',
+                border: '1px solid var(--fc-border, #e2e8f0)',
                 borderRadius: '10px',
                 padding: '3px',
                 gap: '2px',
@@ -742,13 +720,13 @@ export default function PaymentsPage() {
                 onClick={() => setViewMode('grid')}
                 title="Grid View"
                 style={{
-                  background: viewMode === 'grid' ? (isDark ? '#262d42' : '#ffffff') : 'transparent',
+                  background: viewMode === 'grid' ? ('var(--fc-surface-card)') : 'transparent',
                   border: 'none',
                   borderRadius: '8px',
                   padding: '5px 8px',
                   cursor: 'pointer',
-                  color: viewMode === 'grid' ? (isDark ? '#fb7185' : '#881337') : (isDark ? '#64748b' : '#94a3b8'),
-                  boxShadow: viewMode === 'grid' ? (isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.08)') : 'none',
+                  color: viewMode === 'grid' ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
+                  boxShadow: viewMode === 'grid' ? ('0 1px 3px rgba(0,0,0,0.08)') : 'none',
                   display: 'flex',
                   alignItems: 'center',
                 }}
@@ -760,13 +738,13 @@ export default function PaymentsPage() {
                 onClick={() => setViewMode('list')}
                 title="List View"
                 style={{
-                  background: viewMode === 'list' ? (isDark ? '#262d42' : '#ffffff') : 'transparent',
+                  background: viewMode === 'list' ? ('var(--fc-surface-card)') : 'transparent',
                   border: 'none',
                   borderRadius: '8px',
                   padding: '5px 8px',
                   cursor: 'pointer',
-                  color: viewMode === 'list' ? (isDark ? '#fb7185' : '#881337') : (isDark ? '#64748b' : '#94a3b8'),
-                  boxShadow: viewMode === 'list' ? (isDark ? '0 1px 3px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.08)') : 'none',
+                  color: viewMode === 'list' ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
+                  boxShadow: viewMode === 'list' ? ('0 1px 3px rgba(0,0,0,0.08)') : 'none',
                   display: 'flex',
                   alignItems: 'center',
                 }}
@@ -783,48 +761,60 @@ export default function PaymentsPage() {
             <div className="skeleton" style={{ width: '40px', height: '40px', borderRadius: '50%' }}></div>
           </div>
         ) : sortedLedger.length === 0 ? (
-          <div style={{ padding: '60px 20px', textAlign: 'center', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+          <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>
             <div style={{ fontSize: '15px', fontWeight: 600 }}>
-              {tabIndex === 2
-                ? 'No refunded submissions found for this festival.'
-                : 'No submission payouts found for this filter.'}
+              {searchTerm.trim()
+                ? `No payouts match "${searchTerm.trim()}" in this tab.`
+                : tabIndex === 2
+                  ? 'No refunded submissions found for this festival.'
+                  : 'No submission payouts found for this filter.'}
             </div>
+            {searchTerm.trim() && (
+              <button
+                type="button"
+                className="fc-btn fc-btn-outline"
+                onClick={() => setSearchTerm('')}
+                style={{ marginTop: '14px', padding: '7px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Clear search
+              </button>
+            )}
           </div>
         ) : viewMode === 'list' ? (
           /* ── Table View Mode ───────────────────────────────────────── */
           <div className="table-container" style={{ overflowX: 'auto', width: '100%' }}>
             <table className="table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
-                <tr style={{ background: isDark ? '#151928' : '#fafafa', borderBottom: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #f1f5f9' }}>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>#</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>Name</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>Film Title</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>Category</th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+                <tr style={{ background: 'var(--fc-surface-subtle)', borderBottom: '1px solid var(--fc-border-subtle)' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)' }}>#</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)' }}>Name</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)' }}>Film Title</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)' }}>Category</th>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)' }}>
                     Submission Fee
                     <span title="Base submission fee before platform & gateway charges" style={{ marginLeft: '4px', cursor: 'pointer', verticalAlign: 'middle' }}>
-                      <InfoIcon size={12} style={{ color: isDark ? '#64748b' : 'var(--fc-text-muted, #94a3b8)' }} />
+                      <InfoIcon size={12} style={{ color: 'var(--fc-text-muted, #94a3b8)' }} />
                     </span>
                   </th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)' }}>
                     Deductions
                     <span title="6% ffesti Plus Fee + Razorpay Route fee & taxes" style={{ marginLeft: '4px', cursor: 'pointer', verticalAlign: 'middle' }}>
-                      <InfoIcon size={12} style={{ color: isDark ? '#64748b' : 'var(--fc-text-muted, #94a3b8)' }} />
+                      <InfoIcon size={12} style={{ color: 'var(--fc-text-muted, #94a3b8)' }} />
                     </span>
                   </th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)' }}>
                     Net Payout
                     <span title="Direct net settlement to festival bank account" style={{ marginLeft: '4px', cursor: 'pointer', verticalAlign: 'middle' }}>
-                      <InfoIcon size={12} style={{ color: isDark ? '#64748b' : 'var(--fc-text-muted, #94a3b8)' }} />
+                      <InfoIcon size={12} style={{ color: 'var(--fc-text-muted, #94a3b8)' }} />
                     </span>
                   </th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)' }}>
                     {tabIndex === 2 ? 'Route & Reversal IDs' : 'Transfer ID'}
                     <span title="Razorpay Route settlement & transfer references" style={{ marginLeft: '4px', cursor: 'pointer', verticalAlign: 'middle' }}>
-                      <InfoIcon size={12} style={{ color: isDark ? '#64748b' : 'var(--fc-text-muted, #94a3b8)' }} />
+                      <InfoIcon size={12} style={{ color: 'var(--fc-text-muted, #94a3b8)' }} />
                     </span>
                   </th>
-                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)', textAlign: 'center' }}>
+                  <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)', textAlign: 'center' }}>
                     Action
                   </th>
                 </tr>
@@ -849,32 +839,32 @@ export default function PaymentsPage() {
                     <tr
                       key={row.id || idx}
                       style={{
-                        borderBottom: isDark ? '1px solid rgba(255, 255, 255, 0.05)' : '1px solid #f1f5f9',
+                        borderBottom: '1px solid var(--fc-border-subtle)',
                         background: isRefunded
-                          ? (isDark ? 'rgba(239, 68, 68, 0.08)' : 'rgba(254, 242, 242, 0.5)')
+                          ? ('rgba(254, 242, 242, 0.5)')
                           : 'inherit',
                       }}
                     >
-                      <td style={{ padding: '14px 16px', color: isDark ? '#64748b' : 'var(--fc-text-muted, #64748b)', fontWeight: 600, fontSize: '13px' }}>
+                      <td style={{ padding: '14px 16px', color: 'var(--fc-text-muted, #64748b)', fontWeight: 600, fontSize: '13px' }}>
                         {(page - 1) * perPage + idx + 1}
                       </td>
                       <td style={{ padding: '14px 16px' }}>
-                        <div style={{ fontWeight: 700, color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
                           {row.filmmaker_name || '—'}
                         </div>
-                        <div style={{ fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #94a3b8)', marginTop: '2px' }}>
+                        <div style={{ fontSize: '12px', color: 'var(--fc-text-muted, #94a3b8)', marginTop: '2px' }}>
                           {row.filmmaker_email || ''}
                         </div>
                       </td>
-                      <td style={{ padding: '14px 16px', fontWeight: 700, color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
+                      <td style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
                         {row.film_title || '—'}
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         <span
                           style={{
-                            background: isDark ? 'rgba(56, 189, 248, 0.12)' : '#e0f2fe',
-                            color: isDark ? '#38bdf8' : '#0284c7',
-                            border: isDark ? '1px solid rgba(56, 189, 248, 0.25)' : 'none',
+                            background: 'var(--fc-info-bg)',
+                            color: 'var(--fc-info-text)',
+                            border: 'none',
                             fontWeight: 700,
                             fontSize: '11px',
                             borderRadius: '6px',
@@ -885,10 +875,10 @@ export default function PaymentsPage() {
                           {row.category_name || 'Short Film'}
                         </span>
                       </td>
-                      <td style={{ padding: '14px 16px', fontWeight: 700, color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
+                      <td style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
                         ₹{fee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td style={{ padding: '14px 16px', fontWeight: 700, color: isDark ? '#f87171' : '#dc2626', fontSize: '13px' }}>
+                      <td style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--fc-danger-text)', fontSize: '13px' }}>
                         <span
                           title={`ffesti Plus Platform Fee (6%): ₹${platformFee.toFixed(2)} | Route Transfer Fee (0.25%) + GST: ₹${routeTotal.toFixed(2)}`}
                           style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
@@ -899,15 +889,15 @@ export default function PaymentsPage() {
                       <td style={{ padding: '14px 16px', fontWeight: 800, fontSize: '13px' }}>
                         {isRefunded ? (
                           <div>
-                            <span style={{ textDecoration: 'line-through', color: isDark ? '#64748b' : 'var(--fc-text-muted, #94a3b8)', display: 'block', fontSize: '11px' }}>
+                            <span style={{ textDecoration: 'line-through', color: 'var(--fc-text-muted, #94a3b8)', display: 'block', fontSize: '11px' }}>
                               ₹{netPayout.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                             </span>
-                            <span style={{ fontWeight: 800, color: isDark ? '#f87171' : '#dc2626' }}>
+                            <span style={{ fontWeight: 800, color: 'var(--fc-danger-text)' }}>
                               -₹{netPayout.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (Reversed)
                             </span>
                           </div>
                         ) : (
-                          <span style={{ color: isDark ? '#4ade80' : '#16a34a' }}>
+                          <span style={{ color: 'var(--fc-success-text)' }}>
                             ₹{netPayout.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                           </span>
                         )}
@@ -915,12 +905,12 @@ export default function PaymentsPage() {
                       <td style={{ padding: '14px 16px' }}>
                         <span
                           style={{
-                            color: isDark ? '#38bdf8' : '#0284c7',
+                            color: 'var(--fc-info-text)',
                             fontWeight: 600,
                             fontSize: '12px',
                             fontFamily: 'monospace',
-                            background: isDark ? 'rgba(14, 165, 233, 0.12)' : '#f0f9ff',
-                            border: isDark ? '1px solid rgba(56, 189, 248, 0.25)' : '1px solid #e0f2fe',
+                            background: 'var(--fc-info-bg)',
+                            border: '1px solid var(--fc-info-border)',
                             padding: '2px 8px',
                             borderRadius: '6px',
                             display: 'inline-block',
@@ -929,7 +919,7 @@ export default function PaymentsPage() {
                           {transferId}
                         </span>
                         {isRefunded && row.reverse_transfer_id && (
-                          <div style={{ color: isDark ? '#f87171' : '#dc2626', fontWeight: 700, fontSize: '11px', fontFamily: 'monospace', marginTop: '4px' }}>
+                          <div style={{ color: 'var(--fc-danger-text)', fontWeight: 700, fontSize: '11px', fontFamily: 'monospace', marginTop: '4px' }}>
                             ↺ Reversal: {row.reverse_transfer_id}
                           </div>
                         )}
@@ -940,9 +930,9 @@ export default function PaymentsPage() {
                           onClick={() => handleDownloadReceipt(row)}
                           disabled={downloadingId === (row.id || row.transaction_record_id)}
                           style={{
-                            border: isDark ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid #fecdd3',
-                            color: isDark ? '#fda4af' : '#9f1239',
-                            background: isDark ? 'rgba(244, 63, 94, 0.12)' : '#fff1f2',
+                            border: '1px solid var(--fc-danger-border)',
+                            color: 'var(--fc-brand-text)',
+                            background: 'var(--fc-danger-bg)',
                             borderRadius: '8px',
                             padding: '6px 14px',
                             fontWeight: 700,
@@ -954,12 +944,12 @@ export default function PaymentsPage() {
                             transition: 'all 0.15s ease',
                           }}
                           onMouseEnter={(e) => {
-                            e.currentTarget.style.background = isDark ? 'rgba(244, 63, 94, 0.22)' : '#ffe4e6';
-                            e.currentTarget.style.borderColor = isDark ? 'rgba(244, 63, 94, 0.5)' : '#fb7185';
+                            e.currentTarget.style.background = 'var(--fc-danger-bg)';
+                            e.currentTarget.style.borderColor = 'var(--fc-brand)';
                           }}
                           onMouseLeave={(e) => {
-                            e.currentTarget.style.background = isDark ? 'rgba(244, 63, 94, 0.12)' : '#fff1f2';
-                            e.currentTarget.style.borderColor = isDark ? 'rgba(244, 63, 94, 0.3)' : '#fecdd3';
+                            e.currentTarget.style.background = 'var(--fc-danger-bg)';
+                            e.currentTarget.style.borderColor = 'var(--fc-danger-border)';
                           }}
                         >
                           <ReceiptIcon size={14} />
@@ -998,16 +988,16 @@ export default function PaymentsPage() {
                   style={{
                     borderRadius: '14px',
                     border: isRefunded
-                      ? (isDark ? '1.5px solid rgba(239, 68, 68, 0.4)' : '1.5px solid #fca5a5')
-                      : (isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid var(--fc-border, #e2e8f0)'),
+                      ? '1.5px solid var(--fc-danger-border)'
+                      : ('1px solid var(--fc-border, #e2e8f0)'),
                     background: isRefunded
-                      ? (isDark ? '#1a141b' : '#fffbfb')
-                      : (isDark ? '#141826' : 'var(--fc-surface-card, #ffffff)'),
+                      ? 'var(--fc-danger-bg)'
+                      : ('var(--fc-surface-card, #ffffff)'),
                     padding: '20px',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'space-between',
-                    boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 1px 3px rgba(0,0,0,0.04)',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                   }}
                 >
                   <div>
@@ -1015,9 +1005,9 @@ export default function PaymentsPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                       <span
                         style={{
-                          background: isDark ? 'rgba(56, 189, 248, 0.12)' : '#f0f9ff',
-                          color: isDark ? '#38bdf8' : '#0284c7',
-                          border: isDark ? '1px solid rgba(56, 189, 248, 0.25)' : '1px solid #bae6fd',
+                          background: 'var(--fc-info-bg)',
+                          color: 'var(--fc-info-text)',
+                          border: '1px solid var(--fc-info-border)',
                           fontWeight: 700,
                           fontSize: '11px',
                           borderRadius: '6px',
@@ -1026,18 +1016,18 @@ export default function PaymentsPage() {
                       >
                         {row.category_name || 'Short Film'}
                       </span>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: isDark ? '#64748b' : 'var(--fc-text-muted, #94a3b8)' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--fc-text-muted, #94a3b8)' }}>
                         #{(page - 1) * perPage + idx + 1}
                       </span>
                     </div>
 
-                    <div style={{ fontWeight: 800, fontSize: '15px', color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)', marginBottom: '4px' }}>
+                    <div style={{ fontWeight: 800, fontSize: '15px', color: 'var(--fc-text-main, #0f172a)', marginBottom: '4px' }}>
                       {row.film_title || 'Untitled Film'}
                     </div>
-                    <div style={{ fontWeight: 600, fontSize: '13px', color: isDark ? '#cbd5e1' : 'var(--fc-text-main, #475569)' }}>
+                    <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--fc-text-main, #475569)' }}>
                       {row.filmmaker_name || '—'}
                     </div>
-                    <div style={{ fontSize: '12px', color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #94a3b8)', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--fc-text-muted, #94a3b8)', marginBottom: '14px' }}>
                       {row.filmmaker_email || ''}
                     </div>
 
@@ -1046,29 +1036,29 @@ export default function PaymentsPage() {
                       style={{
                         padding: '12px 14px',
                         borderRadius: '10px',
-                        background: isDark ? '#0c0f1a' : '#f8fafc',
-                        border: isDark ? '1px solid rgba(255, 255, 255, 0.06)' : '1px solid #edf2f7',
+                        background: 'var(--fc-surface-subtle)',
+                        border: '1px solid var(--fc-border-subtle)',
                         marginBottom: '16px',
                         fontSize: '12px',
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                        <span style={{ color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>Submission Fee</span>
-                        <span style={{ fontWeight: 700, color: isDark ? '#f8fafc' : 'var(--fc-text-main, #0f172a)' }}>
+                        <span style={{ color: 'var(--fc-text-muted, #64748b)' }}>Submission Fee</span>
+                        <span style={{ fontWeight: 700, color: 'var(--fc-text-main, #0f172a)' }}>
                           ₹{fee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #64748b)' }}>Deductions</span>
-                        <span style={{ fontWeight: 700, color: isDark ? '#f87171' : '#dc2626' }}>
+                        <span style={{ color: 'var(--fc-text-muted, #64748b)' }}>Deductions</span>
+                        <span style={{ fontWeight: 700, color: 'var(--fc-danger-text)' }}>
                           -₹{deductions.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-                      <div style={{ borderTop: isDark ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid #e2e8f0', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontWeight: 700, color: isRefunded ? (isDark ? '#f87171' : '#dc2626') : (isDark ? '#4ade80' : '#16a34a') }}>
+                      <div style={{ borderTop: '1px solid var(--fc-border)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontWeight: 700, color: isRefunded ? ('var(--fc-danger-text)') : ('var(--fc-success-text)') }}>
                           {isRefunded ? 'Net Reversed' : 'Net Payout'}
                         </span>
-                        <span style={{ fontWeight: 800, color: isRefunded ? (isDark ? '#f87171' : '#dc2626') : (isDark ? '#4ade80' : '#16a34a') }}>
+                        <span style={{ fontWeight: 800, color: isRefunded ? ('var(--fc-danger-text)') : ('var(--fc-success-text)') }}>
                           ₹{netPayout.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
@@ -1077,17 +1067,17 @@ export default function PaymentsPage() {
 
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: isDark ? '#94a3b8' : 'var(--fc-text-muted, #94a3b8)' }}>TRANSFER ID</span>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--fc-text-muted, #94a3b8)' }}>TRANSFER ID</span>
                       <span
                         style={{
                           fontSize: '12px',
-                          color: isDark ? '#38bdf8' : '#0284c7',
+                          color: 'var(--fc-info-text)',
                           fontWeight: 700,
                           fontFamily: 'monospace',
-                          background: isDark ? 'rgba(14, 165, 233, 0.12)' : '#f0f9ff',
+                          background: 'var(--fc-info-bg)',
                           padding: '2px 8px',
                           borderRadius: '6px',
-                          border: isDark ? '1px solid rgba(56, 189, 248, 0.25)' : '1px solid #e0f2fe',
+                          border: '1px solid var(--fc-info-border)',
                         }}
                       >
                         {transferId}
@@ -1100,9 +1090,9 @@ export default function PaymentsPage() {
                       disabled={downloadingId === (row.id || row.transaction_record_id)}
                       style={{
                         width: '100%',
-                        border: isDark ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid #fecdd3',
-                        color: isDark ? '#fda4af' : '#9f1239',
-                        background: isDark ? 'rgba(244, 63, 94, 0.12)' : '#fff1f2',
+                        border: '1px solid var(--fc-danger-border)',
+                        color: 'var(--fc-brand-text)',
+                        background: 'var(--fc-danger-bg)',
                         borderRadius: '10px',
                         padding: '8px',
                         fontWeight: 700,
@@ -1115,12 +1105,12 @@ export default function PaymentsPage() {
                         transition: 'all 0.15s ease',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = isDark ? 'rgba(244, 63, 94, 0.22)' : '#ffe4e6';
-                        e.currentTarget.style.borderColor = isDark ? 'rgba(244, 63, 94, 0.5)' : '#fb7185';
+                        e.currentTarget.style.background = 'var(--fc-danger-bg)';
+                        e.currentTarget.style.borderColor = 'var(--fc-brand)';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = isDark ? 'rgba(244, 63, 94, 0.12)' : '#fff1f2';
-                        e.currentTarget.style.borderColor = isDark ? 'rgba(244, 63, 94, 0.3)' : '#fecdd3';
+                        e.currentTarget.style.background = 'var(--fc-danger-bg)';
+                        e.currentTarget.style.borderColor = 'var(--fc-danger-border)';
                       }}
                     >
                       <ReceiptIcon size={14} />

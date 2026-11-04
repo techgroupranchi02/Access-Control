@@ -32,6 +32,11 @@ const MAX_PASSWORD_LENGTH = 128;
  * @param {string} password
  * @returns {{ valid: boolean, message?: string }}
  */
+/** JWT lifetime: 30 days with "Remember me", otherwise the standard 24-hour session. */
+function tokenLifetime(remember) {
+  return remember ? env.jwtRememberExpiresIn : env.jwtExpiresIn;
+}
+
 function validatePassword(password) {
   if (!password || typeof password !== 'string') {
     return { valid: false, message: 'Password is required.' };
@@ -159,7 +164,7 @@ async function register(name, email, password) {
  * @param {string} idToken
  * @returns {Promise<{ token: string, user: object }>}
  */
-async function loginWithGoogle(idToken) {
+async function loginWithGoogle(idToken, { remember = false } = {}) {
   const googleIdentity = await verifyGoogleToken(idToken);
   const normalizedEmail = googleIdentity.email;
 
@@ -182,7 +187,7 @@ async function loginWithGoogle(idToken) {
       env.jwtSecret,
       {
         algorithm: 'HS256',
-        expiresIn: env.jwtExpiresIn,
+        expiresIn: tokenLifetime(remember),
       }
     );
 
@@ -262,7 +267,7 @@ async function loginWithGoogle(idToken) {
     env.jwtSecret,
     {
       algorithm: 'HS256',
-      expiresIn: env.jwtExpiresIn,
+      expiresIn: tokenLifetime(remember),
     }
   );
 
@@ -322,7 +327,7 @@ async function verifyApiAuth(hostname, path, email, password) {
  * @param {string} password
  * @returns {Promise<{ token: string, user: object }>}
  */
-async function login(email, password) {
+async function login(email, password, { remember = false } = {}) {
   if (!email || !password) {
     throw new Error('Email and password are required.');
   }
@@ -387,7 +392,7 @@ async function login(email, password) {
       env.jwtSecret,
       {
         algorithm: 'HS256',
-        expiresIn: env.jwtExpiresIn,
+        expiresIn: tokenLifetime(remember),
       }
     );
 
@@ -483,7 +488,7 @@ async function login(email, password) {
       env.jwtSecret,
       {
         algorithm: 'HS256',
-        expiresIn: env.jwtExpiresIn,
+        expiresIn: tokenLifetime(remember),
       }
     );
 
@@ -537,7 +542,7 @@ async function getProfile(userId, role, editionId, reqUser = null) {
   // ── Flow A: Freecomers Admin Profile ──
   if (adminProfile) {
     const targetFestivalId = (reqUser && reqUser.targetFestivalId) ? parseInt(reqUser.targetFestivalId, 10) : (editionId ? parseInt(editionId, 10) : null);
-    const orderClause = targetFestivalId
+    const orderClause = Number.isFinite(targetFestivalId)
       ? `ORDER BY (event_id = ${targetFestivalId}) DESC, event_id DESC`
       : `ORDER BY event_id DESC`;
 
@@ -554,8 +559,11 @@ async function getProfile(userId, role, editionId, reqUser = null) {
          1 as is_system
        FROM events
        WHERE is_deleted = 0
+         AND (saas_enabled = 1 OR is_saas = 1${Number.isFinite(targetFestivalId) ? ` OR event_id = ${targetFestivalId}` : ''})
        ${orderClause}`
     );
+    // Only SaaS festivals (the same set GET /events lists for admins). The shared events table has
+    // ~13k rows; returning all of them made /auth/me ~3.3 MB and every festival switch slow.
 
     // Freecomers Admin receives all system permissions
     const allPermissions = await query(

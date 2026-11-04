@@ -52,8 +52,8 @@ export default function ReviewStageCreatePage() {
             marginBottom: '16px',
             padding: '12px 18px',
             borderRadius: '8px',
-            background: notification.type === 'error' ? '#fee2e2' : '#dcfce7',
-            color: notification.type === 'error' ? '#b91c1c' : '#15803d',
+            background: notification.type === 'error' ? 'var(--fc-danger-bg)' : 'var(--fc-success-bg)',
+            color: notification.type === 'error' ? 'var(--fc-danger-text)' : 'var(--fc-success-text)',
             fontWeight: 600
           }}
         >

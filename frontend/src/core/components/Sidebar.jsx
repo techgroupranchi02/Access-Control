@@ -39,8 +39,8 @@ import {
   QrCodeScannerIcon,
   HowToVoteIcon,
   TrophyIcon,
-  OpenInNewIcon
-} from './common/Icons';
+  OpenInNewIcon,
+  AddIcon, CloseIcon } from './common/Icons';
 
 function ChevronIcon({ isOpen }) {
   return (
@@ -58,7 +58,7 @@ function ChevronIcon({ isOpen }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
   const { user, logout, switchPersona } = useAuth();
   const {
     currentFestival,
@@ -84,6 +84,21 @@ export default function Sidebar() {
       return false;
     }
   });
+
+  const [isMobileScreen, setIsMobileScreen] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // On mobile screens (or when mobile drawer is open), the sidebar must NEVER be collapsed
+  const effectivelyCollapsed = isCollapsed && !isMobileScreen && !isMobileOpen;
 
   const toggleCollapse = () => {
     setIsCollapsed(prev => {
@@ -121,7 +136,7 @@ export default function Sidebar() {
     if (['/submission-buttons', '/laurel'].some(p => currentPath.startsWith(p))) {
       setOpenModules(prev => ({ ...prev, marketing: true }));
     }
-    if (['/settings', '/setting', '/audience'].some(p => currentPath.startsWith(p))) {
+    if (['/settings', '/setting'].some(p => currentPath.startsWith(p))) {
       setOpenModules(prev => ({ ...prev, settings: true }));
     }
   }, [currentPath]);
@@ -133,14 +148,14 @@ export default function Sidebar() {
   const isSubmissionsActive = ['/submissions', '/review-dashboard'].some(p => currentPath.startsWith(p));
   const isTeamActive = currentPath.startsWith('/team');
   const isTasksActive = ['/tasks', '/schedule', '/calendar'].some(p => currentPath.startsWith(p));
-  const isAudienceActive = ['/registration', '/attendance', '/voting', '/vote'].some(p => currentPath.startsWith(p));
+  const isAudienceActive = ['/audience', '/registration', '/attendance', '/voting', '/vote'].some(p => currentPath.startsWith(p));
   const isMarketingActive = ['/submission-buttons', '/laurel'].some(p => currentPath.startsWith(p));
-  const isSettingsActive = ['/settings', '/setting', '/audience'].some(p => currentPath.startsWith(p));
+  const isSettingsActive = ['/settings', '/setting'].some(p => currentPath.startsWith(p));
 
   // Determine current active persona / role key
-  const effectiveGroup = currentUserGroup || user?.current_group || (isSuperAdmin ? 'admin' : (user?.isSuperAdmin ? 'admin' : 'jury'));
+  const effectiveGroup = currentUserGroup || user?.current_group || (isSuperAdmin ? 'admin' : 'jury');
   const roleKey = effectiveGroup === 'judge' ? 'jury' : effectiveGroup;
-  const isAdminUser = Boolean(isSuperAdmin || effectiveGroup === 'admin' || user?.isSuperAdmin);
+  const isAdminUser = Boolean(isSuperAdmin || effectiveGroup === 'admin');
 
   const userRoleKeys = Array.from(new Set([
     ...(user?.eventGroups?.map(eg => eg.group_key) || []),
@@ -170,7 +185,7 @@ export default function Sidebar() {
 
   const canAccessSettings = (isModuleEnabled('settings') || isModuleEnabled('edition_settings')) && (isAdminUser || canAny(['settings.view', 'settings:view', 'settings.manage', 'settings:manage']));
 
-  const hasAnyCoreModules = canAccessDashboard || canAccessSubmissions || canAccessDiscovery || canAccessPayouts || canAccessTeam || canAccessSettings;
+  const hasAnyCoreModules = canAccessDashboard || canAccessSubmissions || canAccessDiscovery || canAccessPayouts || canAccessTeam;
 
   // ── Add-On Modules Permission & Feature Checks ──
   const isTasksModEnabled = isModuleEnabled('tasks') || isModuleEnabled('schedule') || isModuleEnabled('calendar');
@@ -221,7 +236,7 @@ export default function Sidebar() {
         : (currentFestival?.role_label || 'Admin · Team Member');
 
   return (
-    <aside className={`fc-sidebar ${isCollapsed ? 'is-collapsed' : ''}`}>
+    <aside className={`fc-sidebar ${effectivelyCollapsed ? 'is-collapsed' : ''} ${isMobileOpen ? 'is-mobile-open' : ''}`}>
       {/* Brand Header */}
       <div className="fc-sidebar-header">
         <div className="fc-sidebar-brand-lockup">
@@ -229,9 +244,9 @@ export default function Sidebar() {
             src="/ffesti-plus-logo.png"
             alt="ffesti Plus"
             className="fc-sidebar-logo-img"
-            title={isCollapsed ? "ffesti Plus" : undefined}
+            title={effectivelyCollapsed ? "ffesti Plus" : undefined}
           />
-          {!isCollapsed && (
+          {!effectivelyCollapsed && (
             <div className="fc-brand">
               <span className="fc-brand-title">
                 ffesti<span className="fc-brand-plus-accent">Plus</span>
@@ -240,19 +255,32 @@ export default function Sidebar() {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          className="fc-collapse-btn"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleCollapse();
-          }}
-          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {isCollapsed ? '›' : '‹'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {onCloseMobile && (
+            <button
+              type="button"
+              className="fc-sidebar-mobile-close-btn"
+              onClick={onCloseMobile}
+              title="Close menu"
+              aria-label="Close menu"
+            >
+              <CloseIcon size={16} />
+            </button>
+          )}
+          <button
+            type="button"
+            className="fc-collapse-btn fc-desktop-only-btn"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              toggleCollapse();
+            }}
+            title={effectivelyCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={effectivelyCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {effectivelyCollapsed ? '›' : '‹'}
+          </button>
+        </div>
       </div>
 
       {/* Festival Edition Card */}
@@ -261,14 +289,15 @@ export default function Sidebar() {
         style={festivals && festivals.length > 1 ? { cursor: 'pointer', transition: 'border-color 0.15s ease' } : {}}
         onClick={() => {
           if (festivals && festivals.length > 1 && openFestivalModal) {
+            if (onCloseMobile) onCloseMobile();
             openFestivalModal();
           }
         }}
-        title={isCollapsed
+        title={effectivelyCollapsed
           ? `${currentFestival?.name || 'Indie Film Festival Bangalore'} · ${currentFestival?.edition || 'Edition 4 · 2026'}${festivals?.length > 1 ? ' (Click to switch)' : ''}`
-          : (festivals && festivals.length > 1 ? "Click to switch festival workspace" : undefined)}
+          : (festivals && festivals.length > 1 ? "Click to switch festival" : undefined)}
       >
-        {!isCollapsed ? (
+        {!effectivelyCollapsed ? (
           <>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '2px' }}>
               <div className="fc-festival-name" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -279,6 +308,7 @@ export default function Sidebar() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (onCloseMobile) onCloseMobile();
                     if (openFestivalModal) openFestivalModal();
                   }}
                   style={{
@@ -296,7 +326,7 @@ export default function Sidebar() {
                     flexShrink: 0,
                     lineHeight: 1.2
                   }}
-                  title="Switch Festival Workspace"
+                  title="Switch Festival"
                 >
                   <span>⇄</span>
                   <span>Switch</span>
@@ -307,13 +337,13 @@ export default function Sidebar() {
               {currentFestival?.edition || 'Edition 4 · 2026'}
             </div>
             <div className="fc-festival-status">
-              <span className="fc-status-dot" style={!isSaasEnabled ? { backgroundColor: '#ef4444' } : {}}></span>
+              <span className="fc-status-dot" style={!isSaasEnabled ? { backgroundColor: 'var(--fc-danger)' } : {}}></span>
               <span>{isSaasEnabled ? 'Live · Accepting submissions' : 'SaaS Inactive · Central Managed'}</span>
             </div>
           </>
         ) : (
           <div className="fc-festival-mini">
-            <span className="fc-status-dot" style={!isSaasEnabled ? { backgroundColor: '#ef4444' } : {}}></span>
+            <span className="fc-status-dot" style={!isSaasEnabled ? { backgroundColor: 'var(--fc-danger)' } : {}}></span>
             <span className="fc-festival-mini-tag">
               {currentFestival?.edition ? currentFestival.edition.replace(/Edition\s*/i, 'Ed. ') : 'Ed. 4'}
             </span>
@@ -322,7 +352,15 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation Menu */}
-      <nav className="fc-nav">
+      <nav
+        className="fc-nav"
+        style={{ flex: '1 0 auto' }}
+        onClick={(e) => {
+          if (onCloseMobile && e.target.closest('a')) {
+            onCloseMobile();
+          }
+        }}
+      >
         {/* ── CORE MODULES ── */}
         {hasAnyCoreModules && (
           <>
@@ -398,49 +436,6 @@ export default function Sidebar() {
                   <PeopleIcon size={17} style={{ marginRight: '8px' }} />
                   <span>Team</span>
                 </NavLink>
-              </div>
-            )}
-
-            {/* Settings Module with Submodule (Review Stage) */}
-            {canAccessSettings && (
-              <div className="fc-module-block">
-                <button
-                  type="button"
-                  title="Settings"
-                  className={`fc-module-toggle ${isSettingsActive ? 'is-active-module' : ''}`}
-                  onClick={() => toggleModule('settings')}
-                  aria-expanded={openModules.settings}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <SettingsIcon size={17} style={{ marginRight: '8px' }} />
-                    <span className="fc-toggle-title">Settings</span>
-                  </div>
-                  <div className="fc-toggle-actions">
-                    <ChevronIcon isOpen={openModules.settings} />
-                  </div>
-                </button>
-                {openModules.settings && (
-                  <div className="fc-sub-nav">
-                    <NavLink
-                      to="/settings/review-stage"
-                      title="Review Stage"
-                      className={({ isActive }) => `fc-nav-item ${isActive || currentPath.includes('/review-stage') || currentPath.includes('/review-state') ? 'active' : ''}`}
-                    >
-                      <TuneIcon size={15} style={{ marginRight: '8px' }} />
-                      <span>Review Stage</span>
-                    </NavLink>
-                    {canAccessAudienceSettings && (
-                      <NavLink
-                        to="/settings/audience"
-                        title="Audience"
-                        className={({ isActive }) => `fc-nav-item ${isActive || currentPath.startsWith('/settings/audience') || currentPath === '/audience' ? 'active' : ''}`}
-                      >
-                        <PeopleIcon size={15} style={{ marginRight: '8px' }} />
-                        <span>Audience</span>
-                      </NavLink>
-                    )}
-                  </div>
-                )}
               </div>
             )}
           </>
@@ -542,54 +537,72 @@ export default function Sidebar() {
               </div>
             )}
 
-            {/* Audience & Voting */}
+            {/* Audience */}
             {canAccessAudience && (
               <div className="fc-module-block">
-                <button
-                  type="button"
-                  title="Audience & Voting"
+                <div
                   className={`fc-module-toggle ${isAudienceActive ? 'is-active-module' : ''}`}
-                  onClick={() => toggleModule('audience')}
-                  aria-expanded={openModules.audience}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 0 }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <NavLink
+                    to="/audience"
+                    title="Audience"
+                    className={({ isActive }) => `fc-nav-item ${isActive || currentPath === '/audience' || currentPath === '/registration' ? 'active' : ''}`}
+                    style={{ flex: 1, padding: '7px 10px', background: 'transparent', border: 'none', textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+                    onClick={() => {
+                      if (!openModules.audience) {
+                        setOpenModules(prev => ({ ...prev, audience: true }));
+                      }
+                    }}
+                  >
                     <ConfirmationNumberIcon size={17} style={{ marginRight: '8px', color: 'var(--fc-brand, #a82f2f)' }} />
-                    <span className="fc-toggle-title" style={{ color: 'var(--fc-brand, #a82f2f)' }}>Audience & Voting</span>
-                  </div>
-                  <div className="fc-toggle-actions">
+                    <span className="fc-toggle-title" style={{ color: 'var(--fc-brand, #a82f2f)', fontWeight: 700 }}>Audience</span>
+                  </NavLink>
+                  <button
+                    type="button"
+                    title="Toggle Submenu"
+                    className="fc-toggle-actions"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleModule('audience');
+                    }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 10px', display: 'flex', alignItems: 'center' }}
+                    aria-expanded={openModules.audience}
+                  >
                     <ChevronIcon isOpen={openModules.audience} />
-                  </div>
-                </button>
+                  </button>
+                </div>
                 {openModules.audience && (
                   <div className="fc-sub-nav">
                     {canAccessRegistration && (
                       <NavLink
-                        to="/registration"
-                        title="Registration & Passes"
-                        className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                        to="/registration/add"
+                        title="Registration"
+                        className={({ isActive }) => `fc-nav-item ${isActive || currentPath === '/registration/add' || currentPath.startsWith('/registration/assign-qr') ? 'active' : ''}`}
                       >
-                        <ConfirmationNumberIcon size={15} style={{ marginRight: '8px' }} />
-                        <span>Registration & Passes</span>
+                        <AddIcon size={15} style={{ marginRight: '8px' }} />
+                        <span>Registration</span>
                       </NavLink>
                     )}
                     {canAccessAttendance && (
                       <NavLink
                         to="/attendance"
-                        title="Gate Attendance"
-                        className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                        title="Attendance"
+                        className={({ isActive }) => `fc-nav-item ${isActive || currentPath.startsWith('/attendance') ? 'active' : ''}`}
                       >
                         <QrCodeScannerIcon size={15} style={{ marginRight: '8px' }} />
-                        <span>Gate Attendance</span>
+                        <span>Attendance</span>
                       </NavLink>
                     )}
                     {canAccessVoting && (
                       <NavLink
                         to="/voting"
-                        title="Audience Voting"
-                        className={({ isActive }) => `fc-nav-item ${isActive ? 'active' : ''}`}
+                        title="Voting"
+                        className={({ isActive }) => `fc-nav-item ${isActive || currentPath.startsWith('/voting') ? 'active' : ''}`}
                       >
                         <HowToVoteIcon size={15} style={{ marginRight: '8px' }} />
-                        <span>Audience Voting</span>
+                        <span>Voting</span>
                       </NavLink>
                     )}
                   </div>
@@ -643,10 +656,56 @@ export default function Sidebar() {
             )}
           </>
         )}
+
+        {/* ── SETTINGS: pinned to the bottom of the sidebar, just above the user footer ── */}
+        {canAccessSettings && (
+          <div style={{ marginTop: 'auto', paddingTop: '12px' }}>
+            <div className="fc-section-divider"></div>
+            <div className="fc-module-block" style={{ marginTop: '4px' }}>
+              <button
+                type="button"
+                title="Settings"
+                className={`fc-module-toggle ${isSettingsActive ? 'is-active-module' : ''}`}
+                onClick={() => toggleModule('settings')}
+                aria-expanded={openModules.settings}
+              >
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <SettingsIcon size={17} style={{ marginRight: '8px' }} />
+                  <span className="fc-toggle-title">Settings</span>
+                </div>
+                <div className="fc-toggle-actions">
+                  <ChevronIcon isOpen={openModules.settings} />
+                </div>
+              </button>
+              {openModules.settings && (
+                <div className="fc-sub-nav">
+                  <NavLink
+                    to="/settings/review-stage"
+                    title="Review Stage"
+                    className={({ isActive }) => `fc-nav-item ${isActive || currentPath.includes('/review-stage') || currentPath.includes('/review-state') ? 'active' : ''}`}
+                  >
+                    <TuneIcon size={15} style={{ marginRight: '8px' }} />
+                    <span>Review Stage</span>
+                  </NavLink>
+                  {canAccessAudienceSettings && (
+                    <NavLink
+                      to="/settings/audience"
+                      title="Audience"
+                      className={({ isActive }) => `fc-nav-item ${isActive || currentPath.startsWith('/settings/audience') ? 'active' : ''}`}
+                    >
+                      <PeopleIcon size={15} style={{ marginRight: '8px' }} />
+                      <span>Audience</span>
+                    </NavLink>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* User Profile Footer */}
-      <div className="fc-user-footer" title={isCollapsed ? `${displayName} · ${displayRole}` : undefined}>
+      <div className="fc-user-footer" title={effectivelyCollapsed ? `${displayName} · ${displayRole}` : undefined}>
         <div className="fc-avatar" style={{ overflow: 'hidden', position: 'relative' }}>
           {user?.thumbnail_pic || user?.thumbnailPic || user?.thumbnail ? (
             <img
@@ -665,7 +724,7 @@ export default function Sidebar() {
             {getInitials(displayName)}
           </span>
         </div>
-        {!isCollapsed && (
+        {!effectivelyCollapsed && (
           <div className="fc-user-meta">
             <div className="fc-user-name">{displayName}</div>
             <div className="fc-user-role">{displayRole}</div>

@@ -497,7 +497,7 @@ export default function JuryVotingBoard({
 
       {uniqueFilms.length === 0 && (
         <div className="fc-nom-info-banner" style={{ marginBottom: '24px' }}>
-          <div className="fc-nom-info-icon-box">ℹ</div>
+          <div className="fc-nom-info-icon-box"><InfoIcon size={16} /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="fc-nom-info-title">
               No films nominated from {prevStageName} yet
@@ -609,7 +609,7 @@ export default function JuryVotingBoard({
                   className={`fc-nom-filter-pill warning-pill ${selectedCategoryFilter === 'unassigned' ? 'active' : ''}`}
                   onClick={() => setSelectedCategoryFilter('unassigned')}
                 >
-                  <span>⚠️ Unassigned Jury</span>
+                  <span>Unassigned Jury</span>
                   <span style={{ opacity: 0.85, fontSize: '11px' }}>({unassignedJuryFilmsCount})</span>
                 </button>
               )}
@@ -721,7 +721,7 @@ export default function JuryVotingBoard({
                             <td style={{ textAlign: 'center' }}>
                               {film.rating && film.rating !== 'Unrated' ? (
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                  <StarIcon size={12} style={{ color: '#eab308' }} />
+                                  <StarIcon size={12} style={{ color: 'var(--fc-warning-text)' }} />
                                   <strong style={{ fontSize: '12.5px', color: 'var(--fc-text-main)' }}>
                                     {parseFloat(film.rating).toFixed(1)}
                                   </strong>
@@ -925,7 +925,7 @@ export default function JuryVotingBoard({
                           style={{
                             background: 'none',
                             border: 'none',
-                            color: isAllAssigned ? '#dc2626' : '#2563eb',
+                            color: isAllAssigned ? 'var(--fc-danger-text)' : 'var(--fc-info-text)',
                             fontSize: '11px',
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -946,7 +946,7 @@ export default function JuryVotingBoard({
                     </div>
 
                     {availableJury.length === 0 ? (
-                      <div style={{ fontSize: '12px', color: '#b45309', fontStyle: 'italic' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--fc-warning-text)', fontStyle: 'italic' }}>
                         No jury members registered for this event yet.
                       </div>
                     ) : (
@@ -962,7 +962,7 @@ export default function JuryVotingBoard({
                               onClick={() => handleToggleJury(cat, juror)}
                               title={assigned ? `Click to unassign ${juror.name}` : `Click to assign ${juror.name}`}
                               style={{
-                                background: assigned ? 'var(--fc-brand-active-bg, rgba(225, 29, 72, 0.15))' : 'var(--fc-surface, #f8fafc)',
+                                background: assigned ? 'var(--fc-brand-active-bg, rgba(168, 47, 47, 0.15))' : 'var(--fc-surface, #f8fafc)',
                                 border: assigned ? '1.5px solid var(--fc-brand, #a82f2f)' : '1px solid var(--fc-border, #e2e8f0)',
                                 borderRadius: '8px',
                                 padding: '5px 12px 5px 6px',
@@ -1022,8 +1022,8 @@ export default function JuryVotingBoard({
                                       <span style={{
                                         fontSize: '9.5px',
                                         fontWeight: 800,
-                                        color: '#16a34a',
-                                        background: '#dcfce7',
+                                        color: 'var(--fc-success-text)',
+                                        background: 'var(--fc-success-bg)',
                                         padding: '1px 5px',
                                         borderRadius: '4px',
                                         display: 'inline-flex',
@@ -1038,8 +1038,8 @@ export default function JuryVotingBoard({
                                     <span style={{
                                       fontSize: '9.5px',
                                       fontWeight: 700,
-                                      color: '#b45309',
-                                      background: '#fef3c7',
+                                      color: 'var(--fc-warning-text)',
+                                      background: 'var(--fc-warning-bg)',
                                       padding: '1px 5px',
                                       borderRadius: '4px'
                                     }}>
@@ -1103,7 +1103,7 @@ export default function JuryVotingBoard({
                                 <span style={{
                                   fontSize: '10px',
                                   fontWeight: 700,
-                                  color: filmStats.completed === filmStats.total ? '#16a34a' : 'var(--fc-brand, #7c3aed)',
+                                  color: filmStats.completed === filmStats.total ? 'var(--fc-success-text)' : 'var(--fc-brand, #7c3aed)',
                                   background: filmStats.completed === filmStats.total ? 'rgba(34, 197, 94, 0.14)' : 'rgba(168, 85, 247, 0.14)',
                                   padding: '1px 5px',
                                   borderRadius: '4px'

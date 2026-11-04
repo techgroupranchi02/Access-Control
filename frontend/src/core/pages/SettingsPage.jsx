@@ -106,7 +106,7 @@ export default function SettingsPage() {
     <div className="fc-settings-page animate-fade-in" style={{ paddingBottom: '80px' }}>
       {/* Toast Notification */}
       {notification && (
-        <div className={`fc-notification-banner ${notification.type === 'error' ? 'fc-notif-error' : 'fc-notif-success'}`} style={{ marginBottom: '16px', padding: '12px 18px', borderRadius: '8px', background: notification.type === 'error' ? '#fee2e2' : '#dcfce7', color: notification.type === 'error' ? '#b91c1c' : '#15803d', fontWeight: 600 }}>
+        <div className={`fc-notification-banner ${notification.type === 'error' ? 'fc-notif-error' : 'fc-notif-success'}`} style={{ marginBottom: '16px', padding: '12px 18px', borderRadius: '8px', background: notification.type === 'error' ? 'var(--fc-danger-bg)' : 'var(--fc-success-bg)', color: notification.type === 'error' ? 'var(--fc-danger-text)' : 'var(--fc-success-text)', fontWeight: 600 }}>
           {notification.msg}
         </div>
       )}
@@ -194,13 +194,13 @@ export default function SettingsPage() {
                     <strong style={{ fontSize: '15px', color: 'var(--fc-text-main)' }}>
                       New Submission
                     </strong>
-                    <span className="criteria-chip" style={{ background: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0', display: 'inline-flex', alignItems: 'center' }}>
+                    <span className="criteria-chip" style={{ background: 'var(--fc-success-bg)', color: 'var(--fc-success-text)', borderColor: 'var(--fc-success-border)', display: 'inline-flex', alignItems: 'center' }}>
                       <InboxIcon size={13} style={{ marginRight: '4px' }} /> Initial Intake Stage
                     </span>
-                    <span className="criteria-chip" style={{ background: '#f8fafc', color: '#64748b', borderColor: '#e2e8f0', display: 'inline-flex', alignItems: 'center' }}>
+                    <span className="criteria-chip" style={{ background: 'var(--fc-surface-subtle)', color: 'var(--fc-text-secondary)', borderColor: 'var(--fc-border)', display: 'inline-flex', alignItems: 'center' }}>
                       <LockIcon size={13} style={{ marginRight: '4px' }} /> System Default (Fixed)
                     </span>
-                    <span className="criteria-chip" style={{ background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}>
+                    <span className="criteria-chip" style={{ background: 'var(--fc-info-bg)', color: 'var(--fc-info-text)', borderColor: 'var(--fc-info-border)' }}>
                       Non-Scoring Base
                     </span>
                   </div>
@@ -316,7 +316,7 @@ export default function SettingsPage() {
                             <strong style={{ fontSize: '15px', color: 'var(--fc-text-main)' }}>
                               {stage.unique_name || stage.name}
                             </strong>
-                            <span className="criteria-chip" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd', display: 'inline-flex', alignItems: 'center' }}>
+                            <span className="criteria-chip" style={{ background: 'var(--fc-info-bg)', color: 'var(--fc-info-text)', borderColor: 'var(--fc-info-border)', display: 'inline-flex', alignItems: 'center' }}>
                               {stage.jury_assignment_mode === 'manual' ? (
                                 <>
                                   <PersonIcon size={13} style={{ marginRight: '4px' }} />
@@ -329,14 +329,14 @@ export default function SettingsPage() {
                                 </>
                               )}
                             </span>
-                            <span className="criteria-chip" style={{ background: '#f5f3ff', color: '#7c3aed', borderColor: '#ddd6fe' }}>
+                            <span className="criteria-chip" style={{ background: 'var(--fc-info-bg)', color: 'var(--fc-info-text)', borderColor: 'var(--fc-info-border)' }}>
                               {stage.review_type === 'pass_fail' || (stage.review_type === 'vote_based' && stage.vote_mode === 'single')
                                 ? 'Pass / Fail'
                                 : (stage.review_type === 'vote_nomination' || stage.review_type === 'vote_based'
                                     ? 'Vote / Nomination'
                                     : `${stage.star_scale || 5}-Star Rating`)}
                             </span>
-                            <span className="criteria-chip" style={{ background: (stage.notes_requirement === 'required' || stage.notes_required === 'required') ? '#fef3c7' : '#f1f5f9', color: (stage.notes_requirement === 'required' || stage.notes_required === 'required') ? '#b45309' : '#475569', borderColor: (stage.notes_requirement === 'required' || stage.notes_required === 'required') ? '#fde68a' : '#cbd5e1' }}>
+                            <span className="criteria-chip" style={{ background: (stage.notes_requirement === 'required' || stage.notes_required === 'required') ? 'var(--fc-warning-bg)' : 'var(--fc-surface-subtle)', color: (stage.notes_requirement === 'required' || stage.notes_required === 'required') ? 'var(--fc-warning-text)' : 'var(--fc-text-secondary)', borderColor: (stage.notes_requirement === 'required' || stage.notes_required === 'required') ? 'var(--fc-warning-border)' : 'var(--fc-border)' }}>
                               Notes: {(stage.notes_requirement === 'required' || stage.notes_required === 'required') ? 'Mandatory Critique' : 'Optional Notes'}
                             </span>
                           </div>
@@ -452,7 +452,7 @@ export default function SettingsPage() {
                     <span style={{ fontSize: '16px' }}>+</span>
                     <span>Add Dynamic Review-State (Stage #{reviewStates.filter(s => s.status !== 'inactive').length + 1})</span>
                   </div>
-                  <p style={{ margin: 0, fontSize: '12px', color: '#78716c' }}>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--fc-text-secondary)' }}>
                     Configure review scoring, jury assignment, and completion rules directly in the page.
                   </p>
                 </div>
@@ -464,14 +464,14 @@ export default function SettingsPage() {
               <div style={{ marginTop: '36px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#64748b', letterSpacing: '-0.2px', margin: 0 }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--fc-text-secondary)', letterSpacing: '-0.2px', margin: 0 }}>
                       Inactive / Bypassed Review Stages
                     </h3>
-                    <span style={{ background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1', padding: '2px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 700 }}>
+                    <span style={{ background: 'var(--fc-surface-subtle)', color: 'var(--fc-text-secondary)', border: '1px solid var(--fc-border)', padding: '2px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 700 }}>
                       {reviewStates.filter(s => s.status === 'inactive').length} {reviewStates.filter(s => s.status === 'inactive').length === 1 ? 'stage' : 'stages'}
                     </span>
                   </div>
-                  <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--fc-text-muted)' }}>
                     These stages are excluded from the sequential review pipeline. Toggle to reactivate into the pipeline.
                   </p>
                 </div>
@@ -498,21 +498,21 @@ export default function SettingsPage() {
                         ) : (
                           <div
                             className="state-section-card"
-                            style={{ opacity: 0.85, borderColor: '#cbd5e1', background: '#fafaf9', borderStyle: 'dashed' }}
+                            style={{ opacity: 0.85, borderColor: 'var(--fc-border)', background: 'var(--fc-surface-subtle)', borderStyle: 'dashed' }}
                           >
                             {/* Header */}
                             <div className="state-section-header">
                               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                                <span className="state-badge-num" style={{ background: '#94a3b8', color: '#fff' }}>
+                                <span className="state-badge-num" style={{ background: 'var(--fc-text-muted)', color: '#fff' }}>
                                   —
                                 </span>
-                                <strong style={{ fontSize: '15px', color: '#64748b' }}>
+                                <strong style={{ fontSize: '15px', color: 'var(--fc-text-secondary)' }}>
                                   {stage.unique_name || stage.name}
-                                  <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#94a3b8', marginLeft: '6px' }}>
+                                  <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--fc-text-muted)', marginLeft: '6px' }}>
                                     (Inactive)
                                   </span>
                                 </strong>
-                                <span className="criteria-chip" style={{ background: '#f1f5f9', color: '#64748b', borderColor: '#cbd5e1', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <span className="criteria-chip" style={{ background: 'var(--fc-surface-subtle)', color: 'var(--fc-text-secondary)', borderColor: 'var(--fc-border)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                   {stage.jury_assignment_mode === 'manual' ? (
                                     <>
                                       <PersonIcon size={12} />
@@ -530,14 +530,14 @@ export default function SettingsPage() {
                                     </>
                                   ))}
                                 </span>
-                                <span className="criteria-chip" style={{ background: '#f1f5f9', color: '#64748b', borderColor: '#cbd5e1' }}>
+                                <span className="criteria-chip" style={{ background: 'var(--fc-surface-subtle)', color: 'var(--fc-text-secondary)', borderColor: 'var(--fc-border)' }}>
                                   {stage.review_type === 'pass_fail' || (stage.review_type === 'vote_based' && stage.vote_mode === 'single')
                                     ? 'Pass / Fail'
                                     : (stage.review_type === 'vote_nomination' || stage.review_type === 'vote_based'
                                         ? 'Vote / Nomination'
                                         : `${stage.star_scale || 5}-Star Rating`)}
                                 </span>
-                                <span className="criteria-chip" style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}>
+                                <span className="criteria-chip" style={{ background: 'var(--fc-warning-bg)', color: 'var(--fc-warning-text)', borderColor: 'var(--fc-warning-border)' }}>
                                   Bypassed in pipeline
                                 </span>
                               </div>

@@ -4,14 +4,18 @@
  */
 
 import { createContext, useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import FestivalSelectionModal from '../components/common/FestivalSelectionModal';
+import { checkRouteAccess, getPrimaryAccessibleRoute } from '../utils/routePermissions';
 
 export const FestivalContext = createContext(null);
 
 export function FestivalProvider({ children }) {
-  const { user } = useAuth() || {};
+  const { user, refreshProfile } = useAuth() || {};
+  const navigate = useNavigate();
+  const location = useLocation();
   const [festivals, setFestivals] = useState([]);
   const [currentFestival, setCurrentFestival] = useState(null);
   const [features, setFeatures] = useState([]);
@@ -91,36 +95,94 @@ export function FestivalProvider({ children }) {
     localStorage.setItem('currentFestivalId', festival.id);
     localStorage.setItem('currentEditionId', festival.id);
 
-    if (markChosen) {
-      sessionStorage.setItem('fc_festival_selected', '1');
-      setIsFestivalModalOpen(false);
-    }
-
     try {
-      // Load edition config (modules / features)
-      const configRes = await api.get(`/events/${festival.id}/config`, {
-        headers: { 'X-Festival-Id': festival.id, 'X-Edition-Id': festival.id },
-      });
+      // Parallel fetch: edition modules and scoped user profile
+      const [configRes, meData] = await Promise.all([
+        api.get(`/events/${festival.id}/config`, {
+          headers: { 'X-Festival-Id': festival.id, 'X-Edition-Id': festival.id },
+        }),
+        refreshProfile ? refreshProfile(festival.id) : api.get('/auth/me', {
+          headers: { 'X-Festival-Id': festival.id, 'X-Edition-Id': festival.id, 'X-Event-Id': festival.id },
+        }).then(r => r.data),
+      ]);
+
       if (configRes.data.event) {
         setCurrentFestival(configRes.data.event);
       }
       const mods = configRes.data.modules || configRes.data.features || [];
       setFeatures(mods);
 
-      // Load user permissions for this event / edition
-      const meRes = await api.get('/auth/me', {
-        headers: { 'X-Festival-Id': festival.id, 'X-Edition-Id': festival.id, 'X-Event-Id': festival.id },
-      });
-      const perms = meRes.data.permissions || {};
+      const perms = meData?.permissions || {};
+      const newGroup = meData?.current_group || null;
+      const newIsSuperAdmin = Boolean(
+        (perms && perms['*']) ||
+        (Array.isArray(perms) && perms.includes('*')) ||
+        meData?.isSuperAdmin
+      );
+
       setUserPermissions(perms);
-      setIsSuperAdmin(Boolean((perms && perms['*']) || (Array.isArray(perms) && perms.includes('*')) || meRes.data.isSuperAdmin));
-      setCurrentUserGroup(meRes.data.current_group || null);
+      setIsSuperAdmin(newIsSuperAdmin);
+      setCurrentUserGroup(newGroup);
+
+      if (markChosen) {
+        sessionStorage.setItem('fc_festival_selected', '1');
+        setIsFestivalModalOpen(false);
+
+        // Helper check functions using newly fetched state
+        const isModEnabled = (key) => {
+          if (!key) return true;
+          const aliases = {
+            'review_dashboard': ['submissions', 'review_dashboard'],
+            'team_management': ['team', 'team_management'],
+            'edition_settings': ['settings', 'edition_settings'],
+            'calendar': ['tasks', 'schedule', 'calendar'],
+            'payments': ['payouts', 'payments'],
+            'team': ['team', 'team_management'],
+            'settings': ['settings', 'edition_settings'],
+            'schedule': ['tasks', 'schedule', 'calendar'],
+            'payouts': ['payouts', 'payments'],
+            'chat': ['chat', 'comms'],
+            'comms': ['comms', 'chat']
+          };
+          const targetKeys = aliases[key] || [key];
+          return mods.some(f => 
+            (targetKeys.includes(f.module_key) || targetKeys.includes(f.feature_key)) && 
+            (f.is_enabled === 1 || f.is_enabled === true)
+          );
+        };
+
+        const hasPerm = (k) => {
+          if (!k || newIsSuperAdmin) return true;
+          if (Array.isArray(perms)) return perms.includes(k) || perms.includes('*');
+          if (perms && (perms[k] || perms['*'])) return true;
+          if (k.includes('.')) {
+            const [m, a] = k.split('.');
+            const map = { view: 'read', edit: 'update', delete: 'delete', manage: 'update' };
+            const col = map[a] || a;
+            return Boolean(perms && (perms[`${m}:${col}`] || perms[`${m}:${a}`]));
+          } else if (k.includes(':')) {
+            const [m, a] = k.split(':');
+            const map = { read: 'view', update: 'edit', delete: 'delete' };
+            const dot = map[a] || a;
+            return Boolean(perms && (perms[`${m}.${dot}`] || perms[`${m}.${a}`]));
+          }
+          return false;
+        };
+
+        const currentPath = window.location.pathname;
+        const isCurrentAccessible = checkRouteAccess(currentPath, isModEnabled, hasPerm, newIsSuperAdmin, newGroup);
+
+        if (!isCurrentAccessible || currentPath === '/') {
+          const primaryRoute = getPrimaryAccessibleRoute(isModEnabled, hasPerm, newIsSuperAdmin, newGroup);
+          navigate(primaryRoute, { replace: true });
+        }
+      }
     } catch (err) {
-      console.error('Failed to load edition config');
+      console.error('Failed to load edition config', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [navigate, refreshProfile]);
 
   const isFeatureEnabled = useCallback((key) => {
     if (!key) return true;

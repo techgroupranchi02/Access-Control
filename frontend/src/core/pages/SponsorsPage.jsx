@@ -49,14 +49,14 @@ export default function SponsorsPage() {
         {sponsors.map((s) => (
           <div key={s.id} className="fc-card" style={{ padding: '18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="fc-dept-tag" style={{ background: '#fef3c7', color: '#92400e', fontWeight: 700 }}>
+              <span className="fc-dept-tag" style={{ background: 'var(--fc-warning-bg)', color: 'var(--fc-warning-text)', fontWeight: 700 }}>
                 {s.tier} Partner
               </span>
-              <span style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.1rem' }}>
+              <span style={{ fontWeight: 800, color: 'var(--fc-success-text)', fontSize: '1.1rem' }}>
                 ${parseFloat(s.contract_amount).toLocaleString()}
               </span>
             </div>
-            <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#1a1a1a', marginTop: '12px' }}>
+            <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--fc-text-main)', marginTop: '12px' }}>
               {s.name}
             </div>
           </div>
@@ -90,8 +90,8 @@ export default function SponsorsPage() {
                     <span 
                       className="fc-dept-tag"
                       style={{
-                        background: d.status === 'Completed' ? '#dcfce7' : d.status === 'In Progress' ? '#fef3c7' : '#f0ece6',
-                        color: d.status === 'Completed' ? '#166534' : d.status === 'In Progress' ? '#92400e' : '#57534e',
+                        background: d.status === 'Completed' ? 'var(--fc-success-bg)' : d.status === 'In Progress' ? 'var(--fc-warning-bg)' : 'var(--fc-surface-hover)',
+                        color: d.status === 'Completed' ? 'var(--fc-success-text)' : d.status === 'In Progress' ? 'var(--fc-warning-text)' : 'var(--fc-text-secondary)',
                         fontWeight: 600
                       }}
                     >

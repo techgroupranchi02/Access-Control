@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
 
+import { CloseIcon, CrownIcon, FlagIcon, EditIcon, GavelIcon, PeopleIcon, GroupIcon } from '../components/common/Icons';
 export default function AdminPage() {
   const [viewMode, setViewMode] = useState('hierarchy'); // 'hierarchy' | 'matrix'
   const [activeTab, setActiveTab] = useState('roles');
@@ -105,26 +106,26 @@ export default function AdminPage() {
 
   const getGroupIcon = (groupKey) => {
     switch (groupKey) {
-      case 'admin': return '👑';
-      case 'lead': return '🎯';
-      case 'reviewer': return '📝';
-      case 'jury': return '⚖️';
-      case 'volunteer': return '🤝';
-      default: return '👥';
+      case 'admin': return <CrownIcon size={16} />;
+      case 'lead': return <FlagIcon size={16} />;
+      case 'reviewer': return <EditIcon size={16} />;
+      case 'jury': return <GavelIcon size={16} />;
+      case 'volunteer': return <PeopleIcon size={16} />;
+      default: return <GroupIcon size={16} />;
     }
   };
 
   const tabs = [
-    { key: 'roles', label: '🎭 Groups & Roles' },
-    { key: 'users', label: '👤 User Group Assignments' },
-    { key: 'festivals', label: '🎪 Editions & Modules' },
-    { key: 'permissions', label: '🔑 Permissions & Scopes' },
+    { key: 'roles', label: 'Groups & Roles' },
+    { key: 'users', label: 'User Group Assignments' },
+    { key: 'festivals', label: 'Editions & Modules' },
+    { key: 'permissions', label: 'Permissions & Scopes' },
   ];
 
   if (loading) {
     return (
       <div className="animate-fade-in">
-        <div className="page-header"><h2 className="page-title">⚙️ Admin Panel</h2></div>
+        <div className="page-header"><h2 className="page-title">Admin Panel</h2></div>
         <div className="card">
           {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: '48px', marginBottom: 8 }}></div>)}
         </div>
@@ -141,7 +142,7 @@ export default function AdminPage() {
   return (
     <div className="animate-fade-in">
       <div className="page-header">
-        <h2 className="page-title">🛡️ Admin & Access Control Panel</h2>
+        <h2 className="page-title">Admin & Access Control Panel</h2>
         <p className="page-description">Manage hierarchical edition groups, scoped permissions, quotas, and modules.</p>
       </div>
 
@@ -151,13 +152,13 @@ export default function AdminPage() {
           className={`view-mode-btn ${viewMode === 'hierarchy' ? 'active' : ''}`}
           onClick={() => setViewMode('hierarchy')}
         >
-          <span>🌲</span> Hierarchical Tree View
+          <span></span> Hierarchical Tree View
         </button>
         <button
           className={`view-mode-btn ${viewMode === 'matrix' ? 'active' : ''}`}
           onClick={() => setViewMode('matrix')}
         >
-          <span>📊</span> Matrix & Tabs View
+          <span></span> Matrix & Tabs View
         </button>
       </div>
 
@@ -177,7 +178,7 @@ export default function AdminPage() {
                     className={`hierarchy-edition-chip ${selectedFestId === fest.id ? 'selected' : ''}`}
                     onClick={() => setSelectedFestId(fest.id)}
                   >
-                    <span>🎪</span>
+                    <span></span>
                     <span>{fest.name}</span>
                   </button>
                 ))}
@@ -221,7 +222,7 @@ export default function AdminPage() {
                         <div className="hierarchy-group-title">
                           <span>{role.name}</span>
                           <span className={`hierarchy-quota-pill ${isFull ? 'quota-full' : isUnlimited ? 'quota-unlimited' : 'quota-ok'}`}>
-                            {isFull ? '🔴 Full' : isUnlimited ? '♾️ Unlimited' : '🟢 Available'}: {assignedUsers.length} {role.user_limit ? `/ ${role.user_limit}` : 'members'}
+                            {isFull ? 'Full' : isUnlimited ? 'Unlimited' : 'Available'}: {assignedUsers.length} {role.user_limit ? `/ ${role.user_limit}` : 'members'}
                           </span>
                         </div>
                         <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
@@ -247,7 +248,7 @@ export default function AdminPage() {
                       <div style={{ marginBottom: '1.4rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                           <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>
-                            🔑 Group Permissions & Scopes ({role.permissions?.length || 0} active / {permissions.length} total)
+                            Group Permissions & Scopes ({role.permissions?.length || 0} active / {permissions.length} total)
                           </div>
                           <button
                             type="button"
@@ -258,7 +259,7 @@ export default function AdminPage() {
                               setEditingPerms(prev => ({ ...prev, [role.id]: !prev[role.id] }));
                             }}
                           >
-                            {editingPerms[role.id] ? '✓ Done Editing' : '✏️ Edit Permissions (Checkbox Grid)'}
+                            {editingPerms[role.id] ? 'Done Editing' : 'Edit Permissions (Checkbox Grid)'}
                           </button>
                         </div>
 
@@ -275,7 +276,7 @@ export default function AdminPage() {
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                               <input
                                 type="text"
-                                placeholder="🔍 Filter permissions (e.g. custom, submission, review)..."
+                                placeholder="Filter permissions (e.g. custom, submission, review)..."
                                 className="form-input"
                                 style={{ maxWidth: '320px', padding: '0.4rem 0.75rem', fontSize: '0.825rem', background: 'var(--fc-surface)', border: '1px solid var(--fc-border-strong, #bfb8ae)', color: 'var(--fc-text-main)' }}
                                 value={permSearch[role.id] || ''}
@@ -301,7 +302,7 @@ export default function AdminPage() {
                                 <button
                                   type="button"
                                   className="btn btn-sm btn-ghost"
-                                  style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', color: '#f87171' }}
+                                  style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', color: 'var(--fc-danger-text)' }}
                                   onClick={() => {
                                     handleUpdateRolePermissions(role.id, []);
                                   }}
@@ -348,7 +349,7 @@ export default function AdminPage() {
                                 })}
                             </div>
                             <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              💡 Click any permission pill to toggle it on or off. Changes are saved automatically.
+                              Click any permission pill to toggle it on or off. Changes are saved automatically.
                             </div>
                           </div>
                         ) : (
@@ -359,7 +360,7 @@ export default function AdminPage() {
                                 <code>{p.permission_key}</code>
                                 {p.scopeKey && p.scopeKey !== 'all' && (
                                   <span className={`fc-scope-badge fc-scope-${p.scopeKey}`} style={{ fontSize: '0.6rem', padding: '0 4px' }}>
-                                    {p.scopeKey === 'assigned' ? '🎯 Assigned' : p.scopeKey === 'jury_panel' ? '⚖️ Jury Panel' : p.scopeKey}
+                                    {p.scopeKey === 'assigned' ? 'Assigned' : p.scopeKey === 'jury_panel' ? 'Jury Panel' : p.scopeKey}
                                   </span>
                                 )}
                                 <button
@@ -380,10 +381,10 @@ export default function AdminPage() {
                                     marginLeft: '2px',
                                     lineHeight: 1,
                                   }}
-                                  onMouseOver={(e) => e.currentTarget.style.color = '#ef4444'}
+                                  onMouseOver={(e) => e.currentTarget.style.color = 'var(--fc-danger-text)'}
                                   onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
                                 >
-                                  ✕
+                                  <CloseIcon size={16} />
                                 </button>
                               </span>
                             ))}
@@ -406,7 +407,7 @@ export default function AdminPage() {
 
                       {/* Level 3: Assigned Members */}
                       <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fc-text-muted, #8c827a)', marginBottom: '0.6rem', fontWeight: 600 }}>
-                        👥 Assigned Members ({assignedUsers.length})
+                        Assigned Members ({assignedUsers.length})
                       </div>
 
                       {assignedUsers.length === 0 ? (
@@ -436,7 +437,7 @@ export default function AdminPage() {
                                 onClick={() => handleRemoveRole(user.id, selectedFestId, role.id)}
                                 style={{ color: 'var(--color-danger)', padding: '4px 8px', fontSize: '0.8rem' }}
                               >
-                                ✕ Remove
+                                Remove
                               </button>
                             </div>
                           ))}
@@ -477,8 +478,8 @@ export default function AdminPage() {
                           </button>
                         </div>
                         {isFull && (
-                          <span style={{ fontSize: '0.78rem', color: '#f87171', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                            ⚠️ Group capacity limit reached ({role.user_limit} max)
+                          <span style={{ fontSize: '0.78rem', color: 'var(--fc-danger-text)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            Group capacity limit reached ({role.user_limit} max)
                           </span>
                         )}
                       </div>
@@ -497,7 +498,7 @@ export default function AdminPage() {
             >
               <div className="hierarchy-group-info">
                 <div className="hierarchy-group-icon" style={{ background: 'var(--fc-surface, #f7f5f2)', border: '1px solid var(--fc-border-subtle, #f0ebe4)', borderRadius: '8px' }}>
-                  🧩
+                  
                 </div>
                 <div>
                   <div className="hierarchy-group-title">
@@ -616,7 +617,7 @@ export default function AdminPage() {
                           {perm.permission_key}
                           {isChecked && currentPerm?.scopeKey && currentPerm.scopeKey !== 'all' && (
                             <span className={`fc-scope-badge fc-scope-${currentPerm.scopeKey}`} style={{ marginLeft: '4px', fontSize: '0.6rem' }}>
-                              {currentPerm.scopeKey === 'assigned' ? '🎯 Assigned' : currentPerm.scopeKey === 'jury_panel' ? '⚖️ Jury Panel' : currentPerm.scopeKey}
+                              {currentPerm.scopeKey === 'assigned' ? 'Assigned' : currentPerm.scopeKey === 'jury_panel' ? 'Jury Panel' : currentPerm.scopeKey}
                             </span>
                           )}
                         </label>
@@ -660,7 +661,7 @@ export default function AdminPage() {
                                     marginLeft: 4, background: 'none', border: 'none',
                                     color: 'inherit', cursor: 'pointer', fontSize: '0.8rem',
                                   }}
-                                >✕</button>
+                                ><CloseIcon size={16} /></button>
                               </span>
                             ))}
                           </div>

@@ -28,14 +28,14 @@ export default function DiscoveryPage() {
   return (
     <div className="animate-fade-in">
       <div className="page-header">
-        <h2 className="page-title">🧭 Discovery Feed</h2>
+        <h2 className="page-title">Discovery Feed</h2>
         <p className="page-description">
           Public filmmaker showcase and buyer discovery portal.
         </p>
       </div>
 
       <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <span>🔑 <strong>Discovery Permissions:</strong></span>
+        <span><strong>Discovery Permissions:</strong></span>
         <span className={`badge ${can('discovery.browse') || can('discovery.view_public') ? 'badge-success' : 'badge-danger'}`}>discovery.browse</span>
         <span className={`badge ${can('discovery.bookmark') ? 'badge-success' : 'badge-danger'}`}>discovery.bookmark</span>
       </div>
@@ -61,8 +61,8 @@ export default function DiscoveryPage() {
               {discoveryItems.map(item => (
                 <tr key={item.id}>
                   <td style={{ fontWeight: 600 }}>{item.title}</td>
-                  <td>👤 {item.director}</td>
-                  <td>🌍 {item.country}</td>
+                  <td>{item.director}</td>
+                  <td>{item.country}</td>
                   <td><span className="badge badge-info">{item.genre}</span></td>
                   <td>⏱️ {item.length}</td>
                   <td>

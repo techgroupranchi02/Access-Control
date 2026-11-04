@@ -14,7 +14,7 @@ const DEFAULT_FAQS = [
   },
   {
     question: 'Who Can Attend (Eligibility & Verification)',
-    answer: '<ul><li><strong>18+ Only:</strong> Only individuals 18 years and above (as of November 19, 2026) are permitted to attend the festival.</li><li><strong>Mandatory Registration:</strong> Registration is compulsory to access any film screenings, ceremonies, or panel discussions.</li><li><strong>Badge Access:</strong> Admission into all NGMA festival halls is reserved exclusively for pre-registered delegates holding a verified Festival Pass.</li><li><strong>Photo ID:</strong> Please carry a valid government-issued photo ID / age proof document for physical verification at the reception counter.</li></ul>'
+    answer: '<ul><li><strong>18+ Only:</strong> Only individuals 18 years and above (as of November 19, 2026) are permitted to attend the festival.</li><li><strong>Mandatory Registration:</strong> Registration is compulsory to access any film screenings, ceremonies, or panel discussions.</li><li><strong>Badge Access:</strong> Admission into all NGMA festival halls is reserved exclusively for pre-registered delegates holding a verified Festival Pass.</li><li><strong>Photo ID:</strong> Please carry a valid photo ID / age proof document for physical verification at the reception counter.</li></ul>'
   },
   {
     question: 'How to Get Your Festival Pass: Online & Spot Registration',
@@ -22,7 +22,7 @@ const DEFAULT_FAQS = [
   },
   {
     question: 'Collecting Your Festival Pass (Badge Pickup & Timing)',
-    answer: '<p>Physical Festival Passes can be picked up exclusively from the registration desk at <strong>NGMA</strong> during the following operational hours:</p><p><strong>Badge Collection Hours:</strong> November 20 – 22 | 10:15 AM – 6:00 PM</p><p><em>* Please carry your government-issued age proof document to present at the counter.</em></p>'
+    answer: '<p>Physical Festival Passes can be picked up exclusively from the registration desk at <strong>NGMA</strong> during the following operational hours:</p><p><strong>Badge Collection Hours:</strong> November 20 – 22 | 10:15 AM – 6:00 PM</p><p><em>* Please carry a valid age proof document to present at the counter.</em></p>'
   },
   {
     question: 'How Audience Choice Voting Works',
@@ -59,7 +59,7 @@ const PREBUILT_TEMPLATES = {
       venue: 'National Gallery of Modern Art (NGMA), Bengaluru',
       dates: 'Nov 20th to Nov 22nd, 2026',
       timing: '10:15 AM to 6:00 PM',
-      instructions: 'Present this Serial Number along with a valid Government Photo ID at the NGMA Registration Desk to collect your printed badge with your official entry QR pass.'
+      instructions: 'Present this Serial Number along with a valid Photo ID at the NGMA Registration Desk to collect your printed badge with your official entry QR pass.'
     },
     fields: [
       {
@@ -70,7 +70,7 @@ const PREBUILT_TEMPLATES = {
         required: true,
         enabled: true,
         is_core: true,
-        placeholder: 'Enter your full name as per Govt ID'
+        placeholder: 'Enter your full name as per Photo ID'
       },
       {
         id: 'email',
@@ -223,7 +223,7 @@ const PREBUILT_TEMPLATES = {
       venue: 'Palais des Festivals / Grand Convention Center',
       dates: 'Nov 18th to Nov 24th, 2026',
       timing: '9:00 AM to 7:00 PM Daily',
-      instructions: 'Bring your company business card and government photo ID to the Industry Accreditation Desk.'
+      instructions: 'Bring your company business card and photo ID to the Industry Accreditation Desk.'
     },
     fields: [
       {

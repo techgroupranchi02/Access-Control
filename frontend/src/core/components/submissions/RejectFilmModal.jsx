@@ -52,14 +52,14 @@ export default function RejectFilmModal({ film, onClose, onSuccess }) {
         <form onSubmit={handleSubmit} style={{ margin: 0 }}>
           <div className="fc-modal-body modal-body" style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {error && (
-              <div className="fc-alert-danger" style={{ padding: '10px 14px', borderRadius: '8px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', fontSize: '13px' }}>
+              <div className="fc-alert-danger" style={{ padding: '10px 14px', borderRadius: '8px', background: 'var(--fc-danger-bg)', border: '1px solid var(--fc-danger-border)', color: 'var(--fc-danger-text)', fontSize: '13px' }}>
                 {error}
               </div>
             )}
             
             <div className="fc-form-group" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label className="fc-form-label" style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--fc-text-secondary, #475569)' }}>
-                Rejection Reason <span style={{ color: '#dc2626' }}>*</span>
+                Rejection Reason <span style={{ color: 'var(--fc-danger-text)' }}>*</span>
               </label>
               <textarea
                 className="fc-form-input fc-input"
@@ -84,11 +84,11 @@ export default function RejectFilmModal({ film, onClose, onSuccess }) {
               <div className="fc-form-hint" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '12px' }}>
                 <span style={{ color: 'var(--fc-text-muted, #64748b)' }}>Characters: {len} / 10 minimum</span>
                 {len >= 10 ? (
-                  <span style={{ color: '#16a34a', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ color: 'var(--fc-success-text)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                     <CheckCircleIcon size={13} /> Minimum met
                   </span>
                 ) : (
-                  <span style={{ color: '#94a3b8' }}>{10 - len} more needed</span>
+                  <span style={{ color: 'var(--fc-text-muted)' }}>{10 - len} more needed</span>
                 )}
               </div>
             </div>
@@ -120,7 +120,7 @@ export default function RejectFilmModal({ film, onClose, onSuccess }) {
                 fontWeight: 600,
                 cursor: (loading || len < 10) ? 'not-allowed' : 'pointer',
                 opacity: (loading || len < 10) ? 0.6 : 1,
-                background: '#dc2626',
+                background: 'var(--fc-danger)',
                 color: '#ffffff',
                 border: 'none'
               }}

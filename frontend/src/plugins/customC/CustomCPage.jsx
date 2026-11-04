@@ -15,7 +15,7 @@ export default function CustomCPage() {
     return (
         <div className="animate-fade-in">
             <div className="page-header">
-                <h2 className="page-title">⚡ Custom C Page</h2>
+                <h2 className="page-title">Custom C Page</h2>
                 <p className="page-description">Dynamically loaded plugin page without modifying core business logic.</p>
             </div>
             <div className="card">

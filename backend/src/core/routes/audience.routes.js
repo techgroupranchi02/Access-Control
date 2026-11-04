@@ -9,6 +9,12 @@ const express = require('express');
 const { authenticate } = require('../middleware/auth.middleware');
 const { requirePermission, requireModule } = require('../middleware/permission.middleware');
 const audienceController = require('../controllers/audience.controller');
+const {
+  publicVoteIpLimiter,
+  publicVoteBadgeLimiter,
+  publicVoteReadLimiter,
+  staffCredentialLimiter,
+} = require('../middleware/rateLimiter.middleware');
 
 // ── 1. Audience Settings & Categories Router (/api/audience) ─────────────────
 const audienceRouter = express.Router();
@@ -36,7 +42,7 @@ const attendanceRouter = express.Router();
 attendanceRouter.use(authenticate);
 attendanceRouter.use(requireModule('audience'));
 
-attendanceRouter.post('/scan', requirePermission('attendance.scan_checkin'), audienceController.performScreeningCheckin);
+attendanceRouter.post('/scan', requirePermission('attendance.scan_checkin'), staffCredentialLimiter, audienceController.performScreeningCheckin);
 attendanceRouter.get('/logs', requirePermission('attendance.view'), audienceController.listAttendance);
 
 // ── 3. Voting & Results Router (/api/voting) ──────────────────────────────────
@@ -56,20 +62,28 @@ registrationRouter.use(authenticate);
 registrationRouter.use(requireModule('audience'));
 
 registrationRouter.get('/attendees', requirePermission('registration.view'), audienceController.listAttendees);
+registrationRouter.get('/attendees/:id', requirePermission('registration.view'), audienceController.getAttendee);
 registrationRouter.post('/attendees', requirePermission('registration.create'), audienceController.registerAttendee);
+registrationRouter.put('/attendees/:id', requirePermission('registration.create'), audienceController.updateAttendee);
 registrationRouter.post('/attendees/:id/issue-qr', requirePermission('registration.create'), audienceController.issueAttendeeQrCode);
+registrationRouter.post('/attendees/:id/assign-qr', requirePermission('registration.create'), audienceController.assignAttendeeQR);
 registrationRouter.post('/attendees/:id/revoke-qr', requirePermission('registration.create'), audienceController.revokeAttendeeQrCode);
 registrationRouter.post('/bulk-import', requirePermission('registration.create'), audienceController.bulkImportAttendees);
+registrationRouter.post('/qr/bulk-generate', requirePermission('registration.create'), audienceController.bulkGenerateQRs);
+registrationRouter.get('/qr/pool', requirePermission('registration.view'), audienceController.getQRPool);
+registrationRouter.get('/qr/check/:code', requirePermission('registration.view'), staffCredentialLimiter, audienceController.checkQRCode);
 
 // ── 5. Public Mobile Voter Router (/api/public/vote) [No Staff Auth] ──────────
 const publicVoteRouter = express.Router();
-// Rate-limiting and input sanitization handled by Express middleware
-publicVoteRouter.get('/:token', audienceController.getPublicScreeningVoteData);
-publicVoteRouter.post('/:token/submit', audienceController.submitAudienceVote);
+// Credential rate limits count failed attempts only, per IP and per badge (docs/adr/0001)
+publicVoteRouter.get('/:token', publicVoteReadLimiter, audienceController.getPublicScreeningVoteData);
+publicVoteRouter.post('/:token/submit', publicVoteIpLimiter, publicVoteBadgeLimiter, audienceController.submitAudienceVote);
 
 // ── 6. Public Registration & Reviews Router (/api/public) [No Auth] ───────────
 const publicRegistrationRouter = express.Router();
 publicRegistrationRouter.get('/registration-status', audienceController.getPublicRegistrationStatus);
+// Approved Audience Choice results (big screen + Kashish app); 403 until approved (docs/adr/0003)
+publicRegistrationRouter.get('/results/:eventId', publicVoteReadLimiter, audienceController.getPublicResults);
 publicRegistrationRouter.get('/registration-form-schema', audienceController.getPublicRegistrationFormSchema);
 
 // Phase 7: Public Film Catalog & Delegate Reviews

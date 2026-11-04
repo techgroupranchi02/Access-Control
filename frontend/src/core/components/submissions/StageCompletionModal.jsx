@@ -59,7 +59,7 @@ export default function StageCompletionModal({
 
         <div className="fc-modal-body modal-body">
           {error && (
-            <div className="fc-alert-danger" style={{ marginBottom: '14px', padding: '10px', borderRadius: '6px', background: '#fee2e2', color: '#b91c1c' }}>
+            <div className="fc-alert-danger" style={{ marginBottom: '14px', padding: '10px', borderRadius: '6px', background: 'var(--fc-danger-bg)', color: 'var(--fc-danger-text)' }}>
               {error}
             </div>
           )}
@@ -72,34 +72,34 @@ export default function StageCompletionModal({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '8px', background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <FlashOnIcon size={18} style={{ color: '#86efac' }} />
+                  <FlashOnIcon size={18} style={{ color: 'var(--fc-success-text)' }} />
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: '13px', color: '#86efac' }}>
+                    <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--fc-success-text)' }}>
                       Auto-Advancement Cutoff
                     </div>
-                    <div style={{ fontSize: '11px', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                      Films scoring <strong>≥ {advanceCutoff.toFixed(1)}</strong> <StarIcon size={11} style={{ color: '#eab308' }} /> advance to Stage {stage.stage_order + 1}
+                    <div style={{ fontSize: '11px', color: 'var(--fc-success-text)', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                      Films scoring <strong>≥ {advanceCutoff.toFixed(1)}</strong> <StarIcon size={11} style={{ color: 'var(--fc-warning-text)' }} /> advance to Stage {stage.stage_order + 1}
                     </div>
                   </div>
                 </div>
-                <span style={{ fontWeight: 800, fontSize: '14px', color: '#86efac' }}>
+                <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--fc-success-text)' }}>
                   {qualifyingCount} films
                 </span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <CancelIcon size={18} style={{ color: '#fca5a5' }} />
+                  <CancelIcon size={18} style={{ color: 'var(--fc-danger-text)' }} />
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: '13px', color: '#fca5a5' }}>
+                    <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--fc-danger-text)' }}>
                       Auto-Rejection Threshold
                     </div>
-                    <div style={{ fontSize: '11px', color: '#f87171', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                      Films scoring <strong>&lt; {rejectCutoff.toFixed(1)}</strong> <StarIcon size={11} style={{ color: '#eab308' }} /> marked as Rejected
+                    <div style={{ fontSize: '11px', color: 'var(--fc-danger-text)', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                      Films scoring <strong>&lt; {rejectCutoff.toFixed(1)}</strong> <StarIcon size={11} style={{ color: 'var(--fc-warning-text)' }} /> marked as Rejected
                     </div>
                   </div>
                 </div>
-                <span style={{ fontWeight: 800, fontSize: '14px', color: '#fca5a5' }}>
+                <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--fc-danger-text)' }}>
                   {rejectCount} films
                 </span>
               </div>

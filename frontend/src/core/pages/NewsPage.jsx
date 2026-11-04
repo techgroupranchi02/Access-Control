@@ -53,14 +53,14 @@ export default function NewsPage() {
     <div className="animate-fade-in">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h2 className="page-title">📰 News & Announcements</h2>
+          <h2 className="page-title">News & Announcements</h2>
           <p className="page-description">
             Broadcast press updates, awards announcements, and internal communications.
           </p>
         </div>
         <PermissionGate permission="news.publish">
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            ✍️ Publish Article
+            Publish Article
           </button>
         </PermissionGate>
       </div>
@@ -72,7 +72,7 @@ export default function NewsPage() {
       )}
 
       <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-        <span>🔑 <strong>News Permissions:</strong></span>
+        <span><strong>News Permissions:</strong></span>
         <span className={`badge ${can('news.view') ? 'badge-success' : 'badge-danger'}`}>news.view</span>
         <span className={`badge ${can('news.publish') ? 'badge-success' : 'badge-danger'}`}>news.publish</span>
       </div>
@@ -104,7 +104,7 @@ export default function NewsPage() {
                   <tr key={n.id}>
                     <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{n.title}</td>
                     <td><span className="badge badge-info">{n.category}</span></td>
-                    <td>👤 {n.author}</td>
+                    <td>{n.author}</td>
                     <td>{n.publishedAt || 'Unpublished (Draft)'}</td>
                     <td><span className={`badge ${n.status === 'Published' ? 'badge-success' : 'badge-muted'}`}>{n.status}</span></td>
                   </tr>

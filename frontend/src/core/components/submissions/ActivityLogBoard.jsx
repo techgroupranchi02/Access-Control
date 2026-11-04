@@ -73,91 +73,91 @@ export function SystemGearIcon({ size = 18, className = '', style = {} }) {
 export const ACTION_CONFIG = {
   STAGE_ADVANCE: {
     label: 'Stage Advanced',
-    color: '#818cf8',
+    color: 'var(--fc-info-text)',
     bg: 'rgba(99, 102, 241, 0.12)',
     border: 'rgba(99, 102, 241, 0.28)',
     Icon: ArrowForwardIcon
   },
   STAGE_CHANGE: {
     label: 'Stage Changed',
-    color: '#a78bfa',
+    color: 'var(--fc-info-text)',
     bg: 'rgba(167, 139, 250, 0.12)',
     border: 'rgba(167, 139, 250, 0.28)',
     Icon: SyncIcon
   },
   AUTO_ADVANCE: {
     label: 'Auto Promoted',
-    color: '#38bdf8',
+    color: 'var(--fc-info-text)',
     bg: 'rgba(56, 189, 248, 0.12)',
     border: 'rgba(56, 189, 248, 0.28)',
     Icon: FlashOnIcon
   },
   WINNER_SELECTED: {
     label: 'Winner Declared',
-    color: '#f59e0b',
+    color: 'var(--fc-warning-text)',
     bg: 'rgba(245, 158, 11, 0.12)',
     border: 'rgba(245, 158, 11, 0.35)',
     Icon: TrophyIcon
   },
   WINNER_REVOKED: {
     label: 'Winner Revoked',
-    color: '#ef4444',
+    color: 'var(--fc-danger-text)',
     bg: 'rgba(239, 68, 68, 0.12)',
     border: 'rgba(239, 68, 68, 0.28)',
     Icon: UndoIcon
   },
   REVIEW_SUBMITTED: {
     label: 'Scorecard Submitted',
-    color: '#10b981',
+    color: 'var(--fc-success-text)',
     bg: 'rgba(16, 185, 129, 0.12)',
     border: 'rgba(16, 185, 129, 0.28)',
     Icon: StarIcon
   },
   JURY_ASSIGNED: {
     label: 'Jury Assigned',
-    color: '#3b82f6',
+    color: 'var(--fc-info-text)',
     bg: 'rgba(59, 130, 246, 0.12)',
     border: 'rgba(59, 130, 246, 0.28)',
     Icon: PersonIcon
   },
   JURY_REMOVED: {
     label: 'Jury Removed',
-    color: '#94a3b8',
+    color: 'var(--fc-text-muted)',
     bg: 'rgba(148, 163, 184, 0.12)',
     border: 'rgba(148, 163, 184, 0.28)',
     Icon: CancelIcon
   },
   DECISION: {
     label: 'Pipeline Decision',
-    color: '#f43f5e',
-    bg: 'rgba(244, 63, 94, 0.12)',
-    border: 'rgba(244, 63, 94, 0.28)',
+    color: 'var(--fc-brand-text)',
+    bg: 'rgba(168, 47, 47, 0.12)',
+    border: 'rgba(168, 47, 47, 0.28)',
     Icon: GavelIcon
   },
   FLAG_UPDATE: {
     label: 'Flag Updated',
-    color: '#eab308',
+    color: 'var(--fc-warning-text)',
     bg: 'rgba(234, 179, 8, 0.12)',
     border: 'rgba(234, 179, 8, 0.28)',
     Icon: FlagIcon
   },
   CATEGORY_UPDATE: {
     label: 'Category Updated',
-    color: '#06b6d4',
+    color: 'var(--fc-info-text)',
     bg: 'rgba(6, 182, 212, 0.12)',
     border: 'rgba(6, 182, 212, 0.28)',
     Icon: LocalOfferIcon
   },
   STATUS_UPDATE: {
     label: 'Status Updated',
-    color: '#cbd5e1',
+    color: 'var(--fc-text-light)',
     bg: 'rgba(203, 213, 225, 0.12)',
     border: 'rgba(203, 213, 225, 0.28)',
     Icon: MovieIcon
   },
   DEFAULT: {
     label: 'Activity',
-    color: '#94a3b8',
+    color: 'var(--fc-text-muted)',
     bg: 'rgba(148, 163, 184, 0.12)',
     border: 'rgba(148, 163, 184, 0.28)',
     Icon: MovieIcon
@@ -478,7 +478,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
           </div>
           <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--fc-text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>{total}</span>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: '#10b981', background: 'rgba(16, 185, 129, 0.12)', padding: '2px 8px', borderRadius: '12px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-success-text)', background: 'rgba(16, 185, 129, 0.12)', padding: '2px 8px', borderRadius: '12px' }}>
               Immutable
             </span>
           </div>
@@ -496,7 +496,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
           <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fc-text-muted)', marginBottom: '6px' }}>
             Stage Promotions
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#818cf8' }}>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--fc-info-text)' }}>
             {actionCounts['STAGE_ADVANCE'] || 0}
           </div>
         </div>
@@ -513,7 +513,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
           <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--fc-text-muted)', marginBottom: '6px' }}>
             Awards & Winners
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b' }}>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--fc-warning-text)' }}>
             {actionCounts['WINNER_SELECTED'] || 0}
           </div>
         </div>
@@ -833,7 +833,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                   style={{
                     border: 'none',
                     background: groupFilter === 'admin' ? 'var(--fc-surface)' : 'transparent',
-                    color: groupFilter === 'admin' ? '#f43f5e' : 'var(--fc-text-muted)',
+                    color: groupFilter === 'admin' ? 'var(--fc-brand-text)' : 'var(--fc-text-muted)',
                     fontWeight: groupFilter === 'admin' ? 600 : 400,
                     fontSize: '11px',
                     padding: '3px 9px',
@@ -852,7 +852,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                   style={{
                     border: 'none',
                     background: groupFilter === 'jury' ? 'var(--fc-surface)' : 'transparent',
-                    color: groupFilter === 'jury' ? '#3b82f6' : 'var(--fc-text-muted)',
+                    color: groupFilter === 'jury' ? 'var(--fc-info-text)' : 'var(--fc-text-muted)',
                     fontWeight: groupFilter === 'jury' ? 600 : 400,
                     fontSize: '11px',
                     padding: '3px 9px',
@@ -954,11 +954,11 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                         ? 'var(--fc-surface-sunken, #e2e8f0)'
                         : isJuryActor
                           ? 'rgba(59, 130, 246, 0.16)'
-                          : 'rgba(225, 29, 72, 0.16)',
+                          : 'rgba(168, 47, 47, 0.16)',
                       color: isSystem
                         ? 'var(--fc-text-secondary, #64748b)'
                         : isJuryActor
-                          ? '#3b82f6'
+                          ? 'var(--fc-info)'
                           : 'var(--fc-brand, #a82f2f)',
                       display: 'flex',
                       alignItems: 'center',
@@ -1027,8 +1027,8 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                               letterSpacing: '0.04em',
                               padding: '2px 6px',
                               borderRadius: '4px',
-                              background: isJuryActor ? 'rgba(59, 130, 246, 0.12)' : 'rgba(225, 29, 72, 0.12)',
-                              color: isJuryActor ? '#3b82f6' : 'var(--fc-brand, #a82f2f)'
+                              background: isJuryActor ? 'rgba(59, 130, 246, 0.12)' : 'rgba(168, 47, 47, 0.12)',
+                              color: isJuryActor ? 'var(--fc-info-text)' : 'var(--fc-brand, #a82f2f)'
                             }}
                           >
                             {isJuryActor ? 'Jury' : 'Admin'}
@@ -1393,8 +1393,8 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                               width: '28px',
                               height: '28px',
                               borderRadius: '50%',
-                              background: isJuryActor ? 'rgba(59, 130, 246, 0.2)' : 'rgba(225, 29, 72, 0.2)',
-                              color: isJuryActor ? '#3b82f6' : '#f43f5e',
+                              background: isJuryActor ? 'rgba(59, 130, 246, 0.2)' : 'rgba(168, 47, 47, 0.2)',
+                              color: isJuryActor ? 'var(--fc-info-text)' : 'var(--fc-brand-text)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -1441,7 +1441,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                                 fontWeight: 600,
                                 textTransform: 'uppercase',
                                 letterSpacing: '0.04em',
-                                color: isJuryActor ? '#3b82f6' : '#f43f5e'
+                                color: isJuryActor ? 'var(--fc-info-text)' : 'var(--fc-brand-text)'
                               }}
                             >
                               {isJuryActor ? 'Jury' : 'Admin'}

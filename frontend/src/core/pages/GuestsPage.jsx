@@ -72,7 +72,7 @@ export default function GuestsPage() {
           <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
             Total Delegates
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#1a1a1a', marginTop: '4px' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--fc-text-main)', marginTop: '4px' }}>
             {guests.length}
           </div>
         </div>
@@ -80,7 +80,7 @@ export default function GuestsPage() {
           <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
             Arrived & Checked In
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#16a34a', marginTop: '4px' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--fc-success-text)', marginTop: '4px' }}>
             {guests.filter(g => g.rsvp_status === 'Arrived').length}
           </div>
         </div>
@@ -88,7 +88,7 @@ export default function GuestsPage() {
           <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
             Badges Issued
           </div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#2563eb', marginTop: '4px' }}>
+          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--fc-info-text)', marginTop: '4px' }}>
             {guests.filter(g => g.badge_issued).length}
           </div>
         </div>
@@ -131,8 +131,8 @@ export default function GuestsPage() {
                     <span 
                       className="fc-dept-tag"
                       style={{
-                        backgroundColor: g.rsvp_status === 'Arrived' ? '#dcfce7' : g.rsvp_status === 'Confirmed' ? '#dbeafe' : '#fef3c7',
-                        color: g.rsvp_status === 'Arrived' ? '#166534' : g.rsvp_status === 'Confirmed' ? '#1e40af' : '#92400e',
+                        backgroundColor: g.rsvp_status === 'Arrived' ? 'var(--fc-success-bg)' : g.rsvp_status === 'Confirmed' ? 'var(--fc-info-bg)' : 'var(--fc-warning-bg)',
+                        color: g.rsvp_status === 'Arrived' ? 'var(--fc-success-text)' : g.rsvp_status === 'Confirmed' ? 'var(--fc-info-text)' : 'var(--fc-warning-text)',
                         fontWeight: 600
                       }}
                     >
@@ -149,7 +149,7 @@ export default function GuestsPage() {
 
                   {/* Flight */}
                   <td>
-                    <span style={{ fontSize: '0.8rem', color: g.flight_details?.includes('19:00') ? '#b91c1c' : 'var(--fc-text-secondary)', fontWeight: g.flight_details?.includes('19:00') ? 700 : 500 }}>
+                    <span style={{ fontSize: '0.8rem', color: g.flight_details?.includes('19:00') ? 'var(--fc-danger-text)' : 'var(--fc-text-secondary)', fontWeight: g.flight_details?.includes('19:00') ? 700 : 500 }}>
                       ✈️ {g.flight_details || 'Not provided'}
                     </span>
                   </td>

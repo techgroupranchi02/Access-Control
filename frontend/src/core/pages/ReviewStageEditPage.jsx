@@ -71,8 +71,8 @@ export default function ReviewStageEditPage() {
             marginBottom: '16px',
             padding: '12px 18px',
             borderRadius: '8px',
-            background: notification.type === 'error' ? '#fee2e2' : '#dcfce7',
-            color: notification.type === 'error' ? '#b91c1c' : '#15803d',
+            background: notification.type === 'error' ? 'var(--fc-danger-bg)' : 'var(--fc-success-bg)',
+            color: notification.type === 'error' ? 'var(--fc-danger-text)' : 'var(--fc-success-text)',
             fontWeight: 600
           }}
         >
@@ -112,7 +112,7 @@ export default function ReviewStageEditPage() {
                   fontWeight: 700,
                   textTransform: 'uppercase',
                   background: stage.status === 'inactive' ? 'var(--fc-surface-hover)' : 'rgba(34, 197, 94, 0.15)',
-                  color: stage.status === 'inactive' ? 'var(--fc-text-muted)' : '#22c55e',
+                  color: stage.status === 'inactive' ? 'var(--fc-text-muted)' : 'var(--fc-success-text)',
                   border: stage.status === 'inactive' ? '1px solid var(--fc-border)' : '1px solid rgba(34, 197, 94, 0.3)'
                 }}
               >
@@ -144,12 +144,12 @@ export default function ReviewStageEditPage() {
       )}
 
       {error && !loading && (
-        <div style={{ padding: '32px', textAlign: 'center', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', color: '#b91c1c' }}>
+        <div style={{ padding: '32px', textAlign: 'center', background: 'var(--fc-danger-bg)', border: '1px solid var(--fc-danger-border)', borderRadius: '12px', color: 'var(--fc-danger-text)' }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
             <WarningIcon size={28} />
           </div>
           <div style={{ fontWeight: 700, marginBottom: '6px' }}>{error}</div>
-          <p style={{ fontSize: '13px', color: '#7f1d1d', marginBottom: '16px' }}>
+          <p style={{ fontSize: '13px', color: 'var(--fc-danger-text)', marginBottom: '16px' }}>
             Could not retrieve stage #{id}. The stage may have been removed or you might lack permissions.
           </p>
           <button

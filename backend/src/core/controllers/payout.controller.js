@@ -118,19 +118,30 @@ async function list(req, res) {
     }
 
     if (search) {
-      whereClause += ' AND (ind.name LIKE ? OR org.name LIKE ? OR u.email LIKE ? OR p.title LIKE ? OR fp.razorpay_transfer_id LIKE ? OR fp.razorpay_payment_id LIKE ?)';
-      const term = `%${search}%`;
-      params.push(term, term, term, term, term, term);
+      // Name, email, film title, category, Razorpay IDs, and phone (formatting ignored, last 10 digits)
+      const term = `%${search.slice(0, 100)}%`;
+      const searchDigits = search.replace(/\D/g, '');
+      const phoneDigits = searchDigits.length >= 4 ? searchDigits.slice(-10) : '';
+      const phoneSql = (col) => `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${col}, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '')`;
+      whereClause += ` AND (
+        ind.name LIKE ? OR org.name LIKE ? OR u.email LIKE ? OR p.title LIKE ? OR cat.name LIKE ?
+        OR fp.razorpay_transfer_id LIKE ? OR fp.razorpay_payment_id LIKE ?
+        OR (? <> '' AND (${phoneSql('ind.phone')} LIKE ? OR ${phoneSql('org.phone')} LIKE ?))
+      )`;
+      params.push(term, term, term, term, term, term, term, phoneDigits, `%${phoneDigits}%`, `%${phoneDigits}%`);
     }
 
     // Total Count
     const countResult = await query(`
-      SELECT COUNT(*) as total 
+      SELECT COUNT(*) as total
       FROM festival_payments fp
       LEFT JOIN users u ON fp.user_id = u.id
       LEFT JOIN individuals ind ON ind.user_id = u.id
       LEFT JOIN organizations org ON org.user_id = u.id
       LEFT JOIN projects p ON fp.project_id = p.project_id
+      LEFT JOIN film_festivals_submissions sub ON fp.submission_id = sub.film_festivals_submission_id
+      LEFT JOIN film_festivals_category_milestone_prices price ON sub.film_festival_category_milestone_price_id = price.film_festival_category_milestone_price_id
+      LEFT JOIN film_festivals_categories cat ON price.film_festival_category_id = cat.film_festival_category_id
       WHERE ${whereClause}
     `, params);
     const total = countResult[0]?.total || 0;

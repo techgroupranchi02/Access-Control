@@ -74,7 +74,7 @@ export default function CustomBPage() {
   return (
     <div className="animate-fade-in">
       <div className="page-header">
-        <h2 className="page-title">📚 Custom B — Workshop Sessions</h2>
+        <h2 className="page-title">Custom B — Workshop Sessions</h2>
         <p className="page-description">
           This is a <strong>dynamically registered plugin page (Custom B)</strong> — running completely outside core business logic.
           It was discovered and mounted automatically via the plugin registry and database configuration.
@@ -83,10 +83,10 @@ export default function CustomBPage() {
 
       {/* Plugin Architecture Info */}
       <div className="alert alert-info" style={{ marginBottom: 'var(--space-lg)' }}>
-        🔌 <strong>Plugin Architecture:</strong> Loaded from <code>plugins/customB/</code> —
+        <strong>Plugin Architecture:</strong> Loaded from <code>plugins/customB/</code> —
         zero core code changes required. Permission group: <strong>CustomGroupY</strong>.
         <br />
-        🔑 Permissions:&nbsp;
+        Permissions:&nbsp;
         <span className={`badge ${can('customB:read') ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 4 }}>customB:read</span>
         <span className={`badge ${can('customB:update') ? 'badge-success' : 'badge-danger'}`} style={{ marginRight: 4 }}>customB:update</span>
         <span className={`badge ${can('customB:delete') ? 'badge-success' : 'badge-danger'}`}>customB:delete</span>
@@ -130,7 +130,7 @@ export default function CustomBPage() {
                     <td>{item.topic}</td>
                     <td>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                        🎓 {item.instructor}
+                        {item.instructor}
                       </span>
                     </td>
                     <td><span className="badge badge-info">{item.capacity} seats</span></td>
@@ -139,9 +139,9 @@ export default function CustomBPage() {
                     <PermissionGate permission="customB:update">
                       <td>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(item)}>✏️ Edit</button>
+                          <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(item)}>Edit</button>
                           <PermissionGate permission="customB:delete">
-                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(item.id)}>🗑️ Delete</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => handleDelete(item.id)}>Delete</button>
                           </PermissionGate>
                         </div>
                       </td>
@@ -158,7 +158,7 @@ export default function CustomBPage() {
       <PermissionGate permission="customB:update">
         <div className="permission-section">
           <h3 className="permission-section-title">
-            ✏️ Edit Workshop Session
+            Edit Workshop Session
             <span className="permission-section-badge">Requires: customB:update</span>
           </h3>
           {editingId ? (
@@ -210,7 +210,7 @@ export default function CustomBPage() {
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button className="btn btn-success btn-sm" onClick={() => handleSave(editingId)}>💾 Save</button>
+                <button className="btn btn-success btn-sm" onClick={() => handleSave(editingId)}>Save</button>
                 <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
               </div>
             </div>
@@ -230,7 +230,7 @@ export default function CustomBPage() {
               borderRadius: 'var(--radius-md)',
             }}>
               <h4 style={{ fontSize: '0.875rem', color: 'var(--color-danger)' }}>
-                🗑️ Danger Zone
+                Danger Zone
                 <span className="permission-section-badge" style={{ marginLeft: 8, background: 'rgba(239,68,68,0.15)', color: 'var(--color-danger)' }}>
                   Requires: customB:delete
                 </span>

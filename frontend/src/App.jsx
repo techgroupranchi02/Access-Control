@@ -5,7 +5,7 @@
  */
 
 import { Suspense, useContext } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './core/context/AuthContext';
 import { FestivalProvider, FestivalContext } from './core/context/FestivalContext';
 import { ThemeProvider } from './core/context/ThemeContext';
@@ -13,6 +13,7 @@ import ProtectedRoute from './core/components/ProtectedRoute';
 import ModuleGate from './core/components/ModuleGate';
 import PermissionGate from './core/components/PermissionGate';
 import Layout from './core/components/Layout';
+import { getPrimaryAccessibleRoute } from './core/utils/routePermissions';
 
 // Core Pages
 import LoginPage from './core/pages/LoginPage';
@@ -42,10 +43,16 @@ import AudienceSettingsPage from './core/pages/AudienceSettingsPage';
 import AttendancePage from './core/pages/AttendancePage';
 import VotingPage from './core/pages/VotingPage';
 import RegistrationPage from './core/pages/RegistrationPage';
+import AttendeeCreatePage from './core/pages/AttendeeCreatePage';
+import AttendeeEditPage from './core/pages/AttendeeEditPage';
+import AttendeeAssignQrPage from './core/pages/AttendeeAssignQrPage';
+import BulkQrManagementPage from './core/pages/BulkQrManagementPage';
 import PublicVotingPage from './core/pages/PublicVotingPage';
+import PublicResultsPage from './core/pages/PublicResultsPage';
 
 import pluginRegistry from './config/pluginRegistry';
 
+import { LockIcon } from './core/components/common/Icons';
 // Loading fallback for lazy-loaded plugins
 function PluginLoading() {
   return (
@@ -59,16 +66,82 @@ function PluginLoading() {
 // Access denied fallback
 function AccessDenied({ module, feature }) {
   const mod = module || feature;
+  const festivalCtx = useContext(FestivalContext);
+  const navigate = useNavigate();
+
+  const isModuleEnabled = festivalCtx?.isModuleEnabled;
+  const hasPermission = festivalCtx?.hasPermission;
+  const isSuperAdmin = festivalCtx?.isSuperAdmin;
+  const currentUserGroup = festivalCtx?.currentUserGroup;
+  const currentFestival = festivalCtx?.currentFestival;
+
+  const primaryRoute = getPrimaryAccessibleRoute(isModuleEnabled, hasPermission, isSuperAdmin, currentUserGroup);
+
+  const getPrimaryLabel = (route) => {
+    if (route.startsWith('/audience') || route.startsWith('/registration')) return 'Audience & Registration';
+    if (route.startsWith('/attendance')) return 'Audience Attendance';
+    if (route.startsWith('/submissions')) return 'Submissions Hub';
+    if (route.startsWith('/dashboard')) return 'Festival Dashboard';
+    if (route.startsWith('/schedule') || route.startsWith('/tasks')) return 'Tasks & Schedule';
+    if (route.startsWith('/team')) return 'Team & Members';
+    return 'Accessible Area';
+  };
+
   return (
-    <div className="permission-denied animate-fade-in">
+    <div className="permission-denied animate-fade-in" style={{ padding: '64px 24px', textAlign: 'center' }}>
       <div>
-        <div className="permission-denied-icon">🚫</div>
-        <p className="permission-denied-text">Access Denied</p>
-        <p className="permission-denied-subtext">
-          {mod
-            ? `The "${mod}" module is not enabled for this festival edition.`
-            : 'You do not have permission to access this resource.'}
+        <div className="permission-denied-icon" style={{ marginBottom: '14px', color: 'var(--fc-text-muted)' }}><LockIcon size={48} /></div>
+        <p className="permission-denied-text" style={{ fontSize: '20px', fontWeight: 700, margin: '0 0 8px', color: 'var(--fc-text-primary, #1e293b)' }}>
+          Access Denied
         </p>
+        <p className="permission-denied-subtext" style={{ fontSize: '14px', color: 'var(--fc-text-muted, #64748b)', margin: '0 auto 24px', maxWidth: '460px', lineHeight: 1.5 }}>
+          {mod
+            ? `The "${mod}" module is not enabled for ${currentFestival?.name || 'this festival edition'}.`
+            : `You do not have permission to access this resource in ${currentFestival?.name || 'this festival'}.`}
+        </p>
+
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {primaryRoute && (
+            <button
+              type="button"
+              onClick={() => navigate(primaryRoute, { replace: true })}
+              style={{
+                backgroundColor: 'var(--fc-brand-primary, #991b1b)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '10px 20px',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              Go to {getPrimaryLabel(primaryRoute)} →
+            </button>
+          )}
+
+          {festivalCtx?.festivals?.length > 1 && (
+            <button
+              type="button"
+              onClick={() => festivalCtx.openFestivalModal()}
+              style={{
+                backgroundColor: 'var(--fc-card-bg, #ffffff)',
+                color: 'var(--fc-text-primary, #1e293b)',
+                border: '1px solid var(--fc-border-subtle, #e2e8f0)',
+                borderRadius: '8px',
+                padding: '10px 16px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer'
+              }}
+            >
+              Switch Festival
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -80,23 +153,16 @@ function HomeRedirect() {
   if (!festivalCtx || festivalCtx.loading) {
     return null;
   }
-  const { isModuleEnabled, hasPermission, isSuperAdmin, currentUserGroup } = festivalCtx;
-  const isAdminUser = isSuperAdmin || currentUserGroup === 'admin';
-  const canAccess = (perm) => isAdminUser || hasPermission(perm);
 
-  if (isModuleEnabled('dashboard') && (isAdminUser || canAccess('dashboard.view') || canAccess('dashboard:view'))) {
-    return <Navigate to="/dashboard" replace />;
+  // While user is selecting workspace upon fresh login, wait at '/' without pre-navigating
+  if (festivalCtx.isFestivalModalOpen && sessionStorage.getItem('fc_festival_selected') !== '1') {
+    return null;
   }
-  if (isModuleEnabled('submissions') && (isAdminUser || canAccess('submission.view') || canAccess('submission:view') || canAccess('review.view') || canAccess('review:view'))) {
-    return <Navigate to="/submissions" replace />;
-  }
-  if (isModuleEnabled('review_dashboard')) {
-    return <Navigate to="/submissions" replace />;
-  }
-  if (isModuleEnabled('team') && (isAdminUser || canAccess('team.view') || canAccess('team:view'))) {
-    return <Navigate to="/team" replace />;
-  }
-  return <Navigate to="/submissions" replace />;
+
+  const { isModuleEnabled, hasPermission, isSuperAdmin, currentUserGroup } = festivalCtx;
+  const primaryRoute = getPrimaryAccessibleRoute(isModuleEnabled, hasPermission, isSuperAdmin, currentUserGroup);
+
+  return <Navigate to={primaryRoute} replace />;
 }
 
 function App() {
@@ -108,6 +174,7 @@ function App() {
           {/* Public Routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/vote/:token" element={<PublicVotingPage />} />
+          <Route path="/results/:eventId" element={<PublicResultsPage />} />
 
           {/* Protected Routes — wrapped in FestivalProvider */}
           <Route
@@ -523,8 +590,19 @@ function App() {
               }
             />
             <Route path="/settings/Audience" element={<Navigate to="/settings/audience" replace />} />
-            <Route path="/audience" element={<Navigate to="/settings/audience" replace />} />
-            <Route path="/Audience" element={<Navigate to="/settings/audience" replace />} />
+            <Route
+              path="/audience"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate permission="registration.view" fallback={<AccessDenied />}>
+                    <RegistrationPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route path="/Audience" element={<Navigate to="/audience" replace />} />
+            <Route path="/registration" element={<Navigate to="/audience" replace />} />
+            <Route path="/Registration" element={<Navigate to="/audience" replace />} />
             <Route
               path="/attendance"
               element={
@@ -546,16 +624,66 @@ function App() {
               }
             />
             <Route
-              path="/registration"
+              path="/registration/add"
               element={
                 <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
-                  <PermissionGate permission="registration.view" fallback={<AccessDenied />}>
-                    <RegistrationPage />
+                  <PermissionGate anyPermissions={['registration.create', 'registration:create', 'registration.view', 'registration:view']} fallback={<AccessDenied />}>
+                    <AttendeeCreatePage />
                   </PermissionGate>
                 </ModuleGate>
               }
             />
-            <Route path="/Registration" element={<Navigate to="/registration" replace />} />
+            <Route
+              path="/registration/edit/:id"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate anyPermissions={['registration.create', 'registration:create', 'registration.view', 'registration:view']} fallback={<AccessDenied />}>
+                    <AttendeeEditPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/registration/:id/edit"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate anyPermissions={['registration.create', 'registration:create', 'registration.view', 'registration:view']} fallback={<AccessDenied />}>
+                    <AttendeeEditPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/registration/assign-qr"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate anyPermissions={['registration.create', 'registration:create', 'registration.view', 'registration:view']} fallback={<AccessDenied />}>
+                    <AttendeeAssignQrPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/registration/assign-qr/:id"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate anyPermissions={['registration.create', 'registration:create', 'registration.view', 'registration:view']} fallback={<AccessDenied />}>
+                    <AttendeeAssignQrPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/registration/bulk-qr"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate anyPermissions={['registration.create', 'registration:create', 'registration.view', 'registration:view']} fallback={<AccessDenied />}>
+                    <BulkQrManagementPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route path="/registration/new" element={<Navigate to="/registration/add" replace />} />
 
 
             {/* Dynamic Plugin Routes (Custom Modules) */}

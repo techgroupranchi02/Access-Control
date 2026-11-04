@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 
+import { WarningIcon } from '../components/common/Icons';
 const DAYS = [
   { index: 0, label: 'Day 1 · Opening Night', hasConflict: true },
   { index: 1, label: 'Day 2 · Indie Showcase', hasConflict: false },
@@ -50,13 +51,13 @@ export default function CalendarPage() {
           to="/tasks"
           style={{ textDecoration: 'none', background: 'transparent', color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)', borderRadius: '6px', padding: '6px 16px', fontWeight: 500, fontSize: '0.875rem' }}
         >
-          📋 Tasks Board
+          Tasks Board
         </Link>
         <Link
           to="/schedule"
           style={{ textDecoration: 'none', background: 'var(--color-primary)', color: '#fff', borderRadius: '6px', padding: '6px 16px', fontWeight: 600, fontSize: '0.875rem' }}
         >
-          🗓️ Festival Schedule (Sub-Page)
+          Festival Schedule (Sub-Page)
         </Link>
       </div>
 
@@ -86,7 +87,7 @@ export default function CalendarPage() {
                   width: '7px', 
                   height: '7px', 
                   borderRadius: '50%', 
-                  backgroundColor: '#dc2626', 
+                  backgroundColor: 'var(--fc-danger)', 
                   marginLeft: '6px' 
                 }} 
               />
@@ -110,7 +111,7 @@ export default function CalendarPage() {
             gap: '12px'
           }}
         >
-          <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+          <WarningIcon size={20} style={{ color: 'var(--fc-danger-text)' }} />
           <div>
             <div style={{ fontWeight: 700, color: 'var(--fc-alert-title, #991b1b)', fontSize: '0.875rem' }}>
               CRITICAL LOGISTICS CONFLICT DETECTED
@@ -161,9 +162,9 @@ export default function CalendarPage() {
                           padding: '12px'
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: isConflicted ? '#ef4444' : 'var(--fc-text-muted)', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: isConflicted ? 'var(--fc-danger-text)' : 'var(--fc-text-muted)', fontWeight: 600 }}>
                           <span>{slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}</span>
-                          {isConflicted && <span>⚠️ Conflict</span>}
+                          {isConflicted && <span>Conflict</span>}
                         </div>
                         <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--fc-text-main)', marginTop: '4px' }}>
                           {slot.film_title}

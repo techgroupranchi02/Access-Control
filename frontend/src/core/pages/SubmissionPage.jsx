@@ -47,10 +47,10 @@ import {
 } from '../components/common/Icons';
 
 const STANDARD_FLAGS = [
-  { id: 'flag-high-priority', label: 'High Priority', color: '#e05252' },
-  { id: 'flag-needs-review', label: 'Needs Review', color: '#d97706' },
-  { id: 'flag-strong-contender', label: 'Strong Contender', color: '#10b981' },
-  { id: 'flag-special-interest', label: 'Special Interest', color: '#3b82f6' },
+  { id: 'flag-high-priority', label: 'High Priority', color: 'var(--fc-danger-text)' },
+  { id: 'flag-needs-review', label: 'Needs Review', color: 'var(--fc-warning-text)' },
+  { id: 'flag-strong-contender', label: 'Strong Contender', color: 'var(--fc-success-text)' },
+  { id: 'flag-special-interest', label: 'Special Interest', color: 'var(--fc-info-text)' },
 ];
 
 const DEFAULT_STAGES = [
@@ -210,6 +210,39 @@ export default function SubmissionPage() {
   const [bulkAssignModalOpen, setBulkAssignModalOpen] = useState(false);
   const [flagManagerOpen, setFlagManagerOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+
+  // Mobile Scrollable Scope Tabs State & Logic
+  const scopeTabsRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const checkTabScroll = useCallback(() => {
+    const el = scopeTabsRef.current;
+    if (!el) return;
+    const hasOverflow = el.scrollWidth > el.clientWidth + 4;
+    setCanScrollLeft(el.scrollLeft > 6);
+    setCanScrollRight(hasOverflow && el.scrollLeft < el.scrollWidth - el.clientWidth - 6);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(checkTabScroll, 120);
+    window.addEventListener('resize', checkTabScroll);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', checkTabScroll);
+    };
+  }, [checkTabScroll, submissions.length, counts]);
+
+  // When active tab or route changes, auto-scroll active tab into center view
+  useEffect(() => {
+    if (scopeTabsRef.current) {
+      const activeTab = scopeTabsRef.current.querySelector('.scope-tab-btn.active');
+      if (activeTab) {
+        activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+      setTimeout(checkTabScroll, 350);
+    }
+  }, [activeScope, activeStageId, checkTabScroll]);
 
   const activeStageObj = useMemo(() => {
     return pipelineStepper.find(s => Number(s.id) === Number(activeStageId));
@@ -435,7 +468,7 @@ export default function SubmissionPage() {
     const parts = String(text).split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
     return parts.map((part, i) => 
       part.toLowerCase() === query.toLowerCase() ? (
-        <mark key={i} style={{ background: 'rgba(225, 29, 72, 0.28)', color: 'inherit', padding: '0 2px', borderRadius: '3px' }}>
+        <mark key={i} style={{ background: 'rgba(168, 47, 47, 0.28)', color: 'inherit', padding: '0 2px', borderRadius: '3px' }}>
           {part}
         </mark>
       ) : part
@@ -683,63 +716,70 @@ export default function SubmissionPage() {
       </div>
 
       {/* ── HIGH-LEVEL SCOPE NAVIGATION TABS (All Films, New Submissions, Under Review, Rejected, Activity Log) ── */}
-      <div className="scope-tabs-bar" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeScope === 'all' && !activeStageId}
-          className={`scope-tab-btn ${activeScope === 'all' && !activeStageId ? 'active' : ''}`}
-          onClick={() => navigateToView('/submissions')}
+      <div className={`fc-scope-tabs-container ${canScrollLeft ? 'has-scroll-left' : ''} ${canScrollRight ? 'has-scroll-right' : ''}`}>
+        <div
+          className="scope-tabs-bar"
+          role="tablist"
+          ref={scopeTabsRef}
+          onScroll={checkTabScroll}
         >
-          {isJuryUser ? 'My Assigned Films' : 'All Films'}{' '}
-          <span className="tab-badge">
-            {isJuryUser ? submissions.length : (counts.total != null ? counts.total : submissions.length)}
-          </span>
-        </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeScope === 'all' && !activeStageId}
+            className={`scope-tab-btn ${activeScope === 'all' && !activeStageId ? 'active' : ''}`}
+            onClick={() => navigateToView('/submissions')}
+          >
+            {isJuryUser ? 'My Assigned Films' : 'All Films'}{' '}
+            <span className="tab-badge">
+              {isJuryUser ? submissions.length : (counts.total != null ? counts.total : submissions.length)}
+            </span>
+          </button>
 
-        {!isJuryUser && (
-          <>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeScope === 'submitted' && !activeStageId}
-              className={`scope-tab-btn ${activeScope === 'submitted' && !activeStageId ? 'active' : ''}`}
-              onClick={() => navigateToView('/submissions/new-submissions')}
-            >
-              New Submissions <span className="tab-badge">{counts.submitted != null ? counts.submitted : 0}</span>
-            </button>
+          {!isJuryUser && (
+            <>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeScope === 'submitted' && !activeStageId}
+                className={`scope-tab-btn ${activeScope === 'submitted' && !activeStageId ? 'active' : ''}`}
+                onClick={() => navigateToView('/submissions/new-submissions')}
+              >
+                New Submissions <span className="tab-badge">{counts.submitted != null ? counts.submitted : 0}</span>
+              </button>
 
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeScope === 'under_review' || Boolean(activeStageId)}
-              className={`scope-tab-btn ${activeScope === 'under_review' || activeStageId ? 'active' : ''}`}
-              onClick={() => navigateToView('/submissions/under-review')}
-            >
-              Under Review <span className="tab-badge">{counts.under_review != null ? counts.under_review : 0}</span>
-            </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeScope === 'under_review' || Boolean(activeStageId)}
+                className={`scope-tab-btn ${activeScope === 'under_review' || activeStageId ? 'active' : ''}`}
+                onClick={() => navigateToView('/submissions/under-review')}
+              >
+                Under Review <span className="tab-badge">{counts.under_review != null ? counts.under_review : 0}</span>
+              </button>
 
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeScope === 'rejected' && !activeStageId}
-              className={`scope-tab-btn ${activeScope === 'rejected' && !activeStageId ? 'active' : ''}`}
-              onClick={() => navigateToView('/submissions/rejected')}
-            >
-              Rejected <span className="tab-badge">{counts.rejected != null ? counts.rejected : 0}</span>
-            </button>
-          </>
-        )}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeScope === 'rejected' && !activeStageId}
+                className={`scope-tab-btn ${activeScope === 'rejected' && !activeStageId ? 'active' : ''}`}
+                onClick={() => navigateToView('/submissions/rejected')}
+              >
+                Rejected <span className="tab-badge">{counts.rejected != null ? counts.rejected : 0}</span>
+              </button>
+            </>
+          )}
 
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeScope === 'activity'}
-          className={`scope-tab-btn ${activeScope === 'activity' ? 'active' : ''}`}
-          onClick={() => navigateToView('/submissions/activity')}
-        >
-          Activity Log
-        </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeScope === 'activity'}
+            className={`scope-tab-btn ${activeScope === 'activity' ? 'active' : ''}`}
+            onClick={() => navigateToView('/submissions/activity')}
+          >
+            Activity Log
+          </button>
+        </div>
       </div>
 
       {/* ── 6-STAGE SEQUENTIAL PIPELINE STEPPER (Shifted under Under Review, Hidden for Jury) ── */}
@@ -964,8 +1004,8 @@ export default function SubmissionPage() {
                     fontSize: '11.5px',
                     fontWeight: 600,
                     color: 'var(--fc-brand)',
-                    background: 'rgba(225, 29, 72, 0.1)',
-                    border: '1px solid rgba(225, 29, 72, 0.25)',
+                    background: 'rgba(168, 47, 47, 0.1)',
+                    border: '1px solid rgba(168, 47, 47, 0.25)',
                     padding: '3px 8px',
                     borderRadius: '6px',
                     display: 'inline-flex',
@@ -1128,7 +1168,8 @@ export default function SubmissionPage() {
             No submissions found matching your filters.
           </div>
         ) : (
-          <div style={{ overflowX: 'auto', overflowY: 'hidden' }}>
+          <>
+            <div className="fc-desktop-table-container" style={{ overflowX: 'auto', overflowY: 'hidden' }}>
             <table className="fc-table">
               <thead>
                 <tr>
@@ -1676,6 +1717,308 @@ export default function SubmissionPage() {
               </tbody>
             </table>
           </div>
+
+          {/* ── MOBILE SUBMISSIONS LIST (OPTION 1: FILM CARDS) ─────────────── */}
+          <div className="fc-mobile-submissions-list">
+            {/* Select All Bar on Mobile (Admin only) */}
+            {!isJuryUser && (
+              <div className="fc-mfc-select-all-bar">
+                <label className="fc-mfc-select-all-label">
+                  <input
+                    type="checkbox"
+                    checked={submissions.length > 0 && selectedFilmIds.length === submissions.length}
+                    onChange={handleSelectAll}
+                    style={{ accentColor: 'var(--fc-brand)', width: '17px', height: '17px', cursor: 'pointer' }}
+                  />
+                  <span>Select all ({submissions.length} films)</span>
+                </label>
+                {selectedFilmIds.length > 0 && (
+                  <span className="fc-mfc-selected-badge">
+                    {selectedFilmIds.length} selected
+                  </span>
+                )}
+              </div>
+            )}
+
+            {submissions.map(film => {
+              const isChecked = selectedFilmIds.includes(film.id);
+              const isExpanded = expandedJurorRowIds.has(film.id);
+              const isRejected = film.status === 'Rejected' || String(film.status).toLowerCase() === 'rejected';
+              const rawStage = isRejected ? 'Rejected' : (film.current_stage_name || film.status || 'Round 1: Screening');
+              const stageName = (rawStage === 'Submitted' || rawStage === 'submitted' || rawStage === 'New Submission') ? 'New Submission' : rawStage;
+              const stageClass = getStageStatusClass(stageName);
+              const scoresList = film.jurorScores || [];
+              const completedReviewsCount = scoresList.filter(s => s.status === 'Done' || s.status === 'completed').length;
+              const totalJurorsCount = scoresList.length;
+
+              const isCompletedByMe = Boolean(
+                film.my_review_status === 'Done' ||
+                (film.my_rating && film.my_rating !== '0.0') ||
+                (isJuryUser && film.rating && film.rating !== '0.0' && film.rating !== '0')
+              );
+              const myScoreValue = film.my_rating || (isJuryUser ? film.rating : null);
+
+              const filmStage = pipelineStepper.find(s => 
+                (film.review_state_id && Number(s.id) === Number(film.review_state_id)) ||
+                (film.current_stage_name && (s.unique_name || '').toLowerCase() === film.current_stage_name.toLowerCase()) ||
+                (film.status && (s.unique_name || '').toLowerCase() === film.status.toLowerCase())
+              );
+              const isNoJuryStage = Boolean(
+                film.is_no_jury_stage ||
+                film.jury_assignment_mode === 'none' ||
+                filmStage?.jury_assignment_mode === 'none' ||
+                film.status === 'Winner' ||
+                film.current_stage_name === 'Winner'
+              );
+
+              const resolvedFlag =
+                (flags && flags.find(f => f.id === film.flag_id)) ||
+                STANDARD_FLAGS.find(f => f.id === film.flag_id);
+              const flagLabel = film.flag_label || resolvedFlag?.label;
+              const flagColor = film.flag_color || resolvedFlag?.color || '#3b82f6';
+
+              return (
+                <div
+                  key={`m-film-${film.id}`}
+                  className={`fc-mobile-film-card ${isChecked ? 'selected' : ''} ${isRejected ? 'fc-rejected-film-card' : ''}`}
+                  onClick={() => {
+                    if (isJuryUser) {
+                      navigate(`/submissions/${film.id}/review`);
+                    } else {
+                      handleOpenDetails(film);
+                    }
+                  }}
+                >
+                  {/* Top Row: Checkbox, Title, and Category */}
+                  <div className="fc-mfc-header">
+                    <div className="fc-mfc-title-group">
+                      {!isJuryUser && (
+                        <div className="fc-mfc-checkbox" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleSelectRow(film.id)}
+                            style={{ accentColor: 'var(--fc-brand)', width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                        </div>
+                      )}
+                      <div className="fc-mfc-title-wrap">
+                        <div className="fc-mfc-title">
+                          {isRejected && <CancelIcon size={14} style={{ color: '#ef4444', flexShrink: 0, marginRight: '4px', verticalAlign: 'middle' }} />}
+                          {highlightMatch(film.title, search)}
+                        </div>
+                        <div className="fc-mfc-director">
+                          Dir. {highlightMatch(film.director || 'Filmmaker', search)} · {highlightMatch(film.country || 'India', search)} · {film.runtime ? `${film.runtime}m` : '15m'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Category Pill */}
+                    <span className="fc-category-pill fc-mfc-category">
+                      {film.category || 'Short Film'}
+                    </span>
+                  </div>
+
+                  {/* Rejection Note */}
+                  {isRejected && film.rejection_reason && (
+                    <div className="fc-mfc-rejection-box">
+                      <span style={{ fontWeight: 700 }}>Reason:</span> {highlightMatch(film.rejection_reason, search)}
+                    </div>
+                  )}
+
+                  {/* Metadata Strip: Stage, Score, Flag */}
+                  <div className="fc-mfc-meta-strip">
+                    <div className="fc-mfc-meta-item">
+                      <span className="fc-mfc-meta-label">Stage</span>
+                      {isRejected ? (
+                        <span className="fc-status-pill status-rejected">
+                          <CancelIcon size={11} /> Rejected
+                        </span>
+                      ) : (
+                        <span className={`fc-status-pill ${stageClass}`}>
+                          {stageName}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="fc-mfc-meta-item">
+                      <span className="fc-mfc-meta-label">Score</span>
+                      {isJuryUser ? (
+                        isCompletedByMe && myScoreValue ? (
+                          <span className="fc-mfc-score-value">
+                            ★ {parseFloat(myScoreValue).toFixed(1)} <small>/ 5</small>
+                          </span>
+                        ) : (
+                          <span className="fc-mfc-unrated">Not Rated</span>
+                        )
+                      ) : (
+                        film.rating ? (
+                          <span className="fc-mfc-score-value">
+                            ★ {parseFloat(film.rating).toFixed(1)} <small>/ 5</small>
+                          </span>
+                        ) : (
+                          <span className="fc-mfc-unrated">Unrated</span>
+                        )
+                      )}
+                    </div>
+
+                    {flagLabel && (
+                      <div className="fc-mfc-meta-item">
+                        <span className="fc-mfc-meta-label">Flag</span>
+                        <span
+                          className="fc-flag-indicator"
+                          style={{
+                            backgroundColor: `${flagColor}18`,
+                            color: flagColor,
+                            borderColor: `${flagColor}40`,
+                            fontSize: '11px',
+                            padding: '2px 8px'
+                          }}
+                        >
+                          {flagLabel}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Jury Evaluation Section */}
+                  <div className="fc-mfc-jury-section" onClick={e => e.stopPropagation()}>
+                    {isJuryUser ? (
+                      <div className="fc-mfc-jury-status">
+                        {isCompletedByMe ? (
+                          <span className="fc-eval-status-badge completed">
+                            <CheckCircleIcon size={13} /> Evaluation Completed
+                          </span>
+                        ) : (
+                          <span className="fc-eval-status-badge pending">
+                            <ScheduleIcon size={13} /> Pending Your Review
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="fc-mfc-jury-admin">
+                        {isRejected ? (
+                          totalJurorsCount > 0 ? (
+                            <button
+                              type="button"
+                              className="fc-btn-subtle fc-mfc-breakdown-btn"
+                              onClick={() => toggleJurorExpand(film.id)}
+                            >
+                              <PlayArrowIcon size={12} style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                              <span>{isExpanded ? 'Hide Jurors' : `Juror Breakdown (${completedReviewsCount}/${totalJurorsCount})`}</span>
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#b91c1c', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <CancelIcon size={12} /> Evaluation Closed
+                            </span>
+                          )
+                        ) : isNoJuryStage ? (
+                          <span className="fc-mfc-admin-only">
+                            <LockIcon size={11} style={{ opacity: 0.7 }} /> Admin-Only Stage
+                          </span>
+                        ) : totalJurorsCount > 0 ? (
+                          <button
+                            type="button"
+                            className="fc-btn-subtle fc-mfc-breakdown-btn"
+                            onClick={() => toggleJurorExpand(film.id)}
+                          >
+                            <PlayArrowIcon size={12} style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+                            <span>{isExpanded ? 'Hide Jurors' : `Juror Breakdown (${completedReviewsCount}/${totalJurorsCount})`}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="fc-assign-action-btn"
+                            onClick={() => {
+                              setSelectedFilmIds([film.id]);
+                              setBulkAssignModalOpen(true);
+                            }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <AddIcon size={13} />
+                            <span>Assign Jury</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Expandable Juror Breakdown (Admin only) */}
+                  {!isJuryUser && isExpanded && scoresList.length > 0 && (
+                    <div className="fc-mfc-juror-matrix" onClick={e => e.stopPropagation()}>
+                      <div className="fc-mfc-juror-matrix-title">
+                        Juror Evaluations ({completedReviewsCount}/${totalJurorsCount})
+                      </div>
+                      <div className="fc-mfc-juror-cards">
+                        {scoresList.map((juror, jIdx) => (
+                          <div key={jIdx} className="fc-mfc-juror-card">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                              <div className="fc-mfc-juror-avatar">
+                                {(juror.name || juror.email || 'J')[0].toUpperCase()}
+                              </div>
+                              <div className="fc-mfc-juror-info">
+                                <span className="fc-mfc-juror-name">{juror.name || juror.email}</span>
+                                <span className="fc-mfc-juror-stage">{juror.stage_name || 'Screening'}</span>
+                              </div>
+                            </div>
+                            <span className={`fc-eval-status-badge ${juror.status === 'Done' ? 'completed' : 'pending'}`}>
+                              {juror.status === 'Done' ? `★ ${juror.rating || 'Done'}` : 'Pending'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Card Actions Footer */}
+                  <div className="fc-mfc-actions-bar" onClick={e => e.stopPropagation()}>
+                    {isJuryUser ? (
+                      <button
+                        type="button"
+                        className="fc-btn fc-btn-primary fc-btn-sm fc-mfc-action-btn"
+                        onClick={() => navigate(`/submissions/${film.id}/review`)}
+                      >
+                        <StarIcon size={13} style={{ color: '#eab308' }} />
+                        <span>{isCompletedByMe ? 'Edit Review' : 'Rate & Review'}</span>
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="fc-btn fc-btn-outline fc-btn-sm fc-mfc-action-btn"
+                          onClick={() => handleOpenDetails(film)}
+                        >
+                          View Details
+                        </button>
+
+                        {!isRejected && stageName !== 'Winner' && (
+                          <button
+                            type="button"
+                            className="fc-btn fc-btn-primary fc-btn-sm fc-mfc-action-btn"
+                            onClick={() => setAdvancingFilm(film)}
+                          >
+                            <FlashOnIcon size={13} />
+                            <span>Advance</span>
+                          </button>
+                        )}
+
+                        {!isRejected && (
+                          <button
+                            type="button"
+                            className="fc-btn fc-btn-danger-light fc-btn-sm fc-mfc-action-btn"
+                            onClick={() => setRejectingFilm(film)}
+                          >
+                            Reject
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
       </div>
       </>

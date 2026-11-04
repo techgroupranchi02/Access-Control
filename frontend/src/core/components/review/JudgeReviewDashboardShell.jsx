@@ -301,7 +301,7 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
                       )}
                     </div>
                     <div className="fc-judge-queue-film-meta">
-                      <span style={{ fontWeight: 600, color: '#2563eb' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--fc-info-text)' }}>
                         Jury: {item.jury_name || item.judge_name || 'Jury Member'}
                       </span>
                       {' · '}{item.director || 'Filmmaker'} · {item.category || 'Short Film'} · {item.runtime ? `${item.runtime} min` : '15 min'}
@@ -332,7 +332,7 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
                   <div className="fc-judge-form-title">Round {activeRound} Review</div>
                   <div className="fc-judge-form-subtitle">
                     <span>{selectedAssignment.title} · {selectedAssignment.director || 'Filmmaker'}</span>
-                    <span style={{ marginLeft: '10px', padding: '3px 10px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', fontWeight: 600, fontSize: '0.82rem' }}>
+                    <span style={{ marginLeft: '10px', padding: '3px 10px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--fc-info-text)', fontWeight: 600, fontSize: '0.82rem' }}>
                       Jury: {selectedAssignment.jury_name || selectedAssignment.judge_name || 'Jury Member'}
                     </span>
                   </div>
@@ -360,7 +360,7 @@ export default function JudgeReviewDashboardShell({ onSwitchToAdmin }) {
                   </div>
                   <div className="fc-overall-stars-val">
                     <span className="fc-overall-num">{overallRating}</span>
-                    <span className="fc-overall-stars" style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: '#eab308' }}>
+                    <span className="fc-overall-stars" style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', color: 'var(--fc-warning-text)' }}>
                       {[1, 2, 3, 4, 5].map((s) => (
                         s <= Math.round(overallRating)
                           ? <StarIcon key={s} size={16} />
