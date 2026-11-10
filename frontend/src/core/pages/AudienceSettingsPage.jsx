@@ -2027,7 +2027,7 @@ export default function AudienceSettingsPage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div className="fc-sp-actions" style={{ display: 'flex', gap: '10px' }}>
           {activeTab === 'categories' && (
             <button 
               className="fc-btn fc-btn-primary" 
@@ -2101,7 +2101,7 @@ export default function AudienceSettingsPage() {
       </div>
 
       {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid var(--fc-border)', marginBottom: '24px' }}>
+      <div className="fc-sp-tabs" style={{ display: 'flex', gap: '8px', borderBottom: '2px solid var(--fc-border)', marginBottom: '24px' }}>
         <button
           onClick={() => setActiveTab('form_builder')}
           style={{
@@ -2296,7 +2296,7 @@ export default function AudienceSettingsPage() {
           </div>
 
           {/* Public Self-Registration Master Control Card */}
-          <div style={{
+          <div className="fc-as-public-card" style={{
             background: settings.delegate_registration_enabled ? 'rgba(16, 185, 129, 0.05)' : 'var(--fc-surface-card)',
             border: settings.delegate_registration_enabled ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid var(--fc-border)',
             borderRadius: '12px',
@@ -2405,6 +2405,7 @@ export default function AudienceSettingsPage() {
             transition: 'all 0.15s ease'
           }}>
             <div
+              className="fc-sp-acc-head"
               onClick={() => toggleAccordion('templates')}
               style={{
                 padding: '14px 18px',
@@ -2554,6 +2555,7 @@ export default function AudienceSettingsPage() {
             transition: 'all 0.15s ease'
           }}>
             <div
+              className="fc-sp-acc-head"
               onClick={() => toggleAccordion('header')}
               style={{
                 padding: '14px 18px',
@@ -2662,6 +2664,7 @@ export default function AudienceSettingsPage() {
             transition: 'all 0.15s ease'
           }}>
             <div
+              className="fc-sp-acc-head"
               onClick={() => toggleAccordion('policy')}
               style={{
                 padding: '14px 18px',
@@ -2851,6 +2854,7 @@ export default function AudienceSettingsPage() {
             transition: 'all 0.15s ease'
           }}>
             <div
+              className="fc-sp-acc-head"
               onClick={() => toggleAccordion('venue')}
               style={{
                 padding: '14px 18px',
@@ -2998,6 +3002,7 @@ export default function AudienceSettingsPage() {
             transition: 'all 0.15s ease'
           }}>
             <div
+              className="fc-sp-acc-head"
               onClick={() => toggleAccordion('faqs')}
               style={{
                 padding: '14px 18px',
@@ -3165,6 +3170,7 @@ export default function AudienceSettingsPage() {
                           }}
                         >
                           <div
+                            className="fc-as-faq-head"
                             onClick={() => setExpandedFaqIndex(isFaqExpanded ? null : fIdx)}
                             style={{
                               padding: '10px 14px',
@@ -3306,6 +3312,7 @@ export default function AudienceSettingsPage() {
             transition: 'all 0.15s ease'
           }}>
             <div
+              className="fc-sp-acc-head"
               onClick={() => toggleAccordion('fields')}
               style={{
                 padding: '14px 18px',
@@ -3456,6 +3463,7 @@ export default function AudienceSettingsPage() {
                               <input
                                 type="text"
                                 value={field.label}
+                                className="fc-as-field-label"
                                 onChange={(e) => handleFieldLabelChange(index, e.target.value)}
                                 style={{
                                   fontWeight: 700,

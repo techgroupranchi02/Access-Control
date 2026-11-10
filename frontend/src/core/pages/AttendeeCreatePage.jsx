@@ -976,7 +976,7 @@ export default function AttendeeCreatePage() {
               )}
 
               {/* Form Action Buttons */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--fc-border)' }}>
+              <div className="fc-form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--fc-border)' }}>
                 <button
                   type="button"
                   onClick={() => (canViewRoster ? navigate('/audience') : resetForm())}

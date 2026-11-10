@@ -2033,12 +2033,12 @@ export default function SubmissionPage() {
           <div className="floating-bulk-bar">
             <div className="floating-bulk-count">
               <span className="floating-badge">{selectedFilmIds.length}</span>
-              <span>Films Selected</span>
+              <span>{selectedFilmIds.length === 1 ? 'Film' : 'Films'} Selected</span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="floating-bulk-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               {allSelectedRejected ? (
-                <span style={{ fontSize: '12px', color: '#fca5a5', fontWeight: 600 }}>
+                <span style={{ fontSize: '12px', color: 'var(--fc-danger-text)', fontWeight: 600 }}>
                   Selected films are rejected (No jury or advancement actions)
                 </span>
               ) : (
@@ -2104,8 +2104,7 @@ export default function SubmissionPage() {
 
               <button
                 type="button"
-                className="fc-btn fc-btn-outline fc-btn-sm"
-                style={{ background: '#292524', color: '#e7e5e4', borderColor: '#44403c' }}
+                className="fc-btn fc-btn-outline fc-btn-sm floating-bulk-clear"
                 onClick={() => setSelectedFilmIds([])}
               >
                 Clear

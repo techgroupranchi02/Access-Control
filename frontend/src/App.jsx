@@ -398,7 +398,7 @@ function App() {
 
             {/* Team & Access Control (Core) */}
             <Route
-              path="/team"
+              path="/team/*"
               element={
                 <ModuleGate module="team" fallback={<AccessDenied module="team" />}>
                   <PermissionGate anyPermissions={['team.view', 'team:view', 'team.manage', 'team:manage']} fallback={<AccessDenied />}>

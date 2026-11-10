@@ -252,7 +252,9 @@ a:hover {
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.4s ease forwards;
+  /* No "forwards": a filled transform (even identity) turns this wrapper into the containing block for
+     position:fixed children, so bottom bars/drawers inside the page get pinned to the page end, not the screen. */
+  animation: fadeIn 0.4s ease;
 }
 
 .animate-slide-in {
@@ -11334,17 +11336,17 @@ body.dark-theme .fc-perm-group-summary-sub,
       bottom: 24px;
       left: 50%;
       transform: translateX(-50%);
-      background: #1c1917;
-      color: #fff;
+      background: var(--fc-surface-card);
+      color: var(--fc-text-main);
       padding: 12px 24px;
       border-radius: 14px;
-      box-shadow: 0 12px 36px rgba(0,0,0,0.35);
+      box-shadow: 0 12px 32px rgba(28, 25, 23, 0.16), 0 2px 6px rgba(28, 25, 23, 0.06);
       display: flex;
       align-items: center;
       gap: 20px;
       z-index: 999;
       animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-      border: 1px solid #44403c;
+      border: 1px solid var(--fc-border);
     }
     @keyframes slideUp {
       from { transform: translate(-50%, 60px); opacity: 0; }
@@ -11353,7 +11355,7 @@ body.dark-theme .fc-perm-group-summary-sub,
     .floating-bulk-count {
       font-size: 13px;
       font-weight: 700;
-      color: #f5f5f4;
+      color: var(--fc-text-main);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -15258,31 +15260,42 @@ body:not(.dark-theme):not([data-theme="dark"]) .fc-console-auth-disclaimer stron
     padding: 6px 10px !important;
   }
 
-  /* Floating Bulk Bar on mobile */
+  /* Floating Bulk Bar on mobile: header row (count + Clear link), then equal one-line action buttons */
   .floating-bulk-bar {
-    width: calc(100% - 24px) !important;
-    max-width: 480px !important;
-    left: 12px !important;
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: none !important;
     transform: none !important;
-    bottom: 12px !important;
-    padding: 10px 14px !important;
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 10px !important;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 12px !important;
+    border-radius: 16px !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center !important;
+    gap: 10px 8px !important;
+    animation: fcBulkBarUp 0.22s ease !important;
   }
-
-  .floating-bulk-bar > div:last-child {
-    display: flex !important;
-    gap: 6px !important;
-    width: 100% !important;
+  .floating-bulk-bar .floating-bulk-actions { display: contents !important; }
+  .floating-bulk-bar .floating-bulk-count { grid-row: 1; grid-column: 1; font-size: 13px !important; }
+  .floating-bulk-bar .floating-bulk-clear {
+    grid-row: 1; grid-column: 2; justify-self: end;
+    background: transparent !important; border: none !important; box-shadow: none !important;
+    color: var(--fc-text-secondary) !important; padding: 4px 6px !important; min-height: 0 !important;
+    font-size: 13px !important; font-weight: 600 !important; text-decoration: underline; text-underline-offset: 3px;
   }
-
-  .floating-bulk-bar > div:last-child button {
-    flex: 1 !important;
+  .floating-bulk-bar .floating-bulk-actions > button:not(.floating-bulk-clear) {
+    width: 100%; min-width: 0; height: 42px;
     justify-content: center !important;
-    padding: 7px 10px !important;
-    font-size: 0.78rem !important;
+    padding: 0 10px !important;
+    border-radius: 10px !important;
+    font-size: 13px !important;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
+  /* Odd number of action buttons (e.g. Assign Jury + Advance + Reject): the last one takes the full row */
+  .floating-bulk-bar .floating-bulk-actions > button:nth-last-child(2):nth-child(odd) { grid-column: 1 / -1; }
+  /* "Selected films are rejected" note spans the row */
+  .floating-bulk-bar .floating-bulk-actions > span { grid-column: 1 / -1; font-size: 12px !important; }
 }
 
 /* ── Print Utilities ──────────────────────────────────────────────── */
@@ -15339,4 +15352,679 @@ body:not(.dark-theme):not([data-theme="dark"]) .fc-console-auth-disclaimer stron
 .fc-select:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--fc-focus-ring);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE (≤ 640px): Audience list, Attendance, Add Attendee, Settings → Audience
+   Tables become stacked cards; toolbars and action rows go full width.
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  /* Audience list toolbar: search on its own row, Filters + Export side by side */
+  .fc-reg-toolbar {
+    flex: 1 1 100% !important;
+    flex-wrap: wrap !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100%;
+  }
+  .fc-reg-toolbar > :first-child { flex: 1 1 100% !important; }
+  .fc-reg-toolbar > button { flex: 1 1 0; justify-content: center; }
+
+  /* Delegate table → one card per delegate */
+  .fc-delegate-table thead { display: none; }
+  .fc-delegate-table,
+  .fc-delegate-table tbody { display: block; width: 100%; }
+  .fc-delegate-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name    actions"
+      "cat     status"
+      "contact contact";
+    gap: 6px 12px;
+    padding: 12px 4px;
+    align-items: center;
+  }
+  .fc-delegate-table td { padding: 0 !important; text-align: left !important; white-space: normal !important; }
+  .fc-delegate-table .fc-dt-name    { grid-area: name; }
+  .fc-delegate-table .fc-dt-cat     { grid-area: cat; }
+  .fc-delegate-table .fc-dt-status  { grid-area: status; justify-self: end; }
+  .fc-delegate-table .fc-dt-contact { grid-area: contact; font-size: 0.82rem; }
+  .fc-delegate-table .fc-dt-contact > div { display: inline; }
+  .fc-delegate-table .fc-dt-contact > div + div::before { content: " · "; color: var(--fc-text-muted); }
+  .fc-delegate-table .fc-dt-actions { grid-area: actions; justify-self: end; }
+
+  /* Venue Checkins table → compact cards */
+  .fc-checkin-table thead { display: none; }
+  .fc-checkin-table,
+  .fc-checkin-table tbody { display: block; width: 100%; }
+  .fc-checkin-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name time"
+      "cat  status"
+      "by   by";
+    gap: 4px 12px;
+    padding: 10px 2px;
+    align-items: center;
+  }
+  .fc-checkin-table td { padding: 0 !important; }
+  .fc-checkin-table .fc-ct-name   { grid-area: name; }
+  .fc-checkin-table .fc-ct-time   { grid-area: time; justify-self: end; font-size: 0.8rem; white-space: nowrap; }
+  .fc-checkin-table .fc-ct-cat    { grid-area: cat; }
+  .fc-checkin-table .fc-ct-status { grid-area: status; justify-self: end; font-size: 0.8rem; }
+  .fc-checkin-table .fc-ct-by     { grid-area: by; font-size: 0.75rem; }
+  .fc-checkin-table .fc-ct-by::before { content: "Scanned by "; }
+
+  /* Form action rows (Add Attendee): main action on top, full width */
+  .fc-form-actions { flex-direction: column-reverse; align-items: stretch !important; }
+  .fc-form-actions > button { width: 100%; padding-left: 16px !important; padding-right: 16px !important; }
+
+  /* Settings → Audience: header buttons full width, tabs scroll sideways, lighter accordion heads */
+  .fc-sp-actions { width: 100%; flex-direction: column; }
+  .fc-sp-actions > button { width: 100%; justify-content: center; white-space: nowrap; }
+  .fc-sp-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .fc-sp-tabs::-webkit-scrollbar { display: none; }
+  .fc-sp-tabs > button { white-space: nowrap; flex-shrink: 0; padding: 10px 12px !important; font-size: 0.88rem !important; }
+  .fc-sp-acc-head { padding: 12px !important; gap: 10px; align-items: flex-start !important; }
+  .fc-sp-acc-head > div:first-child { gap: 0 !important; min-width: 0; }
+  .fc-sp-acc-head > div:first-child > div:first-child { display: none !important; }
+  .fc-sp-acc-head > :last-child { flex-shrink: 0; }
+  .fc-audience-page > .fc-page-header { gap: 12px !important; }
+  .fc-audience-page .fc-page-title { font-size: 1.5rem !important; line-height: 1.2; }
+
+  /* Public self-registration card: compact icon, toggle sits on its own row */
+  .fc-as-public-card { padding: 14px !important; gap: 12px !important; }
+  .fc-as-public-card > div:first-child { align-items: flex-start !important; gap: 12px !important; }
+  .fc-as-public-card > div:first-child > div:first-child { width: 36px !important; height: 36px !important; }
+
+  /* FAQ editor rows: question on its own line, controls underneath */
+  .fc-as-faq-head { flex-wrap: wrap; padding: 10px 12px !important; gap: 8px !important; }
+  .fc-as-faq-head > input { flex: 1 1 calc(100% - 52px) !important; min-width: 0; }
+  .fc-as-faq-head > div { margin-left: auto; order: 3; }
+  .fc-as-faq-head > span:last-child { order: 2; margin-left: 0 !important; }
+
+  /* Form question rows: label input uses the full width */
+  .fc-as-field-label { width: 100% !important; min-width: 0; box-sizing: border-box; font-size: 0.88rem !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE SHELL: use the *visible* viewport height (dvh), not 100vh.
+   On phones 100vh includes the area behind the browser's address/tool bars, so the
+   sidebar footer (profile + theme toggle) sat off-screen and the drawer could not scroll.
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .fc-app-layout {
+    height: 100vh !important;
+    height: 100dvh !important;
+  }
+  .fc-sidebar.is-mobile-open {
+    height: auto !important;
+    max-height: none !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)) !important;
+    overscroll-behavior: contain;
+  }
+  /* Don't let the nav stretch past the visible height; Settings + footer follow it and scroll */
+  .fc-sidebar.is-mobile-open .fc-nav { flex: 0 0 auto !important; }
+  .fc-sidebar.is-mobile-open .fc-user-footer { margin-top: 16px !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE (≤ 640px): Audience page header + tabs
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .fc-registration-page .fc-page-header > div:last-child { width: 100%; flex-direction: column; align-items: stretch !important; }
+  .fc-registration-page .fc-page-header > div:last-child > button { width: 100%; justify-content: center; }
+
+  /* Three equal tabs, count under the label, so all three are visible without sideways scrolling */
+  .fc-registration-page .fc-scope-tabs-container .scope-tabs-bar { gap: 0 !important; padding: 0 !important; overflow-x: visible !important; width: 100% !important; margin-bottom: 0 !important; }
+  .fc-registration-page .fc-scope-tabs-container .scope-tab-btn {
+    flex: 1 1 0 !important;
+    display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    padding: 8px 2px 10px !important;
+    font-size: 0.74rem !important;
+    letter-spacing: 0 !important;
+    white-space: nowrap !important;
+    text-align: center !important;
+    min-width: 0 !important;
+    overflow: hidden;
+  }
+  .fc-registration-page .fc-scope-tabs-container .scope-tab-btn .tab-badge { margin-left: 0 !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE (≤ 640px): Bulk QR Stock
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  /* Header: smaller title, icon inline, Assign button full width */
+  .fc-bq-header h1 { font-size: 1.35rem !important; align-items: flex-start !important; gap: 8px !important; line-height: 1.25; }
+  .fc-bq-header h1 svg { width: 20px; height: 20px; margin-top: 4px; flex-shrink: 0; }
+  .fc-bq-header > div:last-child { width: 100%; }
+  .fc-bq-header > div:last-child > button { width: 100%; justify-content: center; }
+
+  /* Generator: label row, 3-column quantity chips, full-width Generate, Print + Export side by side */
+  .fc-bq-tools { padding: 16px !important; }
+  .fc-bq-batch {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px !important;
+    width: 100%;
+  }
+  .fc-bq-batch > span { grid-column: 1 / -1; }
+  .fc-bq-batch > button,
+  .fc-bq-batch > input { width: 100% !important; min-width: 0 !important; justify-content: center; box-sizing: border-box; }
+  .fc-bq-batch > input { grid-column: span 1; }
+  .fc-bq-batch > button:last-child { grid-column: 1 / -1; }
+  .fc-bq-actions { width: 100%; }
+  .fc-bq-actions > button { flex: 1 1 0; justify-content: center; white-space: nowrap; padding-left: 10px !important; padding-right: 10px !important; font-size: 0.82rem !important; }
+
+  /* Tabs: three equal tabs with the count under each label; search full width */
+  .fc-bq-filterbar { flex-direction: column; align-items: stretch !important; gap: 10px !important; }
+  .fc-bq-tabs { gap: 0 !important; padding: 0 !important; width: 100%; overflow-x: visible !important; }
+  .fc-bq-tabs .scope-tab-btn {
+    flex: 1 1 0 !important;
+    display: inline-flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 4px !important;
+    padding: 8px 2px 10px !important;
+    font-size: 0.78rem !important;
+    white-space: nowrap !important;
+    min-width: 0 !important;
+  }
+  .fc-bq-tabs .scope-tab-btn .tab-badge { margin-left: 0 !important; }
+  .fc-bq-search { flex: 1 1 auto !important; min-width: 0 !important; width: 100%; }
+  .fc-bq-search > div { max-width: none !important; }
+
+  /* Badge grid: 2 compact cards per row */
+  .fc-bq-pool { padding: 12px !important; }
+  .fc-bq-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
+  .fc-bq-card { padding: 10px 8px !important; }
+  .fc-bq-card svg[aria-label="QR code"] { width: 100% !important; height: auto !important; max-width: 112px; margin: 0 auto; }
+  .fc-bq-card button { font-size: 0.75rem !important; padding: 6px 4px !important; }
+}
+
+/* Bulk QR Stock pagination on phones: info and row options stacked, page buttons wrap and stay on screen */
+@media (max-width: 640px) {
+  .fc-bq-pager { flex-direction: column; align-items: stretch !important; }
+  .fc-bq-pages { flex-wrap: wrap; justify-content: center; }
+  .fc-bq-pages > button { min-width: 36px; padding: 6px 10px !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE (≤ 640px): Registration → Assign QR
+   Desk order on a phone: find & select the delegate → selected delegate → scan/pair badge → protocol.
+   ══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .fc-aq-grid { display: flex !important; flex-direction: column; align-items: stretch !important; gap: 16px !important; }
+  .fc-aq-grid > .fc-aq-col > * { width: 100%; box-sizing: border-box; }
+  .fc-aq-col { display: contents !important; }
+  .fc-aq-roster   { order: 1; }
+  .fc-aq-target   { order: 2; }
+  .fc-aq-scanner  { order: 3; scroll-margin-top: 76px; }
+  .fc-aq-protocol { order: 4; }
+  .fc-aq-target.is-empty { display: none !important; }
+
+  .fc-aq-roster, .fc-aq-target, .fc-aq-scanner { padding: 16px !important; }
+
+  /* Badge number box full width, Pair Badge underneath */
+  .fc-aq-code-row { flex-direction: column; }
+  .fc-aq-code-row > button { width: 100%; min-height: 44px; }
+  .fc-aq-code-row input { font-size: 1rem !important; }
+
+  /* Roster status pill on one line */
+  .fc-aq-pill { white-space: nowrap; font-size: 0.66rem !important; padding: 2px 6px !important; }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   MOBILE (≤ 640px): Team: header buttons, filters, member cards
+   ────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .fc-team-page .fc-page-header { flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 14px; }
+  .fc-team-page .fc-page-title { font-size: 1.5rem; }
+  .fc-team-page .fc-header-actions { width: 100%; }
+  .fc-team-page .fc-header-actions > button { flex: 1 1 0; min-width: 0; justify-content: center; white-space: nowrap; padding-left: 10px; padding-right: 10px; }
+  .fc-team-page .fc-header-actions > button > span { justify-content: center; }
+
+  .fc-team-page .fc-team-toolbar { gap: 10px !important; margin-bottom: 12px !important; }
+  /* Group filters: one swipeable row instead of wrapping lines */
+  .fc-team-page .fc-team-toolbar .fc-dept-pills { flex-wrap: nowrap; overflow-x: auto; width: 100%; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .fc-team-page .fc-team-toolbar .fc-dept-pills::-webkit-scrollbar { display: none; }
+  .fc-team-page .fc-team-toolbar .fc-dept-pill { flex: 0 0 auto; white-space: nowrap; }
+  .fc-team-page .fc-team-search { max-width: none !important; min-width: 0 !important; width: 100%; flex: 1 1 100% !important; }
+
+  /* Table → one card per member */
+  .fc-team-page .fc-table-card { background: transparent; border: none; box-shadow: none; overflow: visible; }
+  .fc-team-table, .fc-team-table tbody { display: block; width: 100%; }
+  .fc-team-table thead { display: none; }
+  .fc-team-table tr.fc-tm-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "member group" "perms perms" "actions actions";
+    gap: 10px 12px;
+    padding: 14px;
+    margin-bottom: 10px;
+    background: var(--fc-surface-card);
+    border: 1px solid var(--fc-border);
+    border-radius: 12px;
+  }
+  .fc-team-table tbody tr.fc-tm-row:hover { background: var(--fc-surface-card); }
+  .fc-team-table tr.fc-tm-row > td { display: block; padding: 0 !important; border: none !important; text-align: left !important; min-width: 0; }
+  .fc-team-table .fc-tm-member { grid-area: member; }
+  .fc-team-table .fc-tm-member .fc-member-email { overflow-wrap: anywhere; }
+  .fc-team-table .fc-tm-group { grid-area: group; align-self: start; }
+  .fc-team-table .fc-tm-perms { grid-area: perms; }
+  .fc-team-table .fc-tm-actions { grid-area: actions; padding-top: 10px !important; border-top: 1px solid var(--fc-border-subtle) !important; }
+  .fc-team-table .fc-tm-actions .fc-actions-group { display: flex; gap: 8px; justify-content: stretch; }
+  .fc-team-table .fc-tm-actions .fc-action-btn { flex: 1 1 0; padding-top: 8px; padding-bottom: 8px; text-align: center; }
+
+  /* Expanded permission preview sits under its card */
+  .fc-team-table tr.fc-member-expanded-row { display: block; margin: -6px 0 10px; }
+  .fc-team-table tr.fc-member-expanded-row > td { display: block; padding: 12px !important; border: 1px solid var(--fc-border) !important; border-radius: 12px; }
+  .fc-team-table .fc-tm-expanded-head { flex-wrap: wrap; }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Team → Add Team Member page (/team/add): steps on the left, sticky summary on the right
+   ────────────────────────────────────────────────────────────── */
+.fc-team-add-page { max-width: 1180px; }
+.fc-team-add-crumbs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--fc-text-secondary); margin-bottom: 16px; }
+.fc-team-add-crumbs a { color: var(--fc-text-secondary); text-decoration: none; }
+.fc-team-add-crumbs a:hover { color: var(--fc-text-main); text-decoration: underline; }
+.fc-team-add-crumbs [aria-current="page"] { color: var(--fc-brand-text); font-weight: 700; }
+
+.fc-team-add-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+.fc-team-add-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.fc-team-add-step { padding: 20px 22px !important; overflow: visible; }
+
+.fc-team-add-step-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.fc-team-add-step-head h2 { margin: 0; font-size: 1rem; font-weight: 700; color: var(--fc-text-main); }
+.fc-team-add-step-head p { margin: 3px 0 0; font-size: 0.8rem; color: var(--fc-text-muted); line-height: 1.45; }
+.fc-team-add-step-no {
+  flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--fc-brand-active-bg); color: var(--fc-brand-text);
+  font-size: 0.78rem; font-weight: 700;
+}
+
+/* Step 2: the cards themselves show what's picked, so drop the picker's own heading and chip row */
+.fc-team-add-page .fc-multi-group-picker > div:first-child,
+.fc-team-add-page .fc-group-chips-row { display: none !important; }
+.fc-team-add-page .fc-group-cards-grid { max-height: none; overflow: visible; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+/* Step 3: folded permission preview */
+.fc-team-add-perm-toggle { width: 100%; margin: 0; padding: 0; background: none; border: none; text-align: left; cursor: pointer; font-family: var(--font-family); color: inherit; }
+.fc-team-add-perm-toggle-label { display: inline-flex; align-items: center; gap: 2px; font-size: 0.8rem; font-weight: 600; color: var(--fc-brand-text); white-space: nowrap; align-self: center; }
+.fc-team-add-perms { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--fc-border-subtle); }
+.fc-team-add-perms .fc-perm-section-header,
+.fc-team-add-perms .fc-perm-readonly-banner { display: none; }
+.fc-team-add-perms .fc-perm-modules-container { max-height: none; overflow: visible; padding-right: 0; }
+
+/* Summary */
+.fc-team-add-summary { position: sticky; top: 16px; padding: 20px !important; display: flex; flex-direction: column; gap: 16px; }
+.fc-team-add-summary h3 { margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--fc-text-main); }
+.fc-tas-row { display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; border-bottom: 1px solid var(--fc-border-subtle); }
+.fc-tas-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fc-text-muted); }
+.fc-tas-person { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.fc-tas-name { font-size: 0.9rem; font-weight: 600; color: var(--fc-text-main); overflow-wrap: anywhere; }
+.fc-tas-sub { display: block; font-size: 0.76rem; font-weight: 400; color: var(--fc-text-muted); overflow-wrap: anywhere; }
+.fc-tas-empty { font-size: 0.82rem; color: var(--fc-text-muted); }
+.fc-tas-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fc-tas-chip { font-size: 0.75rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: var(--fc-brand-active-bg); color: var(--fc-brand-text); }
+.fc-tas-bar { height: 6px; border-radius: 999px; background: var(--fc-surface-hover); overflow: hidden; }
+.fc-tas-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--fc-brand); transition: width 0.2s ease; }
+.fc-tas-note { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--fc-text-muted); }
+.fc-tas-actions { display: flex; flex-direction: column; gap: 8px; }
+.fc-tas-actions > button { width: 100%; justify-content: center; padding-top: 10px; padding-bottom: 10px; }
+.fc-tas-hint { margin: -6px 0 0; font-size: 0.75rem; color: var(--fc-text-muted); text-align: center; }
+.fc-team-add-cancel {
+  background: transparent; color: var(--fc-text-main);
+  border: 1px solid var(--fc-border-strong); border-radius: 6px;
+  padding: 8px 16px; font-family: var(--font-family); font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+}
+.fc-team-add-cancel:hover { background: var(--fc-surface-hover); }
+
+@media (max-width: 960px) {
+  .fc-team-add-layout { grid-template-columns: minmax(0, 1fr); }
+  .fc-team-add-summary { position: static; }
+}
+@media (max-width: 640px) {
+  .fc-team-add-step { padding: 16px 14px !important; }
+  .fc-team-add-page .fc-group-cards-grid { grid-template-columns: 1fr !important; }
+}
+.fc-team-add-step .fc-form-group { margin-bottom: 0; }
+
+/* Team → Add Custom Group page (/team/groups/new): reuses the Add Member page layout */
+.fc-team-add-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.fc-team-add-fields .fc-form-group { margin-bottom: 0; }
+.fc-team-cg-perms .fc-perm-section-header { display: none; }
+.fc-team-cg-perms .fc-perm-modules-container { max-height: none; overflow: visible; padding-right: 0; }
+.fc-tas-chip { text-transform: capitalize; }
+@media (max-width: 640px) {
+  .fc-team-add-fields { grid-template-columns: minmax(0, 1fr); }
+}
+.fc-team-add-page .fc-perm-actions-row { flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .fc-team-add-page .fc-perm-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+  .fc-team-add-page .fc-perm-search-box { width: 100%; max-width: none; }
+  .fc-team-add-page .fc-perm-actions-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+  .fc-team-add-page .fc-perm-actions-row > .fc-btn-perm-tool { width: 100%; justify-content: center; text-align: center; }
+  .fc-team-add-page .fc-perm-tree-key-row { flex-wrap: wrap; row-gap: 6px; }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   MOBILE (≤ 640px): Payouts: banner, 2×2 KPIs, swipe tabs, toolbar, grid cards (list view is desktop only)
+   ────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .fc-pay-banner { padding: 14px 16px !important; gap: 12px !important; margin-bottom: 14px !important; }
+  .fc-pay-banner > .fc-pay-bank-pill { width: 100%; box-sizing: border-box; border-radius: 10px !important; padding: 8px 12px !important; font-size: 12px !important; }
+
+  /* KPI tiles: 2 per row, compact */
+  .fc-pay-kpis { grid-template-columns: 1fr 1fr !important; gap: 10px !important; margin-bottom: 16px !important; }
+  .fc-pay-kpis > div { padding: 12px !important; border-radius: 12px !important; position: relative; min-width: 0; }
+  .fc-pay-kpis > div > div:first-child { min-width: 0; }
+  .fc-pay-kpis > div > div:first-child > div:nth-child(1) { font-size: 11.5px !important; padding-right: 30px; }
+  .fc-pay-kpis > div > div:first-child > div:nth-child(2) { font-size: 20px !important; margin: 4px 0 2px !important; overflow-wrap: anywhere; }
+  .fc-pay-kpis > div > div:first-child > div:nth-child(3) { font-size: 10.5px !important; line-height: 1.35; }
+  .fc-pay-kpis > div > div:last-child:not(:first-child) { position: absolute; top: 10px; right: 10px; width: 26px !important; height: 26px !important; border-radius: 8px !important; }
+  .fc-pay-kpis > div > div:last-child:not(:first-child) svg { width: 14px; height: 14px; }
+
+  /* Tabs: one swipeable row, labels never wrap */
+  .fc-pay-tabs-wrap { justify-content: flex-start !important; margin-bottom: 14px !important; }
+  .fc-pay-tabs { display: flex !important; width: 100%; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; gap: 0 !important; }
+  .fc-pay-tabs::-webkit-scrollbar { display: none; }
+  .fc-pay-tabs > button { flex: 0 0 auto; white-space: nowrap; padding: 8px 12px !important; font-size: 13px !important; }
+
+  /* Toolbar: title, full-width search, then sort + export + view toggle on one row */
+  .fc-pay-toolbar { padding: 16px !important; gap: 12px !important; }
+  .fc-pay-toolbar > div:first-child { width: 100%; }
+  .fc-pay-controls { width: 100%; justify-content: stretch !important; gap: 8px !important; }
+  .fc-pay-controls > :first-child { flex: 1 1 100% !important; max-width: none !important; min-width: 0 !important; }
+  .fc-pay-controls .fc-pay-sort { flex: 1 1 0; min-width: 0; padding: 8px 10px !important; }
+  .fc-pay-controls .fc-pay-export { order: 3; flex: 1 1 100%; justify-content: center; padding: 10px 14px !important; box-shadow: none !important; }
+
+  /* Grid view */
+  .fc-pay-grid { padding: 12px !important; gap: 12px !important; grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+/* Room under the last card while the floating selection bar is showing, so it never hides content */
+@media (max-width: 640px) {
+  .fc-submissions-page:has(.floating-bulk-bar) { padding-bottom: 140px; }
+}
+
+@keyframes fcBulkBarUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Selection bar buttons (all widths, theme tokens so it follows light/dark): one solid primary (Advance),
+   neutral outline for Assign Jury and Clear, red outline for Reject */
+.floating-bulk-bar .fc-btn-secondary,
+.floating-bulk-bar .fc-btn-outline { background: var(--fc-surface-card) !important; color: var(--fc-text-main) !important; border: 1px solid var(--fc-border-strong) !important; }
+.floating-bulk-bar .fc-btn-secondary:hover,
+.floating-bulk-bar .fc-btn-outline:hover { background: var(--fc-surface-hover) !important; }
+.floating-bulk-bar .fc-btn-danger { background: var(--fc-surface-card) !important; color: var(--fc-danger-text) !important; border: 1px solid var(--fc-danger-border) !important; }
+.floating-bulk-bar .fc-btn-danger:hover { background: var(--fc-danger-bg) !important; }
+@media (max-width: 640px) {
+  .floating-bulk-bar .fc-btn.floating-bulk-clear,
+  [data-theme="dark"] .floating-bulk-bar .fc-btn.floating-bulk-clear,
+  body.dark-theme .floating-bulk-bar .fc-btn.floating-bulk-clear { background: transparent !important; border: none !important; box-shadow: none !important; }
+}
+
+/* ── Payouts: settlement bank pill + details dialog ─────────────── */
+.fc-pay-bank-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--fc-surface-subtle);
+  padding: 7px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--fc-border);
+  color: var(--fc-text-secondary);
+  font-weight: 650;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 100%;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.fc-pay-bank-pill > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-pay-bank-pill:hover { background: var(--fc-surface-hover); border-color: var(--fc-border-strong); color: var(--fc-text-main); }
+.fc-pay-bank-pill:focus-visible { outline: 2px solid var(--fc-brand); outline-offset: 2px; }
+
+.fc-pay-bank-dialog { max-width: 460px; }
+.fc-pay-bank-icon {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--fc-brand-tint);
+  border: 1px solid var(--fc-brand-border);
+  color: var(--fc-brand-text);
+}
+.fc-pay-bank-body { padding: 18px 24px 8px; }
+.fc-pay-bank-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid;
+  font-size: 12px; font-weight: 700; margin-bottom: 14px;
+}
+.fc-pay-bank-list {
+  margin: 0;
+  border: 1px solid var(--fc-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.fc-pay-bank-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--fc-border-subtle, var(--fc-border));
+}
+.fc-pay-bank-row:last-child { border-bottom: none; }
+.fc-pay-bank-row:nth-child(even) { background: var(--fc-surface-subtle); }
+.fc-pay-bank-row dt { margin: 0; font-size: 13px; color: var(--fc-text-muted); font-weight: 500; flex-shrink: 0; }
+.fc-pay-bank-row dd {
+  margin: 0; font-size: 14px; color: var(--fc-text-main); font-weight: 650;
+  text-align: right; overflow-wrap: anywhere;
+}
+.fc-pay-bank-row dd.is-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.02em; }
+.fc-pay-bank-note { margin: 12px 0 6px; font-size: 12px; color: var(--fc-text-muted); line-height: 1.5; }
+
+.fc-pay-bank-dialog .fc-modal-footer,
+[data-theme="dark"] .fc-pay-bank-dialog .fc-modal-footer,
+body.dark-theme .fc-pay-bank-dialog .fc-modal-footer {
+  background: var(--fc-surface-subtle) !important;
+  border-top: 1px solid var(--fc-border) !important;
+}
+.fc-pay-bank-close {
+  height: 38px; padding: 0 20px; border-radius: 10px;
+  background: var(--fc-surface-card); color: var(--fc-text-main);
+  border: 1px solid var(--fc-border-strong);
+  font: inherit; font-size: 14px; font-weight: 650; cursor: pointer;
+  transition: background 0.15s ease;
+}
+.fc-pay-bank-close:hover { background: var(--fc-surface-hover); }
+.fc-pay-bank-close:focus-visible { outline: 2px solid var(--fc-brand); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .fc-pay-bank-pill { width: 100%; justify-content: center; }
+  .fc-pay-bank-dialog { max-width: none; }
+  .fc-pay-bank-body { padding: 16px 16px 6px; }
+  .fc-pay-bank-dialog .fc-modal-header { padding: 16px; }
+  .fc-pay-bank-dialog .fc-modal-footer { padding: 12px 16px; }
+  .fc-pay-bank-close { width: 100%; height: 42px; }
+}
+
+/* ── Submissions › Under Review stage boards (Nominations, Jury & Voting, Finalist, Winner): phone ── */
+@media (max-width: 640px) {
+  .fc-nominations-board,
+  .fc-jury-voting-board,
+  .fc-finalists-board,
+  .fc-winners-board { padding: 16px 14px !important; border-radius: 12px !important; }
+
+  /* Header: title, count underneath, then full-width controls */
+  .fc-stage-board-head { align-items: stretch !important; gap: 12px !important; }
+  .fc-stage-board-head > div { min-width: 0; }
+  .fc-stage-board-title { flex-wrap: wrap; align-items: flex-start !important; row-gap: 2px !important; }
+  .fc-stage-board-title > strong { flex: 1 1 0; min-width: 0; line-height: 1.35; }
+  .fc-stage-board-title > span:first-child { margin-top: 5px; }
+  .fc-stage-board-title > span:last-child:not(:first-child) { flex-basis: 100%; margin-left: 17px !important; }
+  .fc-stage-board-head > div:first-child > div:not(.fc-stage-board-title) { padding-left: 17px; }
+  .fc-stage-board-head > div:last-child:not(:first-child) { width: 100%; flex-wrap: wrap; gap: 8px !important; }
+  .fc-stage-board-head .fc-nom-view-switcher { width: 100%; box-sizing: border-box; }
+  .fc-stage-board-head .fc-nom-view-btn { flex: 1 1 0; justify-content: center; white-space: nowrap; }
+
+  /* Filter bar: search full width, award pills become one swipeable row */
+  .fc-stage-filter-bar { padding: 12px !important; }
+  .fc-stage-filter-bar > div:first-child > div:first-child { max-width: none !important; }
+  .fc-stage-filter-pills {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -12px;
+    padding: 2px 12px;
+    scroll-padding: 0 12px;
+  }
+  .fc-stage-filter-pills::-webkit-scrollbar { display: none; }
+  .fc-stage-filter-pills > * { flex-shrink: 0; white-space: nowrap; }
+
+  /* Table → one card per film */
+  .fc-stage-table-card { min-height: 0 !important; border-radius: 12px !important; overflow: hidden !important; }
+  .fc-stage-table-wrap { min-height: 0 !important; padding-bottom: 0 !important; overflow: visible !important; }
+  .fc-stage-table, .fc-stage-table tbody { display: block; width: 100%; min-width: 0 !important; }
+  .fc-stage-table thead { display: none; }
+  .fc-stage-table tbody > tr:not(.expandable-juror-row) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto;
+    column-gap: 10px;
+    row-gap: 10px;
+    padding: 14px;
+    border-bottom: 1px solid var(--fc-border);
+  }
+  .fc-stage-table tbody > tr:last-child { border-bottom: none; }
+  .fc-stage-table td {
+    display: block;
+    padding: 0 !important;
+    border: none !important;
+    text-align: left !important;
+    min-width: 0 !important;
+    width: auto !important;
+    background: transparent;
+  }
+  .fc-stage-table td.st-lead { grid-column: 1; grid-row: 1; padding-top: 1px !important; }
+  .fc-stage-table td.st-title { grid-column: 2 / 4; grid-row: 1; }
+  .fc-stage-table td.st-act { grid-column: 4; grid-row: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .fc-stage-table td.st-half-a { grid-column: 2; }
+  .fc-stage-table td.st-half-b { grid-column: 3 / -1; }
+  .fc-stage-table td.st-body { grid-column: 2 / -1; }
+  .fc-stage-table td.st-full { grid-column: 1 / -1; }
+  .fc-stage-table td[data-label]:not(.st-title)::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--fc-text-muted);
+  }
+  .fc-stage-table td.st-half-b > div { justify-content: flex-start !important; }
+  .fc-stage-table td.st-title > div:first-child { flex-wrap: wrap; max-width: 100%; font-size: 14px !important; line-height: 1.35; overflow-wrap: anywhere; }
+  /* Paired fields (category + score) sit together right under the title; a lead field can come first */
+  .fc-stage-table td.st-first { order: 1; }
+  .fc-stage-table td.st-half-a, .fc-stage-table td.st-half-b { order: 2; }
+  .fc-stage-table td.st-body:not(.st-first) { order: 3; }
+
+  /* Footer actions (e.g. Winner: Download Press List / Back) */
+  .fc-stage-board-foot > div:last-child { width: 100%; flex-wrap: wrap; }
+  .fc-stage-board-foot > div:last-child > button { flex: 1 1 140px; justify-content: center; white-space: nowrap; }
+  .fc-stage-table td.st-no { font-weight: 700; color: var(--fc-text-muted); }
+
+  /* Juror breakdown sub-row */
+  .fc-stage-table tr.expandable-juror-row { display: block; border-bottom: 1px solid var(--fc-border); }
+  .fc-stage-table tr.expandable-juror-row > td { display: block; padding: 12px 14px !important; }
+}
+
+/* ── Submissions › Activity Log: phone ─────────────────────────── */
+@media (max-width: 640px) {
+  .fc-al-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px !important; }
+  .fc-al-kpis > div { padding: 12px 14px !important; min-width: 0; }
+  .fc-al-kpis > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+  .fc-al-filters { padding: 12px !important; gap: 10px !important; }
+  .fc-al-toolbar { gap: 10px !important; }
+  .fc-al-search { min-width: 0 !important; max-width: none !important; flex: 1 1 100% !important; }
+  .fc-al-controls { width: 100%; display: grid !important; grid-template-columns: 1fr 1fr; gap: 8px !important; }
+  .fc-al-date { min-width: 0; flex-direction: column; align-items: stretch !important; gap: 3px !important; }
+  .fc-al-date > span { font-size: 11px !important; font-weight: 600; }
+  .fc-al-date > input { width: 100% !important; min-width: 0; box-sizing: border-box; }
+  .fc-al-controls > button:not(.fc-al-export) { grid-column: 1 / -1; justify-content: center; }
+  .fc-al-view { display: none !important; }
+  .fc-al-export { grid-column: 1 / -1; width: 100%; justify-content: center; }
+
+  .fc-al-filter-row { gap: 10px !important; }
+  .fc-al-pills {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    width: calc(100% + 24px);
+    margin: 0 -12px;
+    padding: 2px 12px;
+  }
+  .fc-al-pills::-webkit-scrollbar { display: none; }
+  .fc-al-pills > * { flex-shrink: 0; white-space: nowrap; }
+
+  .fc-stream-item { gap: 12px !important; padding: 14px !important; }
+  .fc-stream-item > div:first-child { width: 34px !important; height: 34px !important; font-size: 12px !important; }
+  .fc-al-item-top { flex-direction: column-reverse; gap: 2px !important; }
+  .fc-al-item-top > div:first-child { font-size: 13px !important; overflow-wrap: anywhere; }
+}
+
+/* ── Settings › Review Stage (pipeline list + create/edit builder): phone ── */
+@media (max-width: 640px) {
+  /* Stage cards: detail row becomes a tidy 2-column grid, no dangling dividers */
+  .state-section-header { padding: 14px 16px !important; }
+  .state-section-body {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px !important;
+    padding: 14px 16px !important;
+  }
+  .state-section-body > div[style*="width: 1px"] { display: none !important; }
+  .state-section-body > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .flow-connector-step { font-size: 11.5px !important; text-align: center; padding-left: 8px; padding-right: 8px; }
+
+  /* Builder */
+  .fc-inpage-stage-builder { border-radius: 14px !important; }
+  .fc-stage-builder-header { padding: 14px 16px !important; }
+  .fc-builder-form { padding: 16px !important; }
+  .fc-builder-section-title { flex-direction: column; align-items: flex-start !important; gap: 4px; }
+  .fc-builder-section-title > span:last-child:not(:first-child) { font-weight: 500; letter-spacing: 0; }
+  .fc-builder-name-row { grid-template-columns: minmax(0, 1fr) !important; gap: 16px !important; }
+  .fc-builder-name-row input { min-width: 0; box-sizing: border-box; }
+
+  /* Stage stack: arrows replace drag on touch screens */
+  .fc-stage-stack-container { padding: 12px !important; }
+  .fc-stage-stack-card { gap: 10px !important; padding: 10px 10px 10px 12px !important; }
+  .fc-stage-drag-handle { display: none !important; }
+  .fc-stage-stack-actions { flex-direction: column; gap: 4px !important; }
+
+  .fc-builder-actions-bar { flex-direction: column; align-items: stretch !important; gap: 12px !important; }
+  .fc-builder-actions-bar > div:last-child { display: grid !important; grid-template-columns: auto 1fr; gap: 8px !important; }
+  .fc-builder-actions-bar > div:last-child > button { justify-content: center; min-height: 42px; }
+}
+@media (max-width: 640px) {
+  /* Drag handle is hidden on phones, so the "drag by the handle" hint would mislead */
+  .fc-stage-stack-hint { display: none !important; }
 }

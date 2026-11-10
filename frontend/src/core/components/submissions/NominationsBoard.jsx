@@ -268,7 +268,7 @@ export default function NominationsBoard({
       marginBottom: '24px'
     }}>
       {/* ── HEADER WITH VIEW MODE SWITCHER ───────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '14px' }}>
+      <div className="fc-stage-board-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '14px' }}>
         <div>
           <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--fc-text-main, #1e293b)', margin: '0 0 6px 0', letterSpacing: '-0.2px' }}>
             {stageName} &amp; Award Categories
@@ -397,7 +397,7 @@ export default function NominationsBoard({
             </div>
 
             {/* Row 2: Category Filter Pills */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <div className="fc-stage-filter-pills" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--fc-text-muted)', marginRight: '4px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
                 Category Filter:
               </span>
@@ -444,9 +444,9 @@ export default function NominationsBoard({
           </div>
 
           {/* Master Unified Table */}
-          <div className="fc-card" style={{ marginTop: '10px', overflow: 'visible', minHeight: '400px' }}>
-            <div style={{ overflowX: 'auto', overflowY: 'visible', minHeight: '380px', paddingBottom: '60px' }}>
-              <table className="fc-table" style={{ width: '100%', margin: 0 }}>
+          <div className="fc-card fc-stage-table-card" style={{ marginTop: '10px', overflow: 'visible', minHeight: '400px' }}>
+            <div className="fc-stage-table-wrap" style={{ overflowX: 'auto', overflowY: 'visible', minHeight: '380px', paddingBottom: '60px' }}>
+              <table className="fc-table fc-stage-table" style={{ width: '100%', margin: 0 }}>
                 <thead>
                   <tr>
                     <th style={{ width: '36px', textAlign: 'center' }}>#</th>
@@ -461,7 +461,7 @@ export default function NominationsBoard({
                 <tbody>
                   {filteredFilms.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--fc-text-muted, #94a3b8)', fontStyle: 'italic' }}>
+                      <td className="st-full" colSpan="7" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--fc-text-muted, #94a3b8)', fontStyle: 'italic' }}>
                         {searchQuery ? `No films match "${searchQuery}".` : 'No films found for the selected filter.'}
                       </td>
                     </tr>
@@ -479,12 +479,12 @@ export default function NominationsBoard({
                           style={{ transition: 'background-color 0.15s ease' }}
                         >
                           {/* Row Index */}
-                          <td style={{ textAlign: 'center', color: 'var(--fc-text-muted)', fontSize: '12px' }}>
+                          <td className="st-lead st-no" style={{ textAlign: 'center', color: 'var(--fc-text-muted)', fontSize: '12px' }}>
                             {idx + 1}
                           </td>
 
                           {/* Title & Director */}
-                          <td>
+                          <td className="st-title" data-label="Film">
                             <div 
                               style={{ 
                                 fontWeight: 700, 
@@ -506,21 +506,21 @@ export default function NominationsBoard({
                           </td>
 
                           {/* Genre / Submission Category */}
-                          <td>
+                          <td className="st-half-a" data-label="Category">
                             <span className="fc-category-pill">
                               {film.category || 'General'}
                             </span>
                           </td>
 
                           {/* Stage */}
-                          <td>
+                          <td className="st-half-b" data-label="Round score">
                             <span className="fc-status-pill status-jury-voting">
                               {film.current_stage_name || film.status || stageName}
                             </span>
                           </td>
 
                           {/* Round Score */}
-                          <td style={{ textAlign: 'center' }}>
+                          <td className="st-body" data-label="Stage" style={{ textAlign: 'center' }}>
                             {film.rating && film.rating !== 'Unrated' ? (
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                 <StarIcon size={13} style={{ color: 'var(--fc-warning-text)' }} />
@@ -537,7 +537,7 @@ export default function NominationsBoard({
                           </td>
 
                           {/* Award Nominations (Interactive badges + Nominate Popover) */}
-                          <td>
+                          <td className="st-body" data-label="Award nominations">
                             <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', position: 'relative' }}>
                               {/* Active Nomination Trophy Badges */}
                               {filmNoms.map(nom => (
@@ -576,7 +576,7 @@ export default function NominationsBoard({
                           </td>
 
                           {/* Actions: View Film Drawer */}
-                          <td style={{ textAlign: 'right' }}>
+                          <td className="st-act" style={{ textAlign: 'right' }}>
                             <button
                               type="button"
                               className="fc-btn fc-btn-outline fc-btn-xs"

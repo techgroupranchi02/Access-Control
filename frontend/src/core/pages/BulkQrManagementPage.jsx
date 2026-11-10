@@ -10,11 +10,16 @@
  * - Zero dialog boxes / completely route-driven
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import SearchInput from '../components/common/SearchInput';
 import QrCode, { qrSvgMarkup } from '../components/common/QrCode';
+import { printInPage } from '../utils/printInPage';
+import { useFestivalConfig } from '../hooks/useFestivalConfig';
+
+// Escape user-provided text placed into print HTML
+const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 import {
   ConfirmationNumberIcon, 
   PrintIcon, 
@@ -25,6 +30,7 @@ import {
 
 export default function BulkQrManagementPage() {
   const navigate = useNavigate();
+  const { currentFestival } = useFestivalConfig();
 
   const [stats, setStats] = useState({ total: 0, unassigned: 0, assigned: 0 });
   const [qrs, setQrs] = useState([]);
@@ -53,16 +59,22 @@ export default function BulkQrManagementPage() {
   const [rowsPerPage, setRowsPerPage] = useState(3); // 3 complete rows by default
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Dynamically compute how many card columns fit in the container to always display 100% full rows
+  // Dynamically compute how many card columns fit in the container to always display 100% full rows.
+  // The grid mounts only after the first load, so measure when its element appears (callback ref),
+  // not once on mount (that left the default of 7 per row on every screen).
+  const [gridEl, setGridEl] = useState(null);
+  const setGridRef = useCallback((node) => { gridContainerRef.current = node; setGridEl(node); }, []);
   useEffect(() => {
-    const el = gridContainerRef.current;
+    const el = gridEl;
     if (!el) return;
 
     const updateColumns = () => {
       const width = el.clientWidth;
       if (!width) return;
-      // Each card has min 190px + 18px gap = ~208px per column slot
-      const cols = Math.max(1, Math.floor((width + 18) / 208));
+      // Each card has min 190px + 18px gap = ~208px per column slot; phones (≤ 640px, same breakpoint
+      // as index.css) show 2 compact cards per row
+      const isPhone = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
+      const cols = isPhone ? 2 : Math.max(1, Math.floor((width + 18) / 208));
       setColumnsCount(cols);
     };
 
@@ -80,7 +92,7 @@ export default function BulkQrManagementPage() {
       if (ro) ro.disconnect();
       else window.removeEventListener('resize', updateColumns);
     };
-  }, []);
+  }, [gridEl]);
 
   // Only the newest request updates the grid; after the first load the grid stays visible while refetching
   const fetchPool = async () => {
@@ -169,7 +181,7 @@ export default function BulkQrManagementPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `kashish_physical_qr_pool_${filterStatus}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `${(currentFestival?.name || 'festival').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-badge-stock-${filterStatus}-${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -182,15 +194,10 @@ export default function BulkQrManagementPage() {
       return;
     }
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('Please allow popups to print physical badge sheets.');
-      return;
-    }
-
+    const festivalLabel = escapeHtml((currentFestival?.name || 'Festival').toUpperCase());
     const badgeCardsHtml = badgesToPrint.map((item, idx) => `
       <div class="badge-card">
-        <div class="festival-title">KASHISH 2026</div>
+        <div class="festival-title">${festivalLabel}</div>
         <div class="badge-subtitle">DELEGATE PASS BADGE</div>
         <div class="qr-container">
           <div class="qr-wrap">
@@ -202,29 +209,27 @@ export default function BulkQrManagementPage() {
       </div>
     `).join('');
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Print Physical QR Badges - KASHISH 2026</title>
-          <style>
+    // Opens the print / save-as-PDF dialog straight from this page (no new tab first)
+    printInPage(
+      `<div class="grid">${badgeCardsHtml}</div>`,
+      `
             @page {
               size: A4 portrait;
               margin: 10mm;
             }
-            body {
+            #fc-print-root {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
               margin: 0;
               padding: 0;
               color: #0f172a;
               background: #fff;
             }
-            .grid {
+            #fc-print-root .grid {
               display: grid;
               grid-template-columns: repeat(3, 1fr);
               gap: 8mm;
             }
-            .badge-card {
+            #fc-print-root .badge-card {
               border: 1.5px dashed #cbd5e1;
               border-radius: 8px;
               padding: 12px 10px;
@@ -232,7 +237,7 @@ export default function BulkQrManagementPage() {
               box-sizing: border-box;
               page-break-inside: avoid;
             }
-            .festival-title {
+            #fc-print-root .festival-title {
               font-size: 10px;
               font-weight: 800;
               letter-spacing: 0.05em;
@@ -240,29 +245,29 @@ export default function BulkQrManagementPage() {
               text-transform: uppercase;
               margin-bottom: 2px;
             }
-            .badge-subtitle {
+            #fc-print-root .badge-subtitle {
               font-size: 8px;
               font-weight: 700;
               color: #64748b;
               margin-bottom: 8px;
               letter-spacing: 0.02em;
             }
-            .qr-container {
+            #fc-print-root .qr-container {
               display: flex;
               justify-content: center;
               margin-bottom: 8px;
             }
-            .qr-container svg {
+            #fc-print-root .qr-container svg {
               width: 125px;
               height: 125px;
               display: block;
             }
             /* QR + stock number: the number sits vertically on the right, centred on the QR */
-            .qr-wrap {
+            #fc-print-root .qr-wrap {
               position: relative;
               display: inline-block;
             }
-            .stock-index {
+            #fc-print-root .stock-index {
               position: absolute;
               left: 100%;
               top: 50%;
@@ -275,7 +280,7 @@ export default function BulkQrManagementPage() {
               letter-spacing: 0.08em;
               white-space: nowrap;
             }
-            .code-box {
+            #fc-print-root .code-box {
               font-family: monospace;
               font-size: 13px;
               font-weight: 800;
@@ -286,21 +291,9 @@ export default function BulkQrManagementPage() {
               letter-spacing: 0.12em;
               margin-bottom: 4px;
             }
-          </style>
-        </head>
-        <body>
-          <div class="grid">
-            ${badgeCardsHtml}
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+          `,
+      `${currentFestival?.name || 'Festival'} badge stickers`
+    );
   };
 
   return (
@@ -317,7 +310,7 @@ export default function BulkQrManagementPage() {
       </nav>
 
       {/* ── Page Header ───────────────────────────────────────────────────── */}
-      <div style={{
+      <div className="fc-bq-header" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -422,7 +415,7 @@ export default function BulkQrManagementPage() {
 
 
       {/* ── Bulk Generator Controls & Print Bar ────────────────────────────── */}
-      <div style={{
+      <div className="fc-bq-tools" style={{
         background: 'var(--fc-surface-card)',
         border: '1px solid var(--fc-border)',
         borderRadius: '14px',
@@ -438,7 +431,7 @@ export default function BulkQrManagementPage() {
           gap: '16px'
         }}>
           {/* Left: Generator Batch Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="fc-bq-batch" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--fc-text-main)' }}>
               Batch Quantity:
             </span>
@@ -508,7 +501,7 @@ export default function BulkQrManagementPage() {
           </div>
 
           {/* Right: Print & Export Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="fc-bq-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               type="button"
               onClick={handlePrintSheet}
@@ -559,7 +552,7 @@ export default function BulkQrManagementPage() {
       </div>
 
       {/* ── Filter Tabs & Search Bar (Submission Page Style) ────────────────── */}
-      <div style={{
+      <div className="fc-bq-filterbar" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'flex-end',
@@ -569,7 +562,7 @@ export default function BulkQrManagementPage() {
         flexWrap: 'wrap'
       }}>
         {/* Scope Navigation Tabs */}
-        <div className="scope-tabs-bar" style={{ display: 'flex', alignItems: 'center', gap: '28px', borderBottom: 'none', margin: 0, padding: '0 4px' }}>
+        <div className="scope-tabs-bar fc-bq-tabs" style={{ display: 'flex', alignItems: 'center', gap: '28px', borderBottom: 'none', margin: 0, padding: '0 4px' }}>
           <button
             type="button"
             className={`scope-tab-btn ${filterStatus === 'unassigned' ? 'active' : ''}`}
@@ -594,7 +587,7 @@ export default function BulkQrManagementPage() {
         </div>
 
         {/* Search Input on the right */}
-        <div style={{ paddingBottom: '6px', display: 'flex', flex: '0 1 320px', minWidth: '220px' }}>
+        <div className="fc-bq-search" style={{ paddingBottom: '6px', display: 'flex', flex: '0 1 320px', minWidth: '220px' }}>
           <SearchInput
             value={searchInput}
             onChange={setSearchInput}
@@ -606,7 +599,7 @@ export default function BulkQrManagementPage() {
       </div>
 
       {/* ── Badges Inventory Grid ───────────────────────────────────────────── */}
-      <div style={{
+      <div className="fc-bq-pool" style={{
         background: 'var(--fc-surface-card)',
         border: '1px solid var(--fc-border)',
         borderRadius: '14px',
@@ -637,7 +630,8 @@ export default function BulkQrManagementPage() {
         ) : (
           <div>
             <div 
-              ref={gridContainerRef}
+              ref={setGridRef}
+              className="fc-bq-grid"
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
@@ -652,6 +646,7 @@ export default function BulkQrManagementPage() {
                 return (
                   <div
                     key={item.qr_id}
+                    className="fc-bq-card"
                     style={{
                       background: 'var(--fc-surface)',
                       border: isAssigned ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid var(--fc-border)',
@@ -671,7 +666,7 @@ export default function BulkQrManagementPage() {
                   >
                     <div>
                       <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--fc-brand-text)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '2px' }}>
-                        KASHISH 2026
+                        {currentFestival?.name || 'Festival'}
                       </div>
                       <div style={{ fontSize: '0.64rem', fontWeight: 600, color: 'var(--fc-text-muted)', marginBottom: '10px' }}>
                         DELEGATE PASS BADGE
@@ -782,7 +777,7 @@ export default function BulkQrManagementPage() {
             </div>
 
             {/* ── Pagination Controls Toolbar ────────────────────────────── */}
-            <div style={{
+            <div className="fc-bq-pager" style={{
               marginTop: '28px',
               paddingTop: '18px',
               borderTop: '1px solid var(--fc-border)',
@@ -834,7 +829,7 @@ export default function BulkQrManagementPage() {
 
               {/* Right: Page Navigation Buttons */}
               {totalPages > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div className="fc-bq-pages" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {/* Previous Button */}
                   <button
                     type="button"
@@ -856,12 +851,24 @@ export default function BulkQrManagementPage() {
                     Previous
                   </button>
 
-                  {/* Page Numbers */}
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                  {/* Page Numbers: first, last and the pages around the current one; gaps shown as "…" */}
+                  {(() => {
+                    const keep = new Set([1, totalPages, validCurrentPage - 1, validCurrentPage, validCurrentPage + 1]);
+                    const items = [];
+                    for (let p = 1; p <= totalPages; p += 1) {
+                      if (keep.has(p)) items.push(p);
+                      else if (items[items.length - 1] !== '…') items.push('…');
+                    }
+                    return items;
+                  })().map((pageNum, idx) => {
+                    if (pageNum === '…') {
+                      return <span key={`gap-${idx}`} aria-hidden="true" style={{ padding: '0 2px', color: 'var(--fc-text-muted)', fontWeight: 700 }}>…</span>;
+                    }
                     const isActive = pageNum === validCurrentPage;
                     return (
                       <button
                         key={pageNum}
+                        aria-current={isActive ? 'page' : undefined}
                         type="button"
                         onClick={() => setCurrentPage(pageNum)}
                         style={{

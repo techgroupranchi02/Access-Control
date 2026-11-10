@@ -451,7 +451,7 @@ export default function JuryVotingBoard({
       marginBottom: '24px'
     }}>
       {/* ── TOP SUBHEADER BAR ───────────────────────────────────────────── */}
-      <div style={{
+      <div className="fc-stage-board-head" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -462,7 +462,7 @@ export default function JuryVotingBoard({
         gap: '12px'
       }}>
         {/* Left: Title & Stage Context */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="fc-stage-board-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ color: 'var(--fc-brand, #a82f2f)', fontSize: '13px', lineHeight: 1 }}>●</span>
           <strong style={{ fontSize: '15px', color: 'var(--fc-text-main)' }}>
             Admin View — {stageName}
@@ -568,7 +568,7 @@ export default function JuryVotingBoard({
             </div>
 
             {/* Row 2: Category Filter Pills */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <div className="fc-stage-filter-pills" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--fc-text-muted)', marginRight: '4px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
                 Filter By Award:
               </span>
@@ -617,9 +617,9 @@ export default function JuryVotingBoard({
           </div>
 
           {/* Master Unified Table */}
-          <div className="fc-card" style={{ marginTop: '10px', overflow: 'visible', minHeight: '380px' }}>
-            <div style={{ overflowX: 'auto', overflowY: 'visible', minHeight: '360px', paddingBottom: '30px' }}>
-              <table className="fc-table" style={{ width: '100%', margin: 0 }}>
+          <div className="fc-card fc-stage-table-card" style={{ marginTop: '10px', overflow: 'visible', minHeight: '380px' }}>
+            <div className="fc-stage-table-wrap" style={{ overflowX: 'auto', overflowY: 'visible', minHeight: '360px', paddingBottom: '30px' }}>
+              <table className="fc-table fc-stage-table" style={{ width: '100%', margin: 0 }}>
                 <thead>
                   <tr>
                     {/* Select All Checkbox */}
@@ -643,7 +643,7 @@ export default function JuryVotingBoard({
                 <tbody>
                   {filteredFilms.length === 0 ? (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--fc-text-muted, #94a3b8)', fontStyle: 'italic' }}>
+                      <td className="st-full" colSpan="7" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--fc-text-muted, #94a3b8)', fontStyle: 'italic' }}>
                         {searchQuery ? `No films match "${searchQuery}".` : 'No films found for the selected filter.'}
                       </td>
                     </tr>
@@ -663,7 +663,7 @@ export default function JuryVotingBoard({
                             style={{ transition: 'background-color 0.15s ease' }}
                           >
                             {/* Checkbox (Admin Selection for Bulk Assign) */}
-                            <td style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                            <td className="st-lead st-chk" style={{ textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                               <input
                                 type="checkbox"
                                 checked={isChecked}
@@ -673,7 +673,7 @@ export default function JuryVotingBoard({
                             </td>
 
                             {/* Title & Director */}
-                            <td>
+                            <td className="st-title" data-label="Film">
                               <div 
                                 style={{ 
                                   fontWeight: 700, 
@@ -695,14 +695,14 @@ export default function JuryVotingBoard({
                             </td>
 
                             {/* Submission Category / Format */}
-                            <td>
+                            <td className="st-half-a" data-label="Category">
                               <span className="fc-category-pill">
                                 {film.category || 'General'}
                               </span>
                             </td>
 
                             {/* Nominated Awards Chips */}
-                            <td>
+                            <td className="st-body" data-label="Nominated awards">
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                 {(film.nominatedAwards || []).map(award => (
                                   <span 
@@ -718,7 +718,7 @@ export default function JuryVotingBoard({
                             </td>
 
                             {/* Score */}
-                            <td style={{ textAlign: 'center' }}>
+                            <td className="st-half-b" data-label="Score" style={{ textAlign: 'center' }}>
                               {film.rating && film.rating !== 'Unrated' ? (
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                                   <StarIcon size={12} style={{ color: 'var(--fc-warning-text)' }} />
@@ -734,7 +734,7 @@ export default function JuryVotingBoard({
                             </td>
 
                             {/* JURY & EVALUATION (IDENTICAL TO STANDARD MASTER TABLE VIEW) */}
-                            <td>
+                            <td className="st-body" data-label="Jury & evaluation">
                               <div>
                                 {/* Assigned jury names display */}
                                 <div style={{ fontSize: '12px', color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
@@ -809,7 +809,7 @@ export default function JuryVotingBoard({
                             </td>
 
                             {/* Actions */}
-                            <td style={{ textAlign: 'right' }}>
+                            <td className="st-act" style={{ textAlign: 'right' }}>
                               <button
                                 type="button"
                                 className="fc-btn fc-btn-outline fc-btn-xs"
@@ -825,7 +825,7 @@ export default function JuryVotingBoard({
                           {/* ── EXPANDABLE JUROR SUB-ROW (IDENTICAL TO STANDARD MASTER TABLE VIEW) ── */}
                           {isExpanded && (
                             <tr className="expandable-juror-row">
-                              <td colSpan="7">
+                              <td className="st-full" colSpan="7">
                                 <div className="juror-breakdown-title">
                                   EVALUATION SCORECARDS &amp; JURY BREAKDOWN FOR "{film.title}"
                                 </div>
@@ -1168,7 +1168,6 @@ export default function JuryVotingBoard({
             <button
               type="button"
               className="fc-btn fc-btn-outline fc-btn-sm"
-              style={{ background: '#292524', color: '#e7e5e4', borderColor: '#44403c' }}
               onClick={() => setSelectedFilmIds([])}
             >
               Clear

@@ -349,6 +349,17 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
     }
   });
 
+  // Phones always get the stream feed; the table is a desktop layout
+  const [isPhone, setIsPhone] = useState(() => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = (e) => setIsPhone(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const effectiveView = isPhone ? 'stream' : viewMode;
+
   const handleSetViewMode = (mode) => {
     setViewMode(mode);
     try {
@@ -458,6 +469,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
     <div className="activity-log-board" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* ── TOP STATS & COMPLIANCE BANNER ────────────────────────────────────────── */}
       <div
+        className="fc-al-kpis"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -546,6 +558,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
 
       {/* ── FILTER TOOLBAR ───────────────────────────────────────────────────────── */}
       <div
+        className="fc-al-filters"
         style={{
           background: 'var(--fc-surface)',
           border: '1px solid var(--fc-border)',
@@ -557,9 +570,9 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
           boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+        <div className="fc-al-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           {/* Left: Search input */}
-          <div style={{ position: 'relative', minWidth: '260px', flex: '1', maxWidth: '420px' }}>
+          <div className="fc-al-search" style={{ position: 'relative', minWidth: '260px', flex: '1', maxWidth: '420px' }}>
             <span
               style={{
                 position: 'absolute',
@@ -585,9 +598,9 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
           </div>
 
           {/* Right: Actions & Export Button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="fc-al-controls" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             {/* Start Date */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="fc-al-date" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '12px', color: 'var(--fc-text-muted)' }}>From:</span>
               <input
                 type="date"
@@ -602,7 +615,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
             </div>
 
             {/* End Date */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div className="fc-al-date" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '12px', color: 'var(--fc-text-muted)' }}>To:</span>
               <input
                 type="date"
@@ -628,8 +641,9 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
               </button>
             )}
 
-            {/* View Mode Switcher Toggle */}
+            {/* View Mode Switcher Toggle (desktop only) */}
             <div
+              className="fc-al-view"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -695,7 +709,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
             {!isJuryUser && (
               <button
                 type="button"
-                className="fc-btn fc-btn-primary"
+                className="fc-btn fc-btn-primary fc-al-export"
                 onClick={handleExportCsv}
                 disabled={exporting || loading || total === 0}
                 style={{
@@ -717,9 +731,9 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
         </div>
 
         {/* Action Type & Group Filter Tabs */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', paddingTop: '8px', borderTop: '1px solid var(--fc-border)' }}>
+        <div className="fc-al-filter-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', paddingTop: '8px', borderTop: '1px solid var(--fc-border)' }}>
           {/* Action Filter Pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <div className="fc-al-pills" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--fc-text-muted)', marginRight: '4px' }}>
               Action:
             </span>
@@ -873,7 +887,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
       </div>
 
       {/* ── MAIN LOG CONTENT (STREAM FEED VS AUDIT TABLE) ─────────────────────────── */}
-      {viewMode === 'stream' ? (
+      {effectiveView === 'stream' ? (
         /* ── STREAM FEED VIEW (Screenshots 1 & 2 style) ───────────────────────────── */
         <div
           className="fc-stream-container"
@@ -1005,6 +1019,7 @@ export default function ActivityLogBoard({ isJuryUser = false, onViewFilm }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     {/* Top row: Sentence + Timestamp */}
                     <div
+                      className="fc-al-item-top"
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',

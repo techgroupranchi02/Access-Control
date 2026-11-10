@@ -134,6 +134,11 @@ npm run lint
 
 ## Docs
 `docs/` holds the project specs, execution plans and Architecture Decision Records.
+- **Keep [docs/execution-plan.md](docs/execution-plan.md) current.** It is the live task tracker.
+  - When a task starts, add it under **In progress**.
+  - When it finishes, move it to **Done** (newest first), with the files changed, how it was verified, and its status: `uncommitted`, `committed` or `deployed`.
+  - Anything waiting on a person goes under **Needs action**, with an owner.
+  - Move **Done** entries older than 30 days to the **Archive** section.
 - **UI work must follow [docs/design.md](docs/design.md)**: colours only from `--fc-*` tokens, so every screen works in light and dark; icons only from `common/Icons.jsx`; no emoji on staff screens.
 - ADRs live in `docs/adr/NNNN-kebab-title.md`. Read the relevant ADRs before changing that area, and add a new ADR for any significant decision.
 

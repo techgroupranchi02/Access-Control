@@ -18,7 +18,6 @@ import {
   CheckCircleIcon,
   CancelIcon,
   ScheduleIcon,
-  SyncIcon,
   CameraAltIcon,
   CloseIcon,
   CheckIcon,
@@ -97,10 +96,10 @@ export default function AttendancePage() {
   };
 
   // Only the newest request updates the list, so a slow response can't overwrite a newer search
-  const fetchLogs = async (screeningId, searchText = logSearchRef.current) => {
+  const fetchLogs = async (screeningId, searchText = logSearchRef.current, { silent = false } = {}) => {
     const requestId = ++logsRequestIdRef.current;
     try {
-      setLogsSearching(true);
+      if (!silent) setLogsSearching(true);
       const res = await api.get('/attendance/logs', {
         params: { screening_id: screeningId || undefined, limit: 50, search: searchText || undefined }
       });
@@ -131,6 +130,21 @@ export default function AttendancePage() {
       fetchLogs(selectedScreening, logSearch);
     }
   }, [selectedScreening, logSearch]);
+
+  // Keep the check-in list current (scans from other volunteers' devices) without a Refresh button:
+  // refresh quietly every 15s while this tab is visible, and right away when the tab comes back.
+  useEffect(() => {
+    if (!selectedScreening) return undefined;
+    const refresh = () => {
+      if (document.visibilityState === 'visible') fetchLogs(selectedScreening, logSearchRef.current, { silent: true });
+    };
+    const timer = setInterval(refresh, 15000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [selectedScreening]);
 
   const executeCheckin = async (rawInput, isFromCamera = false) => {
     let clean = (rawInput || '').trim();
@@ -617,14 +631,6 @@ export default function AttendancePage() {
                   maxWidth="300px"
                   style={{ flex: '1 1 220px' }}
                 />
-                <button
-                  onClick={() => fetchLogs(selectedScreening)}
-                  style={{ background: 'var(--fc-surface-card)', border: '1px solid var(--fc-border)', color: 'var(--fc-text-main)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'background 0.15s ease' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--fc-surface-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--fc-surface-card)'; }}
-                >
-                  <SyncIcon size={13} /> Refresh
-                </button>
               </div>
 
               {logs.length === 0 ? (
@@ -644,7 +650,7 @@ export default function AttendancePage() {
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <table className="fc-checkin-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                     <thead>
                       <tr style={{ background: 'var(--fc-surface)', borderBottom: '1px solid var(--fc-border)', textAlign: 'left', color: 'var(--fc-text-muted)' }}>
                         <th style={{ padding: '10px 12px' }}>Attendee</th>
@@ -657,10 +663,10 @@ export default function AttendancePage() {
                     <tbody>
                       {logs.map((log) => (
                         <tr key={log.id} style={{ borderBottom: '1px solid var(--fc-border)' }}>
-                          <td style={{ padding: '10px 12px' }}>
+                          <td className="fc-ct-name" style={{ padding: '10px 12px' }}>
                             <div style={{ fontWeight: 600, color: 'var(--fc-text-main)' }}>{log.attendee_name}</div>
                           </td>
-                          <td style={{ padding: '10px 12px' }}>
+                          <td className="fc-ct-cat" style={{ padding: '10px 12px' }}>
                             <span
                               style={{
                                 background: log.badge_color || '#6366f1',
@@ -675,13 +681,13 @@ export default function AttendancePage() {
                               {log.badge_ribbon || log.delegate_category}
                             </span>
                           </td>
-                          <td style={{ padding: '10px 12px', color: 'var(--fc-text-secondary)' }}>
+                          <td className="fc-ct-time" style={{ padding: '10px 12px', color: 'var(--fc-text-secondary)' }}>
                             {new Date(log.scanned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                           </td>
-                          <td style={{ padding: '10px 12px' }}>
+                          <td className="fc-ct-status" style={{ padding: '10px 12px' }}>
                             <span style={{ color: 'var(--fc-success-text)', fontWeight: 600 }}>Verified</span>
                           </td>
-                          <td style={{ padding: '10px 12px', color: 'var(--fc-text-muted)' }}>
+                          <td className="fc-ct-by" style={{ padding: '10px 12px', color: 'var(--fc-text-muted)' }}>
                             {log.scanned_by_name || 'Volunteer'}
                           </td>
                         </tr>

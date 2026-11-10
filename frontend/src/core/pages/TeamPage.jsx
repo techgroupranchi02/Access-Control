@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import {
@@ -306,7 +307,6 @@ function PermissionsByModuleSection({
   onResetDefaults,
   groupKey,
   groupDefaults,
-  expandedModules,
   onToggleExpandModule,
   onExpandAll,
   onCollapseAll,
@@ -325,20 +325,14 @@ function PermissionsByModuleSection({
   const domainGroups = useMemo(() => getDomainGroups(catalog), [catalog]);
   const totalCatalogPermsCount = catalog.reduce((acc, m) => acc + (m.permissions?.length || 0), 0);
 
-  const [internalExpanded, setInternalExpanded] = useState(() => {
-    if (expandedModules && expandedModules instanceof Set && expandedModules.size > 0) {
-      return new Set(expandedModules);
-    }
-    return new Set(domainGroups.map((g) => g.key));
-  });
+  // This section owns which modules are open. Every section starts fully expanded and only resets when the
+  // catalog changes. (It used to re-copy the parent's set on every change, where an empty set meant "expand
+  // everything", so Collapse All sprang back open, and Expand All missed modules not in the parent's key list.)
+  const [internalExpanded, setInternalExpanded] = useState(() => new Set(domainGroups.map((g) => g.key)));
 
   useEffect(() => {
-    if (expandedModules && expandedModules instanceof Set && expandedModules.size > 0) {
-      setInternalExpanded(new Set(expandedModules));
-    } else {
-      setInternalExpanded(new Set(domainGroups.map((g) => g.key)));
-    }
-  }, [domainGroups, expandedModules]);
+    setInternalExpanded(new Set(domainGroups.map((g) => g.key)));
+  }, [domainGroups]);
 
   const handleToggle = (key) => {
     setInternalExpanded((prev) => {
@@ -723,11 +717,19 @@ export default function TeamPage() {
   // Expanded member sub-row in table for inline preview
   const [expandedMemberId, setExpandedMemberId] = useState(null);
 
-  // Add Member Modal states
-  const [showAddModal, setShowAddModal] = useState(false);
+  // Add Member is its own page at /team/add (same component, so it shares the team data and group catalog)
+  const location = useLocation();
+  const navigate = useNavigate();
+  const showAddModal = location.pathname.replace(/\/+$/, '') === '/team/add';
+  const setShowAddModal = (open) => navigate(open ? '/team/add' : '/team');
+  // Add Custom Group is its own page too, at /team/groups/new (festival admins only)
+  const isCustomGroupRoute = location.pathname.replace(/\/+$/, '') === '/team/groups/new';
+  const showCustomGroupModal = isCustomGroupRoute && isFestivalAdmin;
+  const setShowCustomGroupModal = (open) => navigate(open ? '/team/groups/new' : '/team');
   const [addSelectedGroups, setAddSelectedGroups] = useState(new Set(['jury']));
   const [addExpandedModules, setAddExpandedModules] = useState(new Set());
   const [addPermSearch, setAddPermSearch] = useState('');
+  const [showAddPerms, setShowAddPerms] = useState(false);
 
   // Edit Member Modal states
   const [editingUser, setEditingUser] = useState(null);
@@ -736,7 +738,6 @@ export default function TeamPage() {
   const [editPermSearch, setEditPermSearch] = useState('');
 
   // Create Custom Group Modal states (Festival Admin Only)
-  const [showCustomGroupModal, setShowCustomGroupModal] = useState(false);
   const [cgName, setCgName] = useState('');
   const [cgDescription, setCgDescription] = useState('');
   const [cgPermissions, setCgPermissions] = useState(new Set());
@@ -1041,6 +1042,16 @@ export default function TeamPage() {
     };
   }, [addSelectedGroups, customGroups, addEffectivePermissions]);
 
+  // Add Member page summary: names of the chosen groups, and the size of the permission catalog
+  const addGroupNames = useMemo(() => Array.from(addSelectedGroups).map((k) => {
+    if (k === 'admin') return 'Admin';
+    if (k === 'jury' || k === 'judge') return 'Jury';
+    if (k === 'volunteer') return 'Volunteer';
+    if (k.startsWith('custom_')) return customGroups.find((c) => c.id === parseInt(k.replace('custom_', ''), 10))?.name || null;
+    return k;
+  }).filter(Boolean), [addSelectedGroups, customGroups]);
+  const addCatalogTotal = useMemo(() => catalog.reduce((acc, m) => acc + (m.permissions?.length || 0), 0), [catalog]);
+
   // Group summary for Edit Member (matches Screenshot 2 top card)
   const editGroupSummary = useMemo(() => {
     if (editSelectedGroups.size === 0) return null;
@@ -1135,14 +1146,23 @@ export default function TeamPage() {
   };
 
   // Open Add Modal
-  const handleOpenAdd = () => {
+  const handleOpenAdd = () => setShowAddModal(true);
+
+  // Fresh form every time the Add Member page opens (also when it's opened directly by URL)
+  useEffect(() => {
+    if (!showAddModal) return;
     setSelectedUser(null);
     setUserQuery('');
     setAddSelectedGroups(new Set(['jury']));
-    setAddExpandedModules(new Set(ALL_DOMAIN_KEYS.concat(catalog.map((m) => m.key || m.id))));
     setAddPermSearch('');
-    setShowAddModal(true);
-  };
+    setShowAddPerms(false);
+    window.scrollTo(0, 0);
+  }, [showAddModal]);
+
+  // Expand every module in the permission preview once the catalog is known
+  useEffect(() => {
+    if (showAddModal) setAddExpandedModules(new Set(ALL_DOMAIN_KEYS.concat(catalog.map((m) => m.key || m.id))));
+  }, [showAddModal, catalog]);
 
   const toggleAddExpandModule = (key) => {
     setAddExpandedModules((prev) => {
@@ -1162,15 +1182,33 @@ export default function TeamPage() {
   };
 
   // Open Create Custom Group Modal (Festival Admin Only)
-  const handleOpenCreateCustomGroup = () => {
+  const handleOpenCreateCustomGroup = () => setShowCustomGroupModal(true);
+
+  // Fresh form each time the Add Custom Group page opens (also when opened directly by URL)
+  useEffect(() => {
+    if (!showCustomGroupModal) return;
     setCgName('');
     setCgDescription('');
     setCgPermissions(new Set());
     setCgScopes({});
-    setCgExpandedModules(new Set(ALL_DOMAIN_KEYS.concat(catalog.map((m) => m.key || m.id))));
     setCgPermSearch('');
-    setShowCustomGroupModal(true);
-  };
+    window.scrollTo(0, 0);
+  }, [showCustomGroupModal]);
+
+  // Only festival admins can create groups: anyone else opening the URL goes back to the Team list
+  useEffect(() => {
+    if (isCustomGroupRoute && user && !isFestivalAdmin) navigate('/team', { replace: true });
+  }, [isCustomGroupRoute, user, isFestivalAdmin]);
+
+  // Summary for the Add Custom Group page: chosen permissions per area (submission, review, ...)
+  const cgAreaCounts = useMemo(() => {
+    const counts = new Map();
+    for (const k of cgPermissions) {
+      const area = String(k).includes(':') ? String(k).split(':')[0] : String(k);
+      counts.set(area, (counts.get(area) || 0) + 1);
+    }
+    return Array.from(counts.entries());
+  }, [cgPermissions]);
 
   const toggleCgPermission = (key) => {
     setCgPermissions((prev) => {
@@ -1355,6 +1393,7 @@ export default function TeamPage() {
 
   return (
     <div className="fc-team-page">
+      {!showAddModal && !isCustomGroupRoute && (<>
       {/* Top Header */}
       <div className="fc-page-header">
         <div>
@@ -1421,7 +1460,7 @@ export default function TeamPage() {
         </div>
 
         {/* Live Search Bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1', maxWidth: '340px', minWidth: '220px' }}>
+        <div className="fc-team-search" style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1', maxWidth: '340px', minWidth: '220px' }}>
           <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
             <span
               style={{
@@ -1538,7 +1577,7 @@ export default function TeamPage() {
             </div>
           </div>
         ) : (
-          <table className="fc-table">
+          <table className="fc-table fc-team-table">
             <thead>
               <tr>
                 <th>MEMBER</th>
@@ -1554,9 +1593,9 @@ export default function TeamPage() {
                 const isNonDeletable = isCurrentSessionUser || (member.accountType === 'organization' && (member.roleKeys?.includes('admin') || member.role?.toLowerCase().includes('admin')));
                 return (
                   <React.Fragment key={member.id}>
-                    <tr>
+                    <tr className="fc-tm-row">
                       {/* MEMBER */}
-                      <td>
+                      <td className="fc-tm-member">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div className="fc-avatar" style={{ width: '32px', height: '32px', fontSize: '0.75rem', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
                             {member.thumbnailPic || member.thumbnail || member.thumbnail_pic ? (
@@ -1604,7 +1643,7 @@ export default function TeamPage() {
                       </td>
 
                       {/* GROUP */}
-                      <td>
+                      <td className="fc-tm-group">
                         {member.groups && member.groups.length > 0 ? (
                           <div className="fc-member-groups-list">
                             {member.groups.map((g) => {
@@ -1622,7 +1661,7 @@ export default function TeamPage() {
                       </td>
 
                       {/* PERMISSIONS */}
-                      <td>
+                      <td className="fc-tm-perms">
                         <div
                           className="fc-dept-tags"
                           style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px', cursor: 'pointer' }}
@@ -1655,7 +1694,7 @@ export default function TeamPage() {
                       </td>
 
                       {/* ACTIONS */}
-                      <td style={{ textAlign: 'right', paddingRight: '24px' }}>
+                      <td className="fc-tm-actions" style={{ textAlign: 'right', paddingRight: '24px' }}>
                         <div className="fc-actions-group">
                           <button
                             className="fc-action-btn"
@@ -1688,7 +1727,7 @@ export default function TeamPage() {
                     {expandedMemberId === member.id && (
                       <tr className="fc-member-expanded-row">
                         <td colSpan={4} style={{ padding: '16px 20px', background: 'var(--fc-surface-card)', borderBottom: '2px solid var(--fc-border)' }}>
-                          <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div className="fc-tm-expanded-head" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                             <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--fc-text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                               Effective Permissions for {member.name} ({member.permissions?.length || 0} granted)
                             </span>
@@ -1723,225 +1762,305 @@ export default function TeamPage() {
         )}
       </div>
 
-      {/* Add User Modal */}
-      {showAddModal && (
-        <div className="fc-modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="fc-modal-card fc-modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="fc-modal-header">
-              <div>
-                <h2>Add Team Member</h2>
-                <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>
-                  Select from registered users of next.autovertest.com/signin
-                </div>
-              </div>
-              <button className="fc-modal-close" onClick={() => setShowAddModal(false)}>
-                <CloseIcon size={14} />
-              </button>
-            </div>
-            <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <div className="fc-modal-body">
-                {/* User Search & Selection */}
-                <div className="fc-form-group" ref={dropdownRef}>
-                  <label>Search Registered User (Individual or Organization)</label>
-                  {!selectedUser ? (
-                    <div className="fc-search-user-wrapper">
-                      <div className="fc-search-input-box">
-                        <span className="fc-search-input-icon" style={{ display: 'flex', alignItems: 'center' }}>
-                          <SearchIcon size={14} />
-                        </span>
-                        <input
-                          type="text"
-                          autoFocus
-                          placeholder="Type name or email to search database..."
-                          value={userQuery}
-                          onChange={(e) => setUserQuery(e.target.value)}
-                          onFocus={() => {
-                            if (searchResults.length > 0 || userQuery.trim().length >= 2) {
-                              setIsDropdownOpen(true);
-                            }
-                          }}
-                        />
-                        {isSearching && <div className="fc-search-input-spinner"></div>}
-                      </div>
+      </>)}
 
-                      {isDropdownOpen && userQuery.trim().length >= 2 && (
-                        <div className="fc-user-search-dropdown">
-                          {isSearching ? (
-                            <div className="fc-user-search-empty">
-                              <div className="fc-spinner" style={{ width: '16px', height: '16px', margin: '0 auto 6px' }}></div>
-                              Searching directory...
-                            </div>
-                          ) : searchResults.length > 0 ? (
-                            searchResults.map((u) => (
-                              <div
-                                key={`${u.userId}-${u.accountType}`}
-                                className={`fc-user-search-item ${u.isAlreadyMember ? 'disabled' : ''}`}
-                                onClick={() => handleSelectUser(u)}
-                                title={u.isAlreadyMember ? 'This user account is already in the team' : 'Click to select user'}
-                              >
-                                <div className="fc-user-search-avatar" style={{ overflow: 'hidden', position: 'relative' }}>
-                                  {u.thumbnailPic || u.thumbnail || u.thumbnail_pic ? (
-                                    <img
-                                      src={u.thumbnailPic || u.thumbnail || u.thumbnail_pic}
-                                      alt={u.name}
-                                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                        if (e.currentTarget.nextSibling) {
-                                          e.currentTarget.nextSibling.style.display = 'flex';
-                                        }
-                                      }}
-                                    />
-                                  ) : null}
-                                  <span style={{ display: (u.thumbnailPic || u.thumbnail || u.thumbnail_pic) ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
-                                    {getInitials(u.name)}
-                                  </span>
-                                </div>
-                                <div className="fc-user-search-info">
-                                  <div className="fc-user-search-name-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                    <span className="fc-user-search-name">{u.name}</span>
-                                    {u.username && (
-                                      <span className="fc-user-search-handle">@{u.username}</span>
-                                    )}
-                                    <span className={`fc-account-type-badge ${u.accountType === 'organization' ? 'org' : 'ind'}`}>
-                                      {u.accountType === 'organization' ? (
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                          <BusinessIcon size={12} /> Organization
-                                        </span>
-                                      ) : (
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                          <PersonIcon size={12} /> Individual
-                                        </span>
-                                      )}
+      {/* Add Team Member page (/team/add) */}
+      {showAddModal && (
+        <div className="fc-team-add-page">
+          <nav className="fc-team-add-crumbs" aria-label="Breadcrumb">
+            <Link to="/team">Team</Link>
+            <span>/</span>
+            <span aria-current="page">Add Team Member</span>
+          </nav>
+          <div className="fc-page-header" style={{ marginBottom: '20px' }}>
+            <div>
+              <h1 className="fc-page-title">Add Team Member</h1>
+              <p className="fc-page-subtitle">Give a registered Freecomers user access to this festival.</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleAddSubmit} className="fc-team-add-layout">
+            <div className="fc-team-add-main">
+              {/* Step 1: person */}
+              <section className="fc-card fc-team-add-step">
+                <div className="fc-team-add-step-head">
+                  <span className="fc-team-add-step-no">1</span>
+                  <div>
+                    <h2>Choose a person</h2>
+                    <p>Search people who already have a Freecomers account, by name or email.</p>
+                  </div>
+                </div>
+                  {/* User Search & Selection */}
+                  <div className="fc-form-group" ref={dropdownRef}>
+                    {!selectedUser ? (
+                      <div className="fc-search-user-wrapper">
+                        <div className="fc-search-input-box">
+                          <span className="fc-search-input-icon" style={{ display: 'flex', alignItems: 'center' }}>
+                            <SearchIcon size={14} />
+                          </span>
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Search by name or email"
+                            value={userQuery}
+                            onChange={(e) => setUserQuery(e.target.value)}
+                            onFocus={() => {
+                              if (searchResults.length > 0 || userQuery.trim().length >= 2) {
+                                setIsDropdownOpen(true);
+                              }
+                            }}
+                          />
+                          {isSearching && <div className="fc-search-input-spinner"></div>}
+                        </div>
+
+                        {isDropdownOpen && userQuery.trim().length >= 2 && (
+                          <div className="fc-user-search-dropdown">
+                            {isSearching ? (
+                              <div className="fc-user-search-empty">
+                                <div className="fc-spinner" style={{ width: '16px', height: '16px', margin: '0 auto 6px' }}></div>
+                                Searching directory...
+                              </div>
+                            ) : searchResults.length > 0 ? (
+                              searchResults.map((u) => (
+                                <div
+                                  key={`${u.userId}-${u.accountType}`}
+                                  className={`fc-user-search-item ${u.isAlreadyMember ? 'disabled' : ''}`}
+                                  onClick={() => handleSelectUser(u)}
+                                  title={u.isAlreadyMember ? 'This user account is already in the team' : 'Click to select user'}
+                                >
+                                  <div className="fc-user-search-avatar" style={{ overflow: 'hidden', position: 'relative' }}>
+                                    {u.thumbnailPic || u.thumbnail || u.thumbnail_pic ? (
+                                      <img
+                                        src={u.thumbnailPic || u.thumbnail || u.thumbnail_pic}
+                                        alt={u.name}
+                                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = 'none';
+                                          if (e.currentTarget.nextSibling) {
+                                            e.currentTarget.nextSibling.style.display = 'flex';
+                                          }
+                                        }}
+                                      />
+                                    ) : null}
+                                    <span style={{ display: (u.thumbnailPic || u.thumbnail || u.thumbnail_pic) ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                                      {getInitials(u.name)}
                                     </span>
                                   </div>
-                                  <span className="fc-user-search-email">{u.email}</span>
+                                  <div className="fc-user-search-info">
+                                    <div className="fc-user-search-name-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span className="fc-user-search-name">{u.name}</span>
+                                      {u.username && (
+                                        <span className="fc-user-search-handle">@{u.username}</span>
+                                      )}
+                                      <span className={`fc-account-type-badge ${u.accountType === 'organization' ? 'org' : 'ind'}`}>
+                                        {u.accountType === 'organization' ? (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                            <BusinessIcon size={12} /> Organization
+                                          </span>
+                                        ) : (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                            <PersonIcon size={12} /> Individual
+                                          </span>
+                                        )}
+                                      </span>
+                                    </div>
+                                    <span className="fc-user-search-email">{u.email}</span>
+                                  </div>
+                                  {u.isAlreadyMember ? (
+                                    <span className="fc-user-search-badge in-team">Already in Team</span>
+                                  ) : (
+                                    <span className="fc-dept-tag" style={{ background: 'var(--fc-brand-active-bg)', color: 'var(--fc-brand)', cursor: 'pointer' }}>
+                                      Select
+                                    </span>
+                                  )}
                                 </div>
-                                {u.isAlreadyMember ? (
-                                  <span className="fc-user-search-badge in-team">Already in Team</span>
-                                ) : (
-                                  <span className="fc-dept-tag" style={{ background: 'var(--fc-brand-active-bg)', color: 'var(--fc-brand)', cursor: 'pointer' }}>
-                                    Select
-                                  </span>
-                                )}
+                              ))
+                            ) : (
+                              <div className="fc-user-search-empty">
+                                No registered user found matching &ldquo;{userQuery}&rdquo;.
+                                <div style={{ marginTop: '5px', fontSize: '0.72rem', color: 'var(--fc-text-muted)' }}>
+                                  Team members must be registered users from next.autovertest.com/signin.
+                                </div>
                               </div>
-                            ))
-                          ) : (
-                            <div className="fc-user-search-empty">
-                              No registered user found matching &ldquo;{userQuery}&rdquo;.
-                              <div style={{ marginTop: '5px', fontSize: '0.72rem', color: 'var(--fc-text-muted)' }}>
-                                Team members must be registered users from next.autovertest.com/signin.
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="fc-selected-user-card">
-                      <div className="fc-selected-user-left">
-                        <div className="fc-user-search-avatar" style={{ width: '38px', height: '38px', fontSize: '0.85rem', overflow: 'hidden', position: 'relative' }}>
-                          {selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic ? (
-                            <img
-                              src={selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic}
-                              alt={selectedUser.name}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
-                              onError={(e) => {
-                                e.currentTarget.style.display = 'none';
-                                if (e.currentTarget.nextSibling) {
-                                  e.currentTarget.nextSibling.style.display = 'flex';
-                                }
-                              }}
-                            />
-                          ) : null}
-                          <span style={{ display: (selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic) ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
-                            {getInitials(selectedUser.name)}
-                          </span>
-                        </div>
-                        <div className="fc-selected-user-meta">
-                          <div className="fc-selected-user-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                            {selectedUser.name}
-                            <span className={`fc-account-type-badge ${selectedUser.accountType === 'organization' ? 'org' : 'ind'}`}>
-                              {selectedUser.accountType === 'organization' ? (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  <BusinessIcon size={12} /> Organization Account
-                                </span>
-                              ) : (
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  <PersonIcon size={12} /> Individual Account
-                                </span>
-                              )}
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="fc-selected-user-card">
+                        <div className="fc-selected-user-left">
+                          <div className="fc-user-search-avatar" style={{ width: '38px', height: '38px', fontSize: '0.85rem', overflow: 'hidden', position: 'relative' }}>
+                            {selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic ? (
+                              <img
+                                src={selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic}
+                                alt={selectedUser.name}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  if (e.currentTarget.nextSibling) {
+                                    e.currentTarget.nextSibling.style.display = 'flex';
+                                  }
+                                }}
+                              />
+                            ) : null}
+                            <span style={{ display: (selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic) ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                              {getInitials(selectedUser.name)}
                             </span>
                           </div>
-                          <span className="fc-selected-user-email">{selectedUser.email}</span>
+                          <div className="fc-selected-user-meta">
+                            <div className="fc-selected-user-name" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              {selectedUser.name}
+                              <span className={`fc-account-type-badge ${selectedUser.accountType === 'organization' ? 'org' : 'ind'}`}>
+                                {selectedUser.accountType === 'organization' ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <BusinessIcon size={12} /> Organization Account
+                                  </span>
+                                ) : (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <PersonIcon size={12} /> Individual Account
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                            <span className="fc-selected-user-email">{selectedUser.email}</span>
+                          </div>
                         </div>
+                        <button
+                          type="button"
+                          className="fc-btn-change-user"
+                          onClick={handleClearSelectedUser}
+                        >
+                          Change
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="fc-btn-change-user"
-                        onClick={handleClearSelectedUser}
-                      >
-                        Change
-                      </button>
-                    </div>
-                  )}
-                  {searchFeedback && (
-                    <span style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '4px' }}>
-                      {searchFeedback}
-                    </span>
-                  )}
-                </div>
+                    )}
+                    {searchFeedback && (
+                      <span style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '4px' }}>
+                        {searchFeedback}
+                      </span>
+                    )}
+                  </div>
+              </section>
 
-                {/* Multi-Group Picker for Add Member */}
-                <div className="fc-form-group">
-                  <MultiGroupPicker
-                    selectedGroupKeys={addSelectedGroups}
-                    onChange={setAddSelectedGroups}
-                    customGroups={customGroups}
-                    groupDefaults={groupDefaults}
-                    catalog={catalog}
-                  />
+              {/* Step 2: groups */}
+              <section className="fc-card fc-team-add-step">
+                <div className="fc-team-add-step-head">
+                  <span className="fc-team-add-step-no">2</span>
+                  <div>
+                    <h2>Choose groups</h2>
+                    <p>Groups decide what this person can see and do. Pick one or more.</p>
+                  </div>
                 </div>
-
-                {/* Permissions Grouped by Module for Add User (Immutable & Read-Only) */}
-                <PermissionsByModuleSection
+                <MultiGroupPicker
+                  selectedGroupKeys={addSelectedGroups}
+                  onChange={setAddSelectedGroups}
+                  customGroups={customGroups}
+                  groupDefaults={groupDefaults}
                   catalog={catalog}
-                  permissions={addEffectivePermissions}
-                  expandedModules={addExpandedModules}
-                  onToggleExpandModule={toggleAddExpandModule}
-                  onExpandAll={handleAddExpandAll}
-                  onCollapseAll={handleAddCollapseAll}
-                  searchQuery={addPermSearch}
-                  onSearchChange={setAddPermSearch}
-                  readOnly={true}
-                  permissionSourceMap={addSourceMap}
-                  permissionScopeMap={addScopeMap}
-                  selectedGroupsSummary={addGroupSummary}
                 />
+              </section>
 
-                <div className="fc-quota-notice">
-                  <span className="fc-quota-notice-icon" style={{ display: 'flex', alignItems: 'center' }}>
-                    <PeopleIcon size={16} />
+              {/* Step 3: permission preview (folded by default) */}
+              <section className="fc-card fc-team-add-step">
+                <button
+                  type="button"
+                  className="fc-team-add-step-head fc-team-add-perm-toggle"
+                  onClick={() => setShowAddPerms((v) => !v)}
+                  aria-expanded={showAddPerms}
+                >
+                  <span className="fc-team-add-step-no">3</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <h2>Review permissions</h2>
+                    <p>{addEffectivePermissions.size} permissions come from the selected groups. To change them, change the groups.</p>
+                  </div>
+                  <span className="fc-team-add-perm-toggle-label">
+                    {showAddPerms ? <>Hide <ExpandLessIcon size={16} /></> : <>Show <ExpandMoreIcon size={16} /></>}
                   </span>
-                  <span>Current Allocation: <strong>{users.length} / 25</strong> available seats.</span>
-                </div>
-              </div>
-              <div className="fc-modal-footer">
-                <button type="button" className="fc-btn-secondary" onClick={() => setShowAddModal(false)}>
-                  Cancel
                 </button>
+                {showAddPerms && (
+                  <div className="fc-team-add-perms">
+                    <PermissionsByModuleSection
+                      catalog={catalog}
+                      permissions={addEffectivePermissions}
+                      expandedModules={addExpandedModules}
+                      onToggleExpandModule={toggleAddExpandModule}
+                      onExpandAll={handleAddExpandAll}
+                      onCollapseAll={handleAddCollapseAll}
+                      searchQuery={addPermSearch}
+                      onSearchChange={setAddPermSearch}
+                      readOnly={true}
+                      permissionSourceMap={addSourceMap}
+                      permissionScopeMap={addScopeMap}
+                    />
+                  </div>
+                )}
+              </section>
+            </div>
+
+            {/* Summary + actions */}
+            <aside className="fc-card fc-team-add-summary">
+              <h3>Summary</h3>
+
+              <div className="fc-tas-row">
+                <span className="fc-tas-label">Person</span>
+                {selectedUser ? (
+                  <div className="fc-tas-person">
+                    <div className="fc-avatar" style={{ width: '32px', height: '32px', fontSize: '0.75rem', flexShrink: 0, overflow: 'hidden' }}>
+                      {selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic ? (
+                        <img
+                          src={selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic}
+                          alt=""
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                        />
+                      ) : getInitials(selectedUser.name)}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="fc-tas-name">{selectedUser.name}</div>
+                      <div className="fc-tas-sub">{selectedUser.email}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="fc-tas-empty">Not chosen yet</span>
+                )}
+              </div>
+
+              <div className="fc-tas-row">
+                <span className="fc-tas-label">Groups</span>
+                {addGroupNames.length > 0 ? (
+                  <div className="fc-tas-chips">
+                    {addGroupNames.map((n) => <span key={n} className="fc-tas-chip">{n}</span>)}
+                  </div>
+                ) : (
+                  <span className="fc-tas-empty" style={{ color: 'var(--fc-danger-text)' }}>Pick at least one group</span>
+                )}
+              </div>
+
+              <div className="fc-tas-row">
+                <span className="fc-tas-label">Permissions</span>
+                <div className="fc-tas-name">{addEffectivePermissions.size} <span className="fc-tas-sub" style={{ display: 'inline' }}>of {addCatalogTotal}</span></div>
+                <div className="fc-tas-bar"><span style={{ width: `${addCatalogTotal ? Math.round((addEffectivePermissions.size / addCatalogTotal) * 100) : 0}%` }} /></div>
+              </div>
+
+              <div className="fc-tas-note">
+                <PeopleIcon size={14} /> {users.length} {users.length === 1 ? 'member' : 'members'} in this team now
+              </div>
+
+              <div className="fc-tas-actions">
                 <button
                   type="submit"
                   className="fc-btn-primary"
-                  disabled={actionLoading || !selectedUser}
-                  style={!selectedUser ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
-                  title={!selectedUser ? 'Please search and select a user first' : ''}
+                  disabled={actionLoading || !selectedUser || addSelectedGroups.size === 0}
+                  style={(!selectedUser || addSelectedGroups.size === 0) ? { opacity: 0.55, cursor: 'not-allowed' } : {}}
                 >
-                  {actionLoading ? 'Saving...' : 'Add Member'}
+                  {actionLoading ? 'Adding...' : 'Add Member'}
+                </button>
+                <button type="button" className="fc-team-add-cancel" onClick={() => setShowAddModal(false)}>
+                  Cancel
                 </button>
               </div>
-            </form>
-          </div>
+              {!selectedUser && <p className="fc-tas-hint">Choose a person to continue.</p>}
+            </aside>
+          </form>
         </div>
       )}
 
@@ -2047,85 +2166,136 @@ export default function TeamPage() {
         </div>
       )}
 
-      {/* Create Custom Group Modal (Festival Admin Only) */}
+      {/* Add Custom Group page (/team/groups/new, festival admins only) */}
       {showCustomGroupModal && (
-        <div className="fc-modal-overlay" onClick={() => setShowCustomGroupModal(false)}>
-          <div className="fc-modal-card fc-modal-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="fc-modal-header">
-              <div>
-                <h2>Add Custom Group</h2>
-                <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>
-                  Define a reusable festival group with modular permissions (Festival Admin only)
-                </div>
-              </div>
-              <button className="fc-modal-close" onClick={() => setShowCustomGroupModal(false)}>
-                <CloseIcon size={14} />
-              </button>
+        <div className="fc-team-add-page">
+          <nav className="fc-team-add-crumbs" aria-label="Breadcrumb">
+            <Link to="/team">Team</Link>
+            <span>/</span>
+            <span aria-current="page">Add Custom Group</span>
+          </nav>
+          <div className="fc-page-header" style={{ marginBottom: '20px' }}>
+            <div>
+              <h1 className="fc-page-title">Add Custom Group</h1>
+              <p className="fc-page-subtitle">Create a reusable group with exactly the permissions it needs, then assign it to team members.</p>
             </div>
-            <form onSubmit={handleCreateCustomGroupSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <div className="fc-modal-body">
-                <div className="fc-form-group">
-                  <label>Group Name <span style={{ color: '#b91c1c' }}>*</span></label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Hospitality Lead, Programmer, Operations Lead"
-                    value={cgName}
-                    onChange={(e) => setCgName(e.target.value)}
-                    autoFocus
+          </div>
+
+          <form onSubmit={handleCreateCustomGroupSubmit} className="fc-team-add-layout">
+            <div className="fc-team-add-main">
+              {/* Step 1: name */}
+              <section className="fc-card fc-team-add-step">
+                <div className="fc-team-add-step-head">
+                  <span className="fc-team-add-step-no">1</span>
+                  <div>
+                    <h2>Name the group</h2>
+                    <p>This name appears on the Team page and when adding a member.</p>
+                  </div>
+                </div>
+                <div className="fc-team-add-fields">
+                  <div className="fc-form-group">
+                    <label htmlFor="cg-name">Group name <span style={{ color: 'var(--fc-danger-text)' }}>*</span></label>
+                    <input
+                      id="cg-name"
+                      type="text"
+                      required
+                      placeholder="e.g. Hospitality Lead, Programmer, Operations Lead"
+                      value={cgName}
+                      onChange={(e) => setCgName(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="fc-form-group">
+                    <label htmlFor="cg-desc">Description <span style={{ fontWeight: 400, color: 'var(--fc-text-muted)', textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+                    <input
+                      id="cg-desc"
+                      type="text"
+                      placeholder="What this group is responsible for"
+                      value={cgDescription}
+                      onChange={(e) => setCgDescription(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* Step 2: permissions */}
+              <section className="fc-card fc-team-add-step">
+                <div className="fc-team-add-step-head">
+                  <span className="fc-team-add-step-no">2</span>
+                  <div>
+                    <h2>Choose permissions</h2>
+                    <p>Tick what members of this group can do. Use "All" on an area to tick everything in it.</p>
+                  </div>
+                </div>
+                <div className="fc-team-cg-perms">
+                  <PermissionsByModuleSection
+                    catalog={catalog}
+                    permissions={cgPermissions}
+                    onTogglePermission={toggleCgPermission}
+                    onToggleModule={toggleCgModule}
+                    onSelectAll={handleCgSelectAll}
+                    onDeselectAll={handleCgDeselectAll}
+                    onResetDefaults={handleCgDeselectAll}
+                    groupKey="custom"
+                    groupDefaults={{ custom: [] }}
+                    onToggleExpandModule={toggleCgExpandModule}
+                    onExpandAll={handleCgExpandAll}
+                    onCollapseAll={handleCgCollapseAll}
+                    searchQuery={cgPermSearch}
+                    onSearchChange={setCgPermSearch}
+                    isCustomGroupCreation={true}
+                    customScopes={cgScopes}
+                    onScopeChange={handleCgScopeChange}
                   />
                 </div>
+              </section>
+            </div>
 
-                <div className="fc-form-group">
-                  <label>Description (Optional)</label>
-                  <input
-                    type="text"
-                    placeholder="Brief summary of duties and festival access level..."
-                    value={cgDescription}
-                    onChange={(e) => setCgDescription(e.target.value)}
-                  />
-                </div>
+            {/* Summary + actions */}
+            <aside className="fc-card fc-team-add-summary">
+              <h3>Summary</h3>
 
-                {/* Permissions Grouped by Module for Custom Group */}
-                <PermissionsByModuleSection
-                  catalog={catalog}
-                  permissions={cgPermissions}
-                  onTogglePermission={toggleCgPermission}
-                  onToggleModule={toggleCgModule}
-                  onSelectAll={handleCgSelectAll}
-                  onDeselectAll={handleCgDeselectAll}
-                  onResetDefaults={handleCgDeselectAll}
-                  groupKey="custom"
-                  groupDefaults={{ custom: [] }}
-                  expandedModules={cgExpandedModules}
-                  onToggleExpandModule={toggleCgExpandModule}
-                  onExpandAll={handleCgExpandAll}
-                  onCollapseAll={handleCgCollapseAll}
-                  searchQuery={cgPermSearch}
-                  onSearchChange={setCgPermSearch}
-                  isCustomGroupCreation={true}
-                  customScopes={cgScopes}
-                  onScopeChange={handleCgScopeChange}
-                />
+              <div className="fc-tas-row">
+                <span className="fc-tas-label">Group</span>
+                {cgName.trim() ? (
+                  <div style={{ minWidth: 0 }}>
+                    <div className="fc-tas-name">{cgName.trim()}</div>
+                    {cgDescription.trim() && <div className="fc-tas-sub">{cgDescription.trim()}</div>}
+                  </div>
+                ) : (
+                  <span className="fc-tas-empty">Not named yet</span>
+                )}
               </div>
-              <div className="fc-modal-footer">
-                <button
-                  type="button"
-                  className="fc-btn-secondary"
-                  onClick={() => setShowCustomGroupModal(false)}
-                >
-                  Cancel
-                </button>
+
+              <div className="fc-tas-row">
+                <span className="fc-tas-label">Permissions</span>
+                <div className="fc-tas-name">{cgPermissions.size} <span className="fc-tas-sub" style={{ display: 'inline' }}>of {addCatalogTotal}</span></div>
+                <div className="fc-tas-bar"><span style={{ width: `${addCatalogTotal ? Math.round((cgPermissions.size / addCatalogTotal) * 100) : 0}%` }} /></div>
+                {cgAreaCounts.length > 0 ? (
+                  <div className="fc-tas-chips" style={{ marginTop: '4px' }}>
+                    {cgAreaCounts.map(([area, n]) => <span key={area} className="fc-tas-chip">{area} · {n}</span>)}
+                  </div>
+                ) : (
+                  <span className="fc-tas-empty">None ticked yet</span>
+                )}
+              </div>
+
+              <div className="fc-tas-actions">
                 <button
                   type="submit"
                   className="fc-btn-primary"
                   disabled={cgLoading || !cgName.trim()}
+                  style={!cgName.trim() ? { opacity: 0.55, cursor: 'not-allowed' } : {}}
                 >
                   {cgLoading ? 'Saving...' : 'Save Custom Group'}
                 </button>
+                <button type="button" className="fc-team-add-cancel" onClick={() => setShowCustomGroupModal(false)}>
+                  Cancel
+                </button>
               </div>
-            </form>
-          </div>
+              {!cgName.trim() && <p className="fc-tas-hint">Enter a group name to continue.</p>}
+            </aside>
+          </form>
         </div>
       )}
     </div>

@@ -743,7 +743,7 @@ export default function InPageReviewStateBuilder({
       </div>
 
       {/* ── INTERACTIVE BUILDER FORM BODY ──────────────────────────────── */}
-      <form onSubmit={handleSubmit} style={{ padding: '24px' }}>
+      <form className="fc-builder-form" onSubmit={handleSubmit} style={{ padding: '24px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
           {/* 1. Stage Name & Sequence Order */}
@@ -756,7 +756,7 @@ export default function InPageReviewStateBuilder({
             </div>
 
             {/* Top Row: Stage Name & Stage Status */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) auto', gap: '24px', alignItems: 'flex-start', marginBottom: '20px' }}>
+            <div className="fc-builder-name-row" style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) auto', gap: '24px', alignItems: 'flex-start', marginBottom: '20px' }}>
               <div>
                 <label className="fc-builder-field-label">STAGE NAME (E.G. ROUND 1, NOMINATION, FINALIST) *</label>
                 <input

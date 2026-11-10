@@ -168,7 +168,7 @@ export default function WinnersBoard({
       marginBottom: '24px'
     }}>
       {/* ── TOP HEADER ─────────────────────────────────────────────────── */}
-      <div style={{
+      <div className="fc-stage-board-head" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -179,7 +179,7 @@ export default function WinnersBoard({
         borderBottom: '1px solid var(--fc-border, #f1f5f9)'
       }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="fc-stage-board-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <TrophyIcon size={20} style={{ color: 'var(--fc-brand, #a82f2f)' }} />
             <strong style={{ fontSize: '16px', color: 'var(--fc-text-main, #0f172a)', fontWeight: 800 }}>
               {stageName} — Official Honours
@@ -330,7 +330,7 @@ export default function WinnersBoard({
         </div>
 
         {/* Row 2: Category Filter Pills */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+        <div className="fc-stage-filter-pills" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--fc-text-muted)', marginRight: '4px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
             Filter:
           </span>
@@ -394,9 +394,9 @@ export default function WinnersBoard({
       {/* ── CONDITIONAL RENDERING: TABLE VIEW vs CARDS VIEW ─────────────── */}
       {viewMode === 'table' ? (
         /* ── 1. UNIFIED STANDARD MASTER TABLE VIEW ──────────────────────── */
-        <div className="fc-card" style={{ marginTop: '10px', overflow: 'visible', minHeight: '380px', marginBottom: '24px' }}>
-          <div style={{ overflowX: 'auto', overflowY: 'visible', minHeight: '360px', paddingBottom: '30px' }}>
-            <table className="fc-table" style={{ width: '100%', margin: 0 }}>
+        <div className="fc-card fc-stage-table-card" style={{ marginTop: '10px', overflow: 'visible', minHeight: '380px', marginBottom: '24px' }}>
+          <div className="fc-stage-table-wrap" style={{ overflowX: 'auto', overflowY: 'visible', minHeight: '360px', paddingBottom: '30px' }}>
+            <table className="fc-table fc-stage-table" style={{ width: '100%', margin: 0 }}>
               <thead>
                 <tr>
                   <th style={{ width: '36px', textAlign: 'center' }}>#</th>
@@ -411,7 +411,7 @@ export default function WinnersBoard({
               <tbody>
                 {filteredCategoryWinners.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--fc-text-muted, #94a3b8)', fontStyle: 'italic' }}>
+                    <td className="st-full" colSpan="7" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--fc-text-muted, #94a3b8)', fontStyle: 'italic' }}>
                       {filterQuery ? `No categories or winners match "${filterQuery}".` : 'No categories found for the selected filter.'}
                     </td>
                   </tr>
@@ -428,12 +428,12 @@ export default function WinnersBoard({
                         style={{ transition: 'background-color 0.15s ease' }}
                       >
                         {/* Row Index */}
-                        <td style={{ textAlign: 'center', color: 'var(--fc-text-muted)', fontSize: '12px' }}>
+                        <td className="st-lead st-no" style={{ textAlign: 'center', color: 'var(--fc-text-muted)', fontSize: '12px' }}>
                           {idx + 1}
                         </td>
 
                         {/* Award Category */}
-                        <td>
+                        <td className="st-title" data-label="Award">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <TrophyIcon size={14} style={{ color: winner ? 'var(--fc-badge-amber, #d97706)' : 'var(--fc-text-muted)' }} />
                             <strong style={{ fontSize: '13px', color: 'var(--fc-text-main, #1e293b)' }}>
@@ -446,7 +446,7 @@ export default function WinnersBoard({
                         </td>
 
                         {/* Official Winner */}
-                        <td>
+                        <td className="st-body st-first" data-label="Official winner">
                           {winner ? (
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -477,7 +477,7 @@ export default function WinnersBoard({
                         </td>
 
                         {/* Category / Format */}
-                        <td>
+                        <td className="st-half-a" data-label="Category">
                           {winner ? (
                             <span className="fc-category-pill">
                               {winner.category || 'General'}
@@ -490,7 +490,7 @@ export default function WinnersBoard({
                         </td>
 
                         {/* Jury Rating */}
-                        <td style={{ textAlign: 'center' }}>
+                        <td className="st-half-b" data-label="Jury rating" style={{ textAlign: 'center' }}>
                           {winner && ratingVal !== null ? (
                             <div>
                               <div style={{
@@ -523,7 +523,7 @@ export default function WinnersBoard({
                         </td>
 
                         {/* Runner-ups & Nominees */}
-                        <td>
+                        <td className="st-body" data-label="Runner-ups & nominees">
                           {nominees.length === 0 ? (
                             <span style={{ fontSize: '11px', color: 'var(--fc-text-muted)', fontStyle: 'italic' }}>
                               No runner-up films
@@ -559,7 +559,7 @@ export default function WinnersBoard({
                         </td>
 
                         {/* Actions */}
-                        <td style={{ textAlign: 'right' }}>
+                        <td className="st-act" style={{ textAlign: 'right' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                             {winner ? (
                               <>
@@ -922,7 +922,7 @@ export default function WinnersBoard({
       )}
 
       {/* ── BOTTOM ACTIONS ─────────────────────────────────────────────── */}
-      <div style={{
+      <div className="fc-stage-board-foot" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',

@@ -625,7 +625,8 @@ const exportColumns = React.useMemo(() => {
   return [...core, ...formCols];
 }, [formSchema]);
 
-const exportPrefKey = `fc_delegate_export_cols_${currentFestival?.id || 'default'}`;
+// v2: default changed to delegate details only, so earlier saved choices start fresh
+const exportPrefKey = `fc_delegate_export_cols_v2_${currentFestival?.id || 'default'}`;
 const [showExportModal, setShowExportModal] = useState(false);
 const [exportSelected, setExportSelected] = useState(() => new Set());
 
@@ -634,7 +635,8 @@ const openExportModal = () => {
   try { saved = JSON.parse(localStorage.getItem(exportPrefKey) || 'null'); } catch { saved = null; }
   const valid = new Set(exportColumns.map(c => c.key));
   const initial = Array.isArray(saved) ? saved.filter(k => valid.has(k)) : [];
-  setExportSelected(new Set(initial.length ? initial : exportColumns.map(c => c.key)));
+  // Default: delegate details ticked, registration form answers unticked (tick them when needed)
+  setExportSelected(new Set(initial.length ? initial : exportColumns.filter(c => c.group !== 'form').map(c => c.key)));
   setShowExportModal(true);
 };
 
@@ -813,7 +815,7 @@ return (
 
       {/* Filter & Search Bar with Add CTA */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', marginBottom: (search || activeFilterCount > 0) ? '12px' : '20px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '280px', maxWidth: '640px' }}>
+        <div className="fc-reg-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '280px', maxWidth: '640px' }}>
               <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
                 <span
                   style={{
@@ -1303,7 +1305,7 @@ return (
           </div>
         ) : (
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                <table className="fc-delegate-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'var(--fc-surface)', borderBottom: '1px solid var(--fc-border)', textAlign: 'left', color: 'var(--fc-text-muted)' }}>
                       <th style={{ padding: '12px 16px', fontWeight: 700 }}>Delegate</th>
@@ -1318,10 +1320,10 @@ return (
                       const isIssued = Boolean(a.qr_token || a.status === 'badge_issued');
                       return (
                         <tr key={a.attendee_id} style={{ borderBottom: '1px solid var(--fc-border-subtle, var(--fc-border))' }}>
-                          <td style={{ padding: '14px 16px' }}>
+                          <td className="fc-dt-name" style={{ padding: '14px 16px' }}>
                             <div style={{ fontWeight: 700, color: 'var(--fc-text-main)', fontSize: '0.92rem' }}>{a.name}</div>
                           </td>
-                          <td style={{ padding: '14px 16px' }}>
+                          <td className="fc-dt-cat" style={{ padding: '14px 16px' }}>
                             <span
                               style={{
                                 background: a.badge_color || 'var(--fc-brand)',
@@ -1338,16 +1340,16 @@ return (
                               {a.badge_ribbon || a.delegate_category}
                             </span>
                           </td>
-                          <td style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                          <td className="fc-dt-status" style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
                             <span style={{ fontSize: '0.82rem', fontWeight: 700, color: isIssued ? 'var(--fc-success-text)' : 'var(--fc-warning-text)' }}>
                               {isIssued ? 'QR Issued' : 'Pending Arrival'}
                             </span>
                           </td>
-                          <td style={{ padding: '14px 16px', color: 'var(--fc-text-secondary)' }}>
+                          <td className="fc-dt-contact" style={{ padding: '14px 16px', color: 'var(--fc-text-secondary)' }}>
                             <div style={{ fontWeight: 600 }}>{a.phone || '—'}</div>
                             <div style={{ fontSize: '0.78rem', color: 'var(--fc-text-muted)' }}>{a.email || '—'}</div>
                           </td>
-                          <td style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <td className="fc-dt-actions" style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                             <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
                               <IconAction
                                 icon={<EditIcon size={15} />}

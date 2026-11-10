@@ -12,6 +12,7 @@ import {
   FileDownloadIcon,
   PeopleIcon,
   CheckCircleIcon,
+  CloseIcon,
 } from '../components/common/Icons';
 
 // Crisp SVG Icons matching FestEase / Material Icons
@@ -20,6 +21,123 @@ function BankIcon({ size = 18, style = {} }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, ...style }}>
       <path d="M4 10v7h3v-7H4zm6 0v7h3v-7h-3zM2 22h19v-3H2v3zm14-12v7h3v-7h-3zm-4.5-9L2 6v2h19V6l-9.5-5z" />
     </svg>
+  );
+}
+
+// PAN / long IDs: keep only the last 4 characters visible
+function maskTail(value, visible = 4) {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  if (v.length <= visible) return v;
+  return '•'.repeat(Math.min(v.length - visible, 6)) + v.slice(-visible);
+}
+
+function titleCase(value) {
+  return String(value || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
+const BANK_STATUS_STYLES = {
+  verified: { label: 'Verified', color: 'var(--fc-success-text)', bg: 'var(--fc-success-bg)', border: 'var(--fc-success-border)' },
+  pending: { label: 'Verification pending', color: 'var(--fc-warning-text)', bg: 'var(--fc-warning-bg)', border: 'var(--fc-warning-border)' },
+  failed: { label: 'Verification failed', color: 'var(--fc-danger-text)', bg: 'var(--fc-danger-bg)', border: 'var(--fc-danger-border)' },
+  rejected: { label: 'Rejected', color: 'var(--fc-danger-text)', bg: 'var(--fc-danger-bg)', border: 'var(--fc-danger-border)' },
+};
+
+function BankDetailsDialog({ bank, onClose }) {
+  const closeRef = useRef(null);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  const statusKey = String(bank?.verification_status || '').toLowerCase();
+  const status = statusKey
+    ? (BANK_STATUS_STYLES[statusKey] || { label: titleCase(statusKey), color: 'var(--fc-text-secondary)', bg: 'var(--fc-surface-subtle)', border: 'var(--fc-border)' })
+    : null;
+
+  // Only rows that have a value are shown — nothing is filled in by the UI
+  const rows = [
+    { label: 'Account holder', value: bank?.beneficiary_name },
+    { label: 'Legal entity', value: bank?.legal_entity_name },
+    { label: 'Bank', value: bank?.bank_name },
+    { label: 'Branch', value: bank?.branch_name },
+    { label: 'Account number', value: bank?.account_number_masked, mono: true },
+    { label: 'IFSC', value: bank?.ifsc_code, mono: true },
+    { label: 'Account type', value: titleCase(bank?.account_type) },
+    { label: 'PAN', value: maskTail(bank?.pan_number), mono: true },
+  ].filter((r) => r.value);
+
+  return (
+    <div className="fc-modal-overlay" onClick={onClose}>
+      <div
+        className="fc-modal-card fc-pay-bank-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="fc-pay-bank-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="fc-modal-header" style={{ gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+            <div className="fc-pay-bank-icon">
+              <BankIcon size={20} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <h2 id="fc-pay-bank-title" style={{ margin: 0, fontSize: '1.05rem', color: 'var(--fc-text-main)' }}>
+                Settlement Bank Account
+              </h2>
+              <div style={{ fontSize: '0.78rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>
+                Net payouts for this festival are deposited here
+              </div>
+            </div>
+          </div>
+          <button ref={closeRef} type="button" className="fc-modal-close" onClick={onClose} aria-label="Close">
+            <CloseIcon size={14} />
+          </button>
+        </div>
+
+        <div className="fc-pay-bank-body">
+          {status && (
+            <span
+              className="fc-pay-bank-status"
+              style={{ color: status.color, background: status.bg, borderColor: status.border }}
+            >
+              {statusKey === 'verified' && <CheckCircleIcon size={14} />}
+              {status.label}
+            </span>
+          )}
+
+          <dl className="fc-pay-bank-list">
+            {rows.map((r) => (
+              <div key={r.label} className="fc-pay-bank-row">
+                <dt>{r.label}</dt>
+                <dd className={r.mono ? 'is-mono' : undefined}>{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <p className="fc-pay-bank-note">
+            For security, only the last 4 digits of the account number and PAN are shown.
+          </p>
+        </div>
+
+        <div className="fc-modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button type="button" className="fc-pay-bank-close" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -83,6 +201,8 @@ export default function PaymentsPage() {
     total_reversed_amount: 0,
   });
   const [bankInfo, setBankInfo] = useState(null);
+  const [showBankDialog, setShowBankDialog] = useState(false);
+  const closeBankDialog = useCallback(() => setShowBankDialog(false), []);
   const [ledger, setLedger] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
   const [page, setPage] = useState(1);
@@ -90,12 +210,31 @@ export default function PaymentsPage() {
 
   // Tabs: 0: Settled, 1: Pending, 2: Refunded
   const [tabIndex, setTabIndex] = useState(1);
+
+  // Phones: the tab row scrolls sideways, so bring the active tab fully into view
+  useEffect(() => {
+    const row = document.querySelector('.fc-pay-tabs');
+    const btn = row?.children?.[tabIndex];
+    if (!row || !btn || row.scrollWidth <= row.clientWidth) return;
+    const offset = btn.getBoundingClientRect().left - row.getBoundingClientRect().left + row.scrollLeft;
+    row.scrollTo({ left: offset - (row.clientWidth - btn.offsetWidth) / 2, behavior: 'smooth' });
+  }, [tabIndex]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searching, setSearching] = useState(false);
   const requestIdRef = useRef(0);
   const searchDidMountRef = useRef(false);
   const [sortBy, setSortBy] = useState('recent');
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid' (desktop choice)
+
+  // Phones always use the grid (card) view; the list/grid toggle is desktop only
+  const [isPhone, setIsPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = (e) => setIsPhone(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const effectiveView = isPhone ? 'grid' : viewMode;
 
   // Fetch Payouts data based on current tab & search
   // `quiet` keeps the current table on screen (used while typing a search) instead of the full loader.
@@ -256,10 +395,10 @@ export default function PaymentsPage() {
     return items;
   }, [ledger, sortBy]);
 
-  const festivalName = currentFestival?.name || currentFestival?.title || 'KASHISH x BENGALURU 2026';
+  const festivalName = currentFestival?.name || currentFestival?.title || 'Festival';
   const hasBank = Boolean(bankInfo && (bankInfo.bank_name || bankInfo.account_number_masked));
-  const bankName = bankInfo?.bank_name || 'State Bank of India';
-  const maskedAcc = bankInfo?.account_number_masked || '••••8399';
+  const bankName = bankInfo?.bank_name || 'Bank account';
+  const maskedAcc = bankInfo?.account_number_masked || '';
 
   return (
     <div className="animate-fade-in" style={{ width: '100%', padding: '0 0 32px 0' }}>
@@ -275,6 +414,7 @@ export default function PaymentsPage() {
 
       {/* ── Festival & Bank Settlement Banner Card ──────────────────── */}
       <div
+        className="fc-pay-banner"
         style={{
           border: '1px solid var(--fc-border, #e2e8f0)',
           borderRadius: '16px',
@@ -319,28 +459,22 @@ export default function PaymentsPage() {
         </div>
 
         {hasBank && (
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: 'var(--fc-surface-subtle)',
-              padding: '7px 16px',
-              borderRadius: '20px',
-              border: '1px solid var(--fc-border)',
-              color: 'var(--fc-text-secondary)',
-              fontWeight: 650,
-              fontSize: '13px',
-            }}
+          <button
+            type="button"
+            className="fc-pay-bank-pill"
+            onClick={() => setShowBankDialog(true)}
+            aria-haspopup="dialog"
+            title="View settlement bank account details"
           >
-            <BankIcon size={16} />
-            <span>Settlement: {bankName} ({maskedAcc})</span>
-          </div>
+            <BankIcon size={16} style={{ flexShrink: 0 }} />
+            <span>Settlement: {bankName}{maskedAcc ? ` (${maskedAcc})` : ''}</span>
+          </button>
         )}
       </div>
 
       {/* ── 4 Metric KPI Summary Cards ──────────────────────────────── */}
       <div
+        className="fc-pay-kpis"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
@@ -498,7 +632,7 @@ export default function PaymentsPage() {
               ₹{Number(kpis.net_settled_to_bank || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
             <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--fc-text-muted, #64748b)' }}>
-              {hasBank ? `${bankName} ${maskedAcc}` : 'No bank account linked'}
+              {hasBank ? [bankName, maskedAcc].filter(Boolean).join(' ') : 'No bank account linked'}
             </div>
           </div>
           <div
@@ -521,8 +655,9 @@ export default function PaymentsPage() {
       </div>
 
       {/* ── Centered Tabs Bar ───────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', width: '100%' }}>
+      <div className="fc-pay-tabs-wrap" style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px', width: '100%' }}>
         <div
+          className="fc-pay-tabs"
           style={{
             display: 'inline-flex',
             gap: '8px',
@@ -617,6 +752,7 @@ export default function PaymentsPage() {
       >
         {/* Card Toolbar Bar */}
         <div
+          className="fc-pay-toolbar"
           style={{
             padding: '20px 24px',
             borderBottom: '1px solid var(--fc-border, #f1f5f9)',
@@ -645,20 +781,21 @@ export default function PaymentsPage() {
             </div>
           </div>
 
-          {/* Controls: Search, Sort, CSV Export, View Toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {/* Controls: Search, Sort, CSV Export, View Toggle (one row, right-aligned; wraps only on narrow screens) */}
+          <div className="fc-pay-controls" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end', flex: '1 1 auto' }}>
             {/* Search Input */}
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
               loading={searching}
-              placeholder="Search name, email, phone, film, transfer ID…"
-              maxWidth="320px"
-              style={{ flex: '1 1 260px' }}
+              placeholder="Search name, phone, film or ID"
+              maxWidth="280px"
+              style={{ flex: '0 1 280px', minWidth: '200px' }}
             />
 
             {/* Sort Dropdown */}
             <select
+              className="fc-pay-sort"
               value={sortBy}
               onChange={handleSortChange}
               style={{
@@ -681,6 +818,7 @@ export default function PaymentsPage() {
             {/* CSV Export Button */}
             <button
               type="button"
+              className="fc-pay-export"
               onClick={handleExportCsv}
               style={{
                 background: 'var(--fc-brand)',
@@ -704,10 +842,13 @@ export default function PaymentsPage() {
               <span>CSV Export</span>
             </button>
 
-            {/* View Mode Toggle: Grid vs List */}
+            {/* View Mode Toggle: Grid vs List (desktop only; phones always show the grid) */}
+            {!isPhone && (
             <div
+              className="fc-pay-view"
               style={{
                 display: 'flex',
+                flexShrink: 0,
                 background: 'var(--fc-surface-subtle)',
                 border: '1px solid var(--fc-border, #e2e8f0)',
                 borderRadius: '10px',
@@ -752,6 +893,7 @@ export default function PaymentsPage() {
                 <ListIcon size={16} />
               </button>
             </div>
+            )}
           </div>
         </div>
 
@@ -780,10 +922,10 @@ export default function PaymentsPage() {
               </button>
             )}
           </div>
-        ) : viewMode === 'list' ? (
+        ) : effectiveView === 'list' ? (
           /* ── Table View Mode ───────────────────────────────────────── */
-          <div className="table-container" style={{ overflowX: 'auto', width: '100%' }}>
-            <table className="table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <div className="table-container fc-pay-table-wrap" style={{ overflowX: 'auto', width: '100%' }}>
+            <table className="table fc-pay-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ background: 'var(--fc-surface-subtle)', borderBottom: '1px solid var(--fc-border-subtle)' }}>
                   <th style={{ padding: '12px 16px', fontWeight: 600, fontSize: '12px', color: 'var(--fc-text-muted, #64748b)' }}>#</th>
@@ -838,6 +980,7 @@ export default function PaymentsPage() {
                   return (
                     <tr
                       key={row.id || idx}
+                      className={`fc-pay-row${isRefunded ? ' is-refunded' : ''}`}
                       style={{
                         borderBottom: '1px solid var(--fc-border-subtle)',
                         background: isRefunded
@@ -845,10 +988,10 @@ export default function PaymentsPage() {
                           : 'inherit',
                       }}
                     >
-                      <td style={{ padding: '14px 16px', color: 'var(--fc-text-muted, #64748b)', fontWeight: 600, fontSize: '13px' }}>
+                      <td className="fc-pd-no" style={{ padding: '14px 16px', color: 'var(--fc-text-muted, #64748b)', fontWeight: 600, fontSize: '13px' }}>
                         {(page - 1) * perPage + idx + 1}
                       </td>
-                      <td style={{ padding: '14px 16px' }}>
+                      <td className="fc-pd-name" style={{ padding: '14px 16px' }}>
                         <div style={{ fontWeight: 700, color: 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
                           {row.filmmaker_name || '—'}
                         </div>
@@ -856,10 +999,10 @@ export default function PaymentsPage() {
                           {row.filmmaker_email || ''}
                         </div>
                       </td>
-                      <td style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
+                      <td className="fc-pd-film" data-label="Film" style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
                         {row.film_title || '—'}
                       </td>
-                      <td style={{ padding: '14px 16px' }}>
+                      <td className="fc-pd-cat" style={{ padding: '14px 16px' }}>
                         <span
                           style={{
                             background: 'var(--fc-info-bg)',
@@ -875,10 +1018,10 @@ export default function PaymentsPage() {
                           {row.category_name || 'Short Film'}
                         </span>
                       </td>
-                      <td style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
+                      <td className="fc-pd-fee" data-label="Submission fee" style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--fc-text-main, #0f172a)', fontSize: '13px' }}>
                         ₹{fee.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--fc-danger-text)', fontSize: '13px' }}>
+                      <td className="fc-pd-ded" data-label="Deductions" style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--fc-danger-text)', fontSize: '13px' }}>
                         <span
                           title={`ffesti Plus Platform Fee (6%): ₹${platformFee.toFixed(2)} | Route Transfer Fee (0.25%) + GST: ₹${routeTotal.toFixed(2)}`}
                           style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
@@ -886,7 +1029,7 @@ export default function PaymentsPage() {
                           -₹{deductions.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </span>
                       </td>
-                      <td style={{ padding: '14px 16px', fontWeight: 800, fontSize: '13px' }}>
+                      <td className="fc-pd-net" data-label="Net payout" style={{ padding: '14px 16px', fontWeight: 800, fontSize: '13px' }}>
                         {isRefunded ? (
                           <div>
                             <span style={{ textDecoration: 'line-through', color: 'var(--fc-text-muted, #94a3b8)', display: 'block', fontSize: '11px' }}>
@@ -902,7 +1045,7 @@ export default function PaymentsPage() {
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '14px 16px' }}>
+                      <td className="fc-pd-trf" data-label={tabIndex === 2 ? 'Route & reversal IDs' : 'Transfer ID'} style={{ padding: '14px 16px' }}>
                         <span
                           style={{
                             color: 'var(--fc-info-text)',
@@ -924,7 +1067,7 @@ export default function PaymentsPage() {
                           </div>
                         )}
                       </td>
-                      <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                      <td className="fc-pd-act" style={{ padding: '14px 16px', textAlign: 'center' }}>
                         <button
                           type="button"
                           onClick={() => handleDownloadReceipt(row)}
@@ -966,7 +1109,7 @@ export default function PaymentsPage() {
           </div>
         ) : (
           /* ── Grid View Mode ────────────────────────────────────────── */
-          <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+          <div className="fc-pay-grid" style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
             {sortedLedger.map((row, idx) => {
               const fee = Number(row.base_fee_amount || 0);
               const platformFee = row.commission_amount !== undefined && row.commission_amount !== null
@@ -1125,6 +1268,10 @@ export default function PaymentsPage() {
           </div>
         )}
       </div>
+
+      {showBankDialog && hasBank && (
+        <BankDetailsDialog bank={bankInfo} onClose={closeBankDialog} />
+      )}
     </div>
   );
 }

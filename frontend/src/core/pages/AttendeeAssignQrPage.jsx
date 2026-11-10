@@ -53,6 +53,19 @@ export default function AttendeeAssignQrPage() {
   const [successResult, setSuccessResult] = useState(null);
 
   const searchInputRef = useRef(null);
+  const scannerCardRef = useRef(null);
+  const codeInputRef = useRef(null);
+
+  // Select a delegate; on phones jump to the badge box (it sits below the roster there) and focus it
+  const pickDelegate = (a) => {
+    setSelectedAttendee(a);
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
+      setTimeout(() => {
+        scannerCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        codeInputRef.current?.focus({ preventScroll: true });
+      }, 50);
+    }
+  };
 
   // Sync prefilled code if route query param changes
   useEffect(() => {
@@ -365,12 +378,12 @@ export default function AttendeeAssignQrPage() {
         );
       })() : (
         /* ── Main 2-Column Pairing Console (Matches Attendance Page Layout) ── */
-        <div className="fc-console-grid" style={{ display: 'grid', gap: '24px', alignItems: 'start' }}>
+        <div className="fc-console-grid fc-aq-grid" style={{ display: 'grid', gap: '24px', alignItems: 'start' }}>
 
           {/* Left Column: Badge Scanner Deck & Intake Protocol */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="fc-aq-col" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* 1. Badge Scanner Deck Card (Identical to AttendancePage) */}
-            <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+            <div ref={scannerCardRef} className="fc-card fc-aq-scanner" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
               <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <QrCodeScannerIcon size={18} /> Badge Scanner Deck
               </h2>
@@ -408,13 +421,15 @@ export default function AttendeeAssignQrPage() {
                   <label style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: 'var(--fc-text-secondary)', marginBottom: '6px' }}>
                     Enter 6-digit badge number or scan with USB scanner:
                   </label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="fc-aq-code-row" style={{ display: 'flex', gap: '8px' }}>
                     <div style={{ position: 'relative', flex: 1 }}>
                       <input 
+                        ref={codeInputRef}
                         type="text"
+                        inputMode="numeric"
                         autoFocus={!prefilledCode}
                         maxLength={40}
-                        placeholder="e.g. 849201 or paste Token..."
+                        placeholder="e.g. 849201"
                         value={code}
                         onChange={(e) => setCode(e.target.value.replace(/\s+/g, ''))}
                         style={{
@@ -519,7 +534,7 @@ export default function AttendeeAssignQrPage() {
             </div>
 
             {/* Registration Desk Operational Info */}
-            <div style={{
+            <div className="fc-aq-protocol" style={{
               background: 'rgba(168, 47, 47, 0.04)',
               border: '1px dashed rgba(168, 47, 47, 0.28)',
               borderRadius: '12px',
@@ -540,9 +555,9 @@ export default function AttendeeAssignQrPage() {
           </div>
 
           {/* Right Column: Delegate Selection & Target Details */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="fc-aq-col" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* Selected Delegate Card (Target Delegate) */}
-            <div className="fc-card" style={{
+            <div className={`fc-card fc-aq-target ${selectedAttendee ? '' : 'is-empty'}`} style={{
               background: 'var(--fc-surface-card)',
               borderRadius: '12px',
               border: selectedAttendee ? '2px solid var(--fc-brand, var(--fc-brand))' : '1px solid var(--fc-border)',
@@ -602,7 +617,7 @@ export default function AttendeeAssignQrPage() {
             </div>
 
             {/* Delegate Roster Selection Card */}
-            <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+            <div className="fc-card fc-aq-roster" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
                 <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0, color: 'var(--fc-text-main)' }}>
                   Registered Delegates Roster
@@ -662,7 +677,7 @@ export default function AttendeeAssignQrPage() {
                   return (
                     <div
                       key={a.attendee_id}
-                      onClick={() => setSelectedAttendee(a)}
+                      onClick={() => pickDelegate(a)}
                       style={{
                         padding: '12px 16px',
                         borderBottom: '1px solid var(--fc-border)',
@@ -685,7 +700,7 @@ export default function AttendeeAssignQrPage() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{
+                        <span className="fc-aq-pill" style={{
                           fontSize: '0.72rem',
                           fontWeight: 700,
                           padding: '3px 8px',
@@ -697,7 +712,7 @@ export default function AttendeeAssignQrPage() {
                         </span>
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); setSelectedAttendee(a); }}
+                          onClick={(e) => { e.stopPropagation(); pickDelegate(a); }}
                           style={{
                             padding: '4px 10px',
                             borderRadius: '6px',
