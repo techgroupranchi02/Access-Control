@@ -14,6 +14,24 @@ const { festivalImageUrl } = require('../utils/media.utils');
 const { query, getConnection } = require('../../config/database');
 const { PREBUILT_TEMPLATES, getAvailableTemplates, getTemplateByKey } = require('../services/registration-form-templates');
 const qrCredential = require('../services/qrCredential.service');
+const kashishExternal = require('../services/kashishExternalVotes.service');
+const { getFilmFestivalId } = require('../services/festivalIds.service');
+
+const KASHISH_VOTING_MESSAGE = 'Audience voting for this festival happens in the Kashish Pride app.';
+
+async function getApproverName(userId) {
+  if (!userId) return 'Festival Administration';
+  try {
+    const rows = await query(`
+      SELECT u.email, ind.name
+      FROM users u
+      LEFT JOIN individuals ind ON ind.user_id = u.id
+      WHERE u.id = ?
+    `, [userId]);
+    if (rows.length > 0) return rows[0].name || rows[0].email;
+  } catch (e) { /* fall through */ }
+  return 'Festival Administration';
+}
 
 /**
  * Helper: Extract event_id from request headers or query
@@ -56,7 +74,7 @@ async function listCategories(req, res) {
         (
           SELECT COUNT(*) 
           FROM saas_attendees sa 
-          WHERE (sa.event_id = ac.event_id OR sa.festival_id = ac.event_id)
+          WHERE sa.event_id = ac.event_id
             AND (sa.delegate_category = ac.code OR sa.delegate_category = ac.name)
         ) AS attendee_count
       FROM audience_categories ac
@@ -183,10 +201,10 @@ async function listVenues(req, res) {
         COALESCE(v.capacity, 100) AS capacity,
         (SELECT COUNT(*) FROM screening_blocks sb WHERE sb.venue_id = v.venue_id) AS total_screenings
       FROM venues v
-      WHERE v.event_id = ? OR v.festival_id = ?
+      WHERE v.event_id = ?
       ORDER BY v.venue_id ASC
     `;
-    const venues = await query(sql, [eventId, eventId]);
+    const venues = await query(sql, [eventId]);
     res.json({ success: true, count: venues.length, venues });
   } catch (error) {
     console.error('[AudienceController] listVenues error:', error.message);
@@ -208,7 +226,11 @@ async function getAudienceSettings(req, res) {
       require_screening_checkin: true,
       enable_did_not_watch_skip: true,
       anti_sharing_protection: true,
-      delegate_registration_enabled: false
+      delegate_registration_enabled: false,
+      // Where audience votes come from: 'freecomers' (screening QR / /vote) or 'kashish' (Kashish app, docs/adr/0004)
+      voting_source: 'freecomers',
+      kashish_voting_from: null,
+      kashish_voting_to: null
     };
 
     let config = defaultConfig;
@@ -251,6 +273,16 @@ async function updateAudienceSettings(req, res) {
     const eventId = getEventId(req);
     // festival_name is derived from events.name on read; don't persist a copy that can go stale
     const { festival_name: _ignoredName, festival_banner_url: _b, festival_logo_url: _l, ...settings } = req.body || {};
+
+    // Vote source + Kashish voting period: keep only known values / valid dates
+    settings.voting_source = settings.voting_source === 'kashish' ? 'kashish' : 'freecomers';
+    for (const key of ['kashish_voting_from', 'kashish_voting_to']) {
+      const d = settings[key] ? new Date(settings[key]) : null;
+      settings[key] = d && !Number.isNaN(d.getTime()) ? d.toISOString() : null;
+    }
+    if (settings.kashish_voting_from && settings.kashish_voting_to && settings.kashish_voting_from > settings.kashish_voting_to) {
+      return res.status(400).json({ error: '"Voting from" must be before "Voting to".' });
+    }
 
     await query(`
       INSERT INTO audience_settings (event_id, settings_json)
@@ -379,6 +411,10 @@ async function createScreeningBlock(req, res) {
 async function openVotingWindow(req, res) {
   try {
     const blockId = parseInt(req.params.id, 10);
+    const blockEvent = await query('SELECT event_id FROM screening_blocks WHERE id = ? LIMIT 1', [blockId]);
+    if (blockEvent.length && await kashishExternal.isKashishSource(blockEvent[0].event_id)) {
+      return res.status(403).json({ error: KASHISH_VOTING_MESSAGE });
+    }
     // Refresh the qr_token on open for security
     const dynamicQrToken = 'kashish_' + crypto.randomBytes(8).toString('hex');
 
@@ -456,6 +492,9 @@ async function performScreeningCheckin(req, res) {
         // Credentials: scanned QR payload or typed 6-digit badge serial, scoped to this event (ADR 0001).
         // The KB26-xxxx delegate label and raw attendee ids are not accepted as credentials.
         const resolved = await qrCredential.resolveAttendee(eventId, rawToken);
+        if (resolved && resolved.lost) {
+          return res.status(403).json({ error: qrCredential.lostBadgeMessage(resolved.lost_at), status: 'lost' });
+        }
         if (resolved) {
           const { custom_data, event_id, ...rest } = resolved.attendee;
           attendeeRecord = rest;
@@ -466,8 +505,8 @@ async function performScreeningCheckin(req, res) {
         const rows = await query(`
         SELECT attendee_id, name, email, phone, delegate_category, status, qr_token
         FROM saas_attendees
-        WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)
-      `, [targetAttendeeId, eventId, eventId]);
+        WHERE attendee_id = ? AND event_id = ?
+      `, [targetAttendeeId, eventId]);
         if (rows.length > 0) attendeeRecord = rows[0];
       }
 
@@ -646,8 +685,10 @@ async function listAttendance(req, res) {
         registration_type, registered_by_user_id, registered_by_role, status, qr_token, custom_data
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'admin', ?, ?, ?)
     `;
+      // festival_id holds film_festivals.film_festival_id, not the event id (festivalIds.service.js)
+      const filmFestivalId = (await getFilmFestivalId(eventId)) ?? 0;
       const result = await query(insertSql, [
-        eventId, eventId, name.trim(), email ? email.trim() : null, phone ? phone.trim() : null,
+        eventId, filmFestivalId, name.trim(), email ? email.trim() : null, phone ? phone.trim() : null,
         category, regType, userId, initialStatus, qrToken, customDataJson
       ]);
 
@@ -718,10 +759,10 @@ async function listAttendance(req, res) {
           (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended
         FROM saas_attendees sa
         LEFT JOIN audience_categories ac ON (ac.code = sa.delegate_category OR ac.name = sa.delegate_category) AND ac.event_id = sa.event_id
-        WHERE sa.attendee_id = ? AND (sa.event_id = ? OR sa.festival_id = ?)
+        WHERE sa.attendee_id = ? AND sa.event_id = ?
         LIMIT 1
       `;
-      const rows = await query(sql, [attendeeId, eventId, eventId]);
+      const rows = await query(sql, [attendeeId, eventId]);
       if (!rows || rows.length === 0) {
         return res.status(404).json({ error: 'Attendee not found.' });
       }
@@ -736,6 +777,14 @@ async function listAttendance(req, res) {
         custom_data: cd || {},
         serial_no: cd?.serial_no || ('KB26-' + String(row.attendee_id).padStart(4, '0')),
         badge_serial: await qrCredential.getBadgeSerial(row.attendee_id),
+        lost_badges: await (async () => {
+          const lost = await qrCredential.getLostBadges(getEventId(req), row.attendee_id);
+          const names = new Map();
+          for (const l of lost) {
+            if (l.lost_by_user_id && !names.has(l.lost_by_user_id)) names.set(l.lost_by_user_id, await getApproverName(l.lost_by_user_id));
+          }
+          return lost.map(l => ({ badge_serial: l.badge_serial, lost_at: l.lost_at, lost_by: l.lost_by_user_id ? names.get(l.lost_by_user_id) : null }));
+        })(),
         pass_type: cd?.pass_type || 'Full-Festival Pass',
         pass_days: cd?.pass_days || ['All Days']
       };
@@ -760,8 +809,8 @@ async function listAttendance(req, res) {
       }
 
       const existingRows = await query(
-        'SELECT * FROM saas_attendees WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)',
-        [attendeeId, eventId, eventId]
+        'SELECT * FROM saas_attendees WHERE attendee_id = ? AND event_id = ?',
+        [attendeeId, eventId]
       );
       if (!existingRows || existingRows.length === 0) {
         return res.status(404).json({ error: 'Attendee not found.' });
@@ -802,7 +851,7 @@ async function listAttendance(req, res) {
       const updateSql = `
         UPDATE saas_attendees
         SET name = ?, email = ?, phone = ?, delegate_category = ?, status = ?, custom_data = ?
-        WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)
+        WHERE attendee_id = ? AND event_id = ?
       `;
       await query(updateSql, [
         name.trim(),
@@ -812,7 +861,6 @@ async function listAttendance(req, res) {
         updatedStatus,
         JSON.stringify(updatedCustomData),
         attendeeId,
-        eventId,
         eventId
       ]);
 
@@ -843,6 +891,90 @@ async function listAttendance(req, res) {
    * POST /api/registration/attendees/:id/issue-qr
    * Issues a physical QR badge credential to a registered attendee upon physical arrival at the venue desk.
    */
+  /**
+   * POST /api/registration/attendees/:id/verify-phone   (Lost Badge tab, instant check)
+   * Checks the last 4 mobile digits the delegate tells the desk, without revealing them.
+   * Wrong answers count toward lostBadgeLimiter, the same as report-lost.
+   */
+  async function verifyLostBadgePhone(req, res) {
+    try {
+      const eventId = parseInt(getEventId(req), 10);
+      const attendeeId = parseInt(req.params.id, 10);
+      const rows = await query(
+        'SELECT phone FROM saas_attendees WHERE attendee_id = ? AND event_id = ? LIMIT 1',
+        [attendeeId, eventId]
+      );
+      if (!attendeeId || rows.length === 0) {
+        return res.status(404).json({ error: 'Attendee not found.' });
+      }
+      if (String(rows[0].phone || '').replace(/\D/g, '').length < 4) {
+        return res.json({ success: true, match: false, no_phone: true });
+      }
+      const match = qrCredential.phoneLast4Matches(rows[0].phone, req.body?.phone_last4);
+      if (!match) {
+        res.locals.credentialMiss = true;
+        return res.status(403).json({ success: false, match: false, error: 'Those digits don\'t match the delegate\'s registered mobile number.' });
+      }
+      res.json({ success: true, match: true });
+    } catch (error) {
+      console.error('[AudienceController] verifyLostBadgePhone error:', error.message);
+      res.status(500).json({ error: 'Could not check the digits.' });
+    }
+  }
+
+  async function reportLostBadge(req, res) {
+    try {
+      const eventId = parseInt(getEventId(req), 10);
+      const attendeeId = parseInt(req.params.id, 10);
+      if (!attendeeId) {
+        return res.status(400).json({ error: 'Valid attendee ID is required.' });
+      }
+      const rows = await query(
+        `SELECT attendee_id, name, phone, status, qr_token FROM saas_attendees
+         WHERE attendee_id = ? AND event_id = ? LIMIT 1`,
+        [attendeeId, eventId]
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'Attendee not found.' });
+      }
+      const attendee = rows[0];
+
+      // Identity: last 4 digits of the registered mobile. Without a mobile on file, only admins may proceed.
+      const storedDigits = String(attendee.phone || '').replace(/\D/g, '');
+      if (storedDigits.length >= 4) {
+        if (!qrCredential.phoneLast4Matches(attendee.phone, req.body?.phone_last4)) {
+          res.locals.credentialMiss = true;
+          return res.status(403).json({ error: 'Those digits don\'t match the delegate\'s registered mobile number.' });
+        }
+      } else {
+        // requirePermission marks platform admins, festival owners and the admin group as wildcard
+        const isAdmin = Boolean(req.user?.isSuperAdmin || req.permissionScope?.isWildcard);
+        if (!isAdmin) {
+          return res.status(403).json({ error: 'This delegate has no mobile number on file. Ask an admin to mark the badge lost.' });
+        }
+      }
+
+      const activeBadges = await query(
+        'SELECT COUNT(*) AS n FROM saas_qr WHERE attendee_id = ? AND event_id = ? AND is_lost = 0',
+        [attendeeId, eventId]
+      );
+      if (!Number(activeBadges[0]?.n) && !attendee.qr_token) {
+        return res.status(400).json({ error: `${attendee.name} has no active badge to mark as lost. Assign a new badge instead.` });
+      }
+
+      const { lostSerials } = await qrCredential.markBadgesLost(eventId, attendeeId, req.user ? req.user.id : null);
+      res.json({
+        success: true,
+        attendee_id: attendeeId,
+        lost_badges: lostSerials,
+        message: `Badge ${lostSerials.length ? lostSerials.map(s => '#' + s).join(', ') : ''} marked lost for ${attendee.name}. It can't be used again. Assign a new badge now.`.replace('Badge  marked', 'Badge marked')
+      });
+    } catch (error) {
+      console.error('[AudienceController] reportLostBadge error:', error.message);
+      res.status(500).json({ error: 'Failed to mark the badge as lost.' });
+    }
+  }
+
   async function issueAttendeeQrCode(req, res) {
     try {
       const eventId = getEventId(req);
@@ -854,9 +986,9 @@ async function listAttendance(req, res) {
       const rows = await query(`
       SELECT attendee_id, event_id, name, email, phone, delegate_category, status, qr_token, custom_data
       FROM saas_attendees
-      WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)
+      WHERE attendee_id = ? AND event_id = ?
       LIMIT 1
-    `, [attendeeId, eventId, eventId]);
+    `, [attendeeId, eventId]);
 
       if (rows.length === 0) {
         return res.status(404).json({ error: 'Attendee not found.' });
@@ -910,8 +1042,9 @@ async function listAttendance(req, res) {
   }
 
   /**
-   * POST /api/registration/attendees/:id/revoke-qr
-   * Revokes / resets the issued QR code for an attendee (e.g. if badge is lost or cancelled).
+   * POST /api/registration/attendees/:id/revoke-qr   (admin roster page)
+   * Revokes the attendee's badge by marking it lost (ADR 0001, Amendment 2): the badge is refused
+   * everywhere from now on and never returns to stock, but its row and history are kept.
    */
   async function revokeAttendeeQrCode(req, res) {
     try {
@@ -920,18 +1053,23 @@ async function listAttendance(req, res) {
       if (!attendeeId) {
         return res.status(400).json({ error: 'Valid attendee ID is required.' });
       }
+      const exists = await query(
+        'SELECT attendee_id FROM saas_attendees WHERE attendee_id = ? AND event_id = ? LIMIT 1',
+        [attendeeId, eventId]
+      );
+      if (exists.length === 0) {
+        return res.status(404).json({ error: 'Attendee not found.' });
+      }
 
-      await query(`
-      UPDATE saas_attendees 
-      SET qr_token = NULL, status = 'registered'
-      WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)
-    `, [attendeeId, eventId, eventId]);
+      const { lostSerials } = await qrCredential.markBadgesLost(eventId, attendeeId, req.user ? req.user.id : null);
 
-      await query(`
-      DELETE FROM saas_qr WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)
-    `, [attendeeId, eventId, eventId]);
-
-      res.json({ success: true, message: 'QR badge revoked. Attendee reset to pre-registered status.' });
+      res.json({
+        success: true,
+        lost_badges: lostSerials,
+        message: lostSerials.length
+          ? `Badge ${lostSerials.map(s => '#' + s).join(', ')} revoked and marked lost. It can't be used again; assign a new badge from Registration.`
+          : 'QR badge revoked. Attendee reset to pre-registered status.'
+      });
     } catch (error) {
       console.error('[AudienceController] revokeAttendeeQrCode error:', error.message);
       res.status(500).json({ error: 'Failed to revoke QR badge.' });
@@ -956,7 +1094,7 @@ async function listAttendance(req, res) {
           return res.status(409).json({
             error: genErr.message,
             generated_count: genErr.created.length,
-            batch: genErr.created.map(r => ({ code: r.serial_no, qr_data: r.qr_data, badge_serial: r.serial_no, status: 'unassigned' }))
+            batch: genErr.created.map(r => ({ code: r.serial_no, qr_data: r.qr_data, badge_serial: r.serial_no, sequence_no: r.sequence_no ?? null, status: 'unassigned' }))
           });
         }
         throw genErr;
@@ -966,11 +1104,12 @@ async function listAttendance(req, res) {
       const statsRows = await query(`
         SELECT 
           COUNT(*) as total,
-          SUM(CASE WHEN attendee_id IS NULL THEN 1 ELSE 0 END) as unassigned,
-          SUM(CASE WHEN attendee_id IS NOT NULL THEN 1 ELSE 0 END) as assigned
+          SUM(CASE WHEN attendee_id IS NULL AND is_lost = 0 THEN 1 ELSE 0 END) as unassigned,
+          SUM(CASE WHEN attendee_id IS NOT NULL AND is_lost = 0 THEN 1 ELSE 0 END) as assigned,
+          SUM(CASE WHEN is_lost = 1 THEN 1 ELSE 0 END) as lost
         FROM saas_qr
-        WHERE event_id = ? OR festival_id = ?
-      `, [eventId, eventId]);
+        WHERE event_id = ?
+      `, [eventId]);
       const statsRow = statsRows?.[0] || {};
 
       res.json({
@@ -981,13 +1120,16 @@ async function listAttendance(req, res) {
           code: r.serial_no,
           qr_data: r.qr_data,
           badge_serial: r.serial_no,
+          sequence_no: r.sequence_no ?? null,
           stock_index: idx + 1,
           status: 'unassigned'
         })),
+        sequence_range: created.length ? { from: created[0].sequence_no ?? null, to: created[created.length - 1].sequence_no ?? null } : null,
         pool_stats: {
           total: parseInt(statsRow?.total || 0, 10),
           unassigned: parseInt(statsRow?.unassigned || 0, 10),
-          assigned: parseInt(statsRow?.assigned || 0, 10)
+          assigned: parseInt(statsRow?.assigned || 0, 10),
+          lost: parseInt(statsRow?.lost || 0, 10)
         }
       });
     } catch (error) {
@@ -1008,16 +1150,24 @@ async function listAttendance(req, res) {
       const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 1000);
       const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
       const offset = (page - 1) * limit;
+      // Badge sequence range (#from–#to) and "#45" search (ADR 0001, Amendment 3)
+      const seqFrom = parseInt(req.query.seq_from, 10);
+      const seqTo = parseInt(req.query.seq_to, 10);
+      const seqSearch = /^#\s*\d{1,7}$/.test(search) ? parseInt(search.replace(/\D/g, ''), 10) : null;
+
+      // Number badges other systems added since the last look
+      await qrCredential.assignMissingSequences(eventId);
 
       // Stats
       const statsRows = await query(`
         SELECT 
           COUNT(*) as total,
-          SUM(CASE WHEN attendee_id IS NULL THEN 1 ELSE 0 END) as unassigned,
-          SUM(CASE WHEN attendee_id IS NOT NULL THEN 1 ELSE 0 END) as assigned
+          SUM(CASE WHEN attendee_id IS NULL AND is_lost = 0 THEN 1 ELSE 0 END) as unassigned,
+          SUM(CASE WHEN attendee_id IS NOT NULL AND is_lost = 0 THEN 1 ELSE 0 END) as assigned,
+          SUM(CASE WHEN is_lost = 1 THEN 1 ELSE 0 END) as lost
         FROM saas_qr
-        WHERE event_id = ? OR festival_id = ?
-      `, [eventId, eventId]);
+        WHERE event_id = ?
+      `, [eventId]);
       const statsRow = statsRows?.[0] || {};
 
       let sql = `
@@ -1025,7 +1175,10 @@ async function listAttendance(req, res) {
           sq.qr_id,
           sq.qr_data,
           sq.serial_no,
+          sq.sequence_no,
           sq.attendee_id,
+          sq.is_lost,
+          sq.lost_at,
           sq.created_at,
           sq.updated_at,
           sa.name as attendee_name,
@@ -1035,17 +1188,31 @@ async function listAttendance(req, res) {
           sa.custom_data as attendee_custom_data
         FROM saas_qr sq
         LEFT JOIN saas_attendees sa ON sa.attendee_id = sq.attendee_id
-        WHERE (sq.event_id = ? OR sq.festival_id = ?)
+        WHERE sq.event_id = ?
       `;
-      const params = [eventId, eventId];
+      const params = [eventId];
 
       if (statusFilter === 'unassigned') {
-        sql += ' AND sq.attendee_id IS NULL';
+        sql += ' AND sq.attendee_id IS NULL AND sq.is_lost = 0';
       } else if (statusFilter === 'assigned') {
-        sql += ' AND sq.attendee_id IS NOT NULL';
+        sql += ' AND sq.attendee_id IS NOT NULL AND sq.is_lost = 0';
+      } else if (statusFilter === 'lost') {
+        sql += ' AND sq.is_lost = 1';
       }
 
-      if (search) {
+      if (Number.isFinite(seqFrom) && seqFrom > 0) {
+        sql += ' AND sq.sequence_no >= ?';
+        params.push(seqFrom);
+      }
+      if (Number.isFinite(seqTo) && seqTo > 0) {
+        sql += ' AND sq.sequence_no <= ?';
+        params.push(seqTo);
+      }
+
+      if (seqSearch !== null) {
+        sql += ' AND sq.sequence_no = ?';
+        params.push(seqSearch);
+      } else if (search) {
         // Badge number (partial), QR UUID, delegate name / email, phone (formatting ignored)
         const like = `%${search.slice(0, 100)}%`;
         const searchDigits = search.replace(/\D/g, '');
@@ -1058,7 +1225,7 @@ async function listAttendance(req, res) {
         params.push(like, like, like, like, like, phoneDigits, `%${phoneDigits}%`);
       }
 
-      sql += ' ORDER BY sq.qr_id DESC LIMIT ? OFFSET ?';
+      sql += ' ORDER BY sq.sequence_no IS NULL, sq.sequence_no DESC, sq.qr_id DESC LIMIT ? OFFSET ?';
       params.push(limit, offset);
 
       const rows = await query(sql, params);
@@ -1073,7 +1240,9 @@ async function listAttendance(req, res) {
           qr_data: r.qr_data,
           code: r.serial_no || r.qr_data,
           badge_serial: r.serial_no,
-          status: r.attendee_id ? 'assigned' : 'unassigned',
+          sequence_no: r.sequence_no == null ? null : Number(r.sequence_no),
+          status: Number(r.is_lost) === 1 ? 'lost' : (r.attendee_id ? 'assigned' : 'unassigned'),
+          lost_at: r.lost_at || null,
           attendee_id: r.attendee_id,
           attendee_name: r.attendee_name,
           attendee_serial: cd?.serial_no || (r.attendee_id ? ('KB26-' + String(r.attendee_id).padStart(4, '0')) : null),
@@ -1088,7 +1257,8 @@ async function listAttendance(req, res) {
         stats: {
           total: parseInt(statsRow?.total || 0, 10),
           unassigned: parseInt(statsRow?.unassigned || 0, 10),
-          assigned: parseInt(statsRow?.assigned || 0, 10)
+          assigned: parseInt(statsRow?.assigned || 0, 10),
+          lost: parseInt(statsRow?.lost || 0, 10)
         },
         page,
         limit,
@@ -1129,6 +1299,20 @@ async function listAttendance(req, res) {
         });
       }
 
+      if (Number(qrRow.is_lost) === 1) {
+        return res.json({
+          success: true,
+          valid: false,
+          in_pool: true,
+          status: 'lost',
+          code: qrRow.qr_data,
+          badge_serial: qrRow.serial_no,
+          sequence_no: qrRow.sequence_no ?? null,
+          display_code: qrRow.serial_no || qrRow.qr_data,
+          message: `${qrCredential.lostBadgeMessage(qrRow.lost_at)} It can't be assigned again; use a different badge.`
+        });
+      }
+
       let row = { ...qrRow, attendee_name: null, delegate_category: null, custom_data: null };
       if (qrRow.attendee_id) {
         const aRows = await query(
@@ -1152,6 +1336,7 @@ async function listAttendance(req, res) {
           status: 'already_assigned',
           code: row.qr_data,
           badge_serial: row.serial_no,
+          sequence_no: row.sequence_no ?? null,
           display_code: displayCode,
           assigned_to: {
             attendee_id: row.attendee_id,
@@ -1170,6 +1355,7 @@ async function listAttendance(req, res) {
         status: 'unassigned',
         code: row.qr_data,
         badge_serial: row.serial_no,
+          sequence_no: row.sequence_no ?? null,
         display_code: displayCode,
         message: `Badge "${displayCode}" is valid and ready to be assigned.`
       });
@@ -1200,9 +1386,9 @@ async function listAttendance(req, res) {
       const attendeeRows = await query(`
         SELECT attendee_id, name, email, phone, delegate_category, status, qr_token, custom_data
         FROM saas_attendees
-        WHERE attendee_id = ? AND (event_id = ? OR festival_id = ?)
+        WHERE attendee_id = ? AND event_id = ?
         LIMIT 1
-      `, [attendeeId, eventId, eventId]);
+      `, [attendeeId, eventId]);
 
       if (!attendeeRows || attendeeRows.length === 0) {
         return res.status(404).json({ error: 'Attendee not found.' });
@@ -1219,12 +1405,15 @@ async function listAttendance(req, res) {
         });
       }
       const displayCode = qrRow.serial_no || qrRow.qr_data;
+      if (Number(qrRow.is_lost) === 1) {
+        return res.status(400).json({ error: `Badge ${displayCode} was reported lost and can't be reused. Please scan or enter a different badge.` });
+      }
 
       // Link atomically: only if unassigned or already ours (guards concurrent desks)
       const linkResult = await query(`
         UPDATE saas_qr
         SET attendee_id = ?, updated_at = NOW()
-        WHERE qr_id = ? AND (attendee_id IS NULL OR attendee_id = ?)
+        WHERE qr_id = ? AND is_lost = 0 AND (attendee_id IS NULL OR attendee_id = ?)
       `, [attendeeId, qrRow.qr_id, attendeeId]);
 
       if (!linkResult.affectedRows) {
@@ -1243,12 +1432,13 @@ async function listAttendance(req, res) {
         });
       }
 
-      // Release any other badge previously linked to this attendee in this event
+      // Release any other (non-lost) badge previously linked to this attendee in this event.
+      // Lost badges keep their owner link and never return to stock (ADR 0001, Amendment 2).
       await query(`
         UPDATE saas_qr
         SET attendee_id = NULL, updated_at = NOW()
-        WHERE attendee_id = ? AND qr_id <> ? AND (event_id = ? OR festival_id = ?)
-      `, [attendeeId, qrRow.qr_id, eventId, eventId]);
+        WHERE attendee_id = ? AND qr_id <> ? AND is_lost = 0 AND event_id = ?
+      `, [attendeeId, qrRow.qr_id, eventId]);
 
       // Parse custom data and ensure serial_no (delegate label) is preserved
       let cd = attendee.custom_data;
@@ -1316,12 +1506,14 @@ async function listAttendance(req, res) {
         sa.registered_at,
         sa.custom_data,
         (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended,
-        (SELECT sq.serial_no FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.serial_no IS NOT NULL ORDER BY sq.qr_id DESC LIMIT 1) AS badge_serial
+        (SELECT sq.serial_no FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.serial_no IS NOT NULL AND sq.is_lost = 0 ORDER BY sq.qr_id DESC LIMIT 1) AS badge_serial,
+        (SELECT sq.sequence_no FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.is_lost = 0 ORDER BY sq.qr_id DESC LIMIT 1) AS badge_sequence,
+        (SELECT COUNT(*) FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.is_lost = 1) AS lost_badge_count
       FROM saas_attendees sa
       LEFT JOIN audience_categories ac ON (ac.code = sa.delegate_category OR ac.name = sa.delegate_category) AND ac.event_id = sa.event_id
-      WHERE (sa.event_id = ? OR sa.festival_id = ?)
+      WHERE sa.event_id = ?
     `;
-      const params = [eventId, eventId];
+      const params = [eventId];
 
       if (search) {
         // Extract possible attendee ID from formats like "KB26-0275" or numeric input
@@ -1414,9 +1606,9 @@ async function listAttendance(req, res) {
         // Check if existing
         const existing = await query(`
         SELECT attendee_id FROM saas_attendees 
-        WHERE (event_id = ? OR festival_id = ?) AND ((email IS NOT NULL AND email = ?) OR (phone IS NOT NULL AND phone = ?))
+        WHERE event_id = ? AND ((email IS NOT NULL AND email = ?) OR (phone IS NOT NULL AND phone = ?))
         LIMIT 1
-      `, [eventId, eventId, email, phone]);
+      `, [eventId, email, phone]);
 
         if (existing.length > 0) {
           await query(`
@@ -1429,7 +1621,7 @@ async function listAttendance(req, res) {
           const res = await query(`
           INSERT INTO saas_attendees (event_id, festival_id, name, email, phone, delegate_category, registration_type, registered_by_user_id, registered_by_role, status, qr_token)
           VALUES (?, ?, ?, ?, ?, ?, 'kashish_sync', ?, 'admin', 'registered', NULL)
-        `, [eventId, eventId, d.name.trim(), email, phone, category, userId]);
+        `, [eventId, (await getFilmFestivalId(eventId)) ?? 0, d.name.trim(), email, phone, category, userId]);
 
           // Badge credential: UUID payload + per-event 6-digit serial (ADR 0001)
           const qrRow = await qrCredential.createQrRow(eventId, { attendeeId: res.insertId });
@@ -1566,6 +1758,36 @@ async function listAttendance(req, res) {
   async function getVotingLeaderboard(req, res) {
     try {
       const eventId = getEventId(req);
+
+      // Festivals whose films live only in the Kashish app (docs/adr/0004)
+      const votingConfig = await kashishExternal.getVotingConfig(eventId);
+      if (votingConfig.source === 'kashish') {
+        const { standings, adjustment_number, festival_mean } = await kashishExternal.computeExternalStandings(eventId, votingConfig);
+        const publication = await kashishExternal.getLatestPublication(eventId);
+        const lastSync = await query(
+          "SELECT completed_at FROM kashish_sync_logs WHERE event_id = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1",
+          [eventId]
+        );
+        return res.json({
+          success: true,
+          source: 'kashish',
+          count: standings.length,
+          leaderboard: standings,
+          adjustment_number,
+          festival_mean,
+          voting_period: { from: votingConfig.from, to: votingConfig.to },
+          last_sync_at: lastSync[0]?.completed_at || null,
+          approval: publication
+            ? {
+              is_approved: true,
+              approved_at: publication.published_at,
+              approved_by: await getApproverName(publication.published_by_user_id),
+              changed_since: kashishExternal.standingsChanged(publication.standings, standings)
+            }
+            : { is_approved: false, approved_at: null, approved_by: null, changed_since: false }
+        });
+      }
+
       await recalculateScores(eventId);
 
       const sql = `
@@ -1644,6 +1866,41 @@ async function listAttendance(req, res) {
         return res.status(404).json({ error: 'Festival not found.' });
       }
 
+      // Kashish-app festivals: serve the frozen snapshot from the latest Approve & Publish (docs/adr/0004)
+      if (await kashishExternal.isKashishSource(eventId)) {
+        const publication = await kashishExternal.getLatestPublication(eventId);
+        if (!publication) {
+          return res.status(403).json({
+            success: false,
+            status: 'results_not_approved',
+            event: { event_id: eventId, name: eventRows[0].name },
+            message: 'Audience Choice results have not been approved yet.'
+          });
+        }
+        const ranked = (publication.standings || [])
+          .filter(r => Number(r.total_votes) > 0)
+          .map(r => ({
+            rank: r.standing_rank,
+            film_id: r.film_id,
+            film_title: r.film_title,
+            director: r.director || null,
+            total_votes: Number(r.total_votes),
+            average_rating: Number(r.raw_average),
+            score: Number(r.bayesian_score),
+            eligible: true
+          }));
+        res.set('Cache-Control', 'public, max-age=30');
+        return res.json({
+          success: true,
+          status: 'approved',
+          source: 'kashish',
+          event: { event_id: eventId, name: eventRows[0].name },
+          approved_at: publication.published_at,
+          winner: ranked[0] || null,
+          standings: ranked
+        });
+      }
+
       const approvalRows = await query(
         'SELECT approved_at FROM audience_voting_scores WHERE event_id = ? AND results_approved = 1 ORDER BY approved_at DESC LIMIT 1',
         [eventId]
@@ -1702,6 +1959,20 @@ async function listAttendance(req, res) {
       const userId = req.user ? req.user.id : 1;
       const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '127.0.0.1';
 
+      // Kashish-app festivals: freeze the current standings as the published results (docs/adr/0004)
+      if (await kashishExternal.isKashishSource(eventId)) {
+        const publication = await kashishExternal.publishExternalResults(eventId, req.user ? req.user.id : null);
+        await query(`
+          INSERT INTO audience_voting_audit_logs (event_id, vote_id, action, actor_user_id, reason, ip_address)
+          VALUES (?, NULL, 'results_approved', ?, 'Kashish Audience Choice standings published (frozen snapshot)', ?)
+        `, [eventId, userId, clientIp]);
+        return res.json({
+          success: true,
+          message: 'Audience Choice results published. The winners screen now shows these standings until you publish again.',
+          published_at: publication?.published_at || null
+        });
+      }
+
       await query(`
       UPDATE audience_voting_scores 
       SET results_approved = 1, approved_by_user_id = ?, approved_at = CURRENT_TIMESTAMP
@@ -1728,6 +1999,16 @@ async function listAttendance(req, res) {
   async function getApprovalStatus(req, res) {
     try {
       const eventId = getEventId(req);
+      if (await kashishExternal.isKashishSource(eventId)) {
+        const publication = await kashishExternal.getLatestPublication(eventId);
+        if (!publication) return res.json({ success: true, is_approved: false });
+        return res.json({
+          success: true,
+          is_approved: true,
+          approved_at: publication.published_at,
+          approved_by: await getApproverName(publication.published_by_user_id)
+        });
+      }
       const rows = await query(`
       SELECT results_approved, approved_by_user_id, approved_at
       FROM audience_voting_scores
@@ -1859,6 +2140,9 @@ async function listAttendance(req, res) {
       }
 
       const block = blockRows[0];
+      if (await kashishExternal.isKashishSource(block.event_id)) {
+        return res.status(403).json({ error: KASHISH_VOTING_MESSAGE });
+      }
 
       // Fetch films in this screening
       const films = await query(`
@@ -1917,6 +2201,9 @@ async function listAttendance(req, res) {
       }
 
       const block = blockRows[0];
+      if (await kashishExternal.isKashishSource(block.event_id)) {
+        return res.status(403).json({ error: KASHISH_VOTING_MESSAGE });
+      }
       if (block.voting_status !== 'open') {
         return res.status(403).json({ error: 'Voting is currently closed for this screening session.' });
       }
@@ -1933,6 +2220,9 @@ async function listAttendance(req, res) {
 
       const notFoundMsg = 'We could not verify this badge. Check the badge number and mobile digits on your festival pass.';
       const resolved = await qrCredential.resolveAttendee(block.event_id, cleanBadgeStr);
+      if (resolved && resolved.lost) {
+        return res.status(403).json({ error: qrCredential.lostBadgeMessage(resolved.lost_at), status: 'lost' });
+      }
       if (!resolved) {
         return res.status(404).json({ error: notFoundMsg });
       }
@@ -1951,7 +2241,7 @@ async function listAttendance(req, res) {
       const attendee = resolved.attendee;
       // Badge the vote was cast with (stored on every vote, ADR 0003)
       const voteQrId = resolved.qr?.qr_id
-        || (await query('SELECT qr_id FROM saas_qr WHERE attendee_id = ? ORDER BY qr_id DESC LIMIT 1', [attendee.attendee_id]))[0]?.qr_id
+        || (await query('SELECT qr_id FROM saas_qr WHERE attendee_id = ? AND is_lost = 0 ORDER BY qr_id DESC LIMIT 1', [attendee.attendee_id]))[0]?.qr_id
         || null;
 
       // 3. Option 3 Eligibility Enforcement: Verify Attendee was Checked-In at this Screening
@@ -2530,7 +2820,7 @@ async function listAttendance(req, res) {
       LEFT JOIN saas_attendees sa ON sa.attendee_id = dr.attendee_id
       LEFT JOIN submissions s ON s.id = dr.film_id
       LEFT JOIN users u ON u.id = dr.moderated_by_user_id
-      WHERE (dr.event_id = ? OR dr.event_id = 40 OR s.event_id = ?)
+      WHERE (dr.event_id = ? OR s.event_id = ?)
     `;
       const params = [eventId, eventId];
 
@@ -2562,7 +2852,7 @@ async function listAttendance(req, res) {
         SUM(CASE WHEN dr.status = 'rejected' THEN 1 ELSE 0 END) AS rejected
       FROM delegate_reviews dr
       LEFT JOIN submissions s ON s.id = dr.film_id
-      WHERE (dr.event_id = ? OR dr.event_id = 40 OR s.event_id = ?)
+      WHERE (dr.event_id = ? OR s.event_id = ?)
     `;
       const [counts] = await query(countSql, [eventId, eventId]);
 
@@ -2672,6 +2962,8 @@ async function listAttendance(req, res) {
     updateAttendee,
     issueAttendeeQrCode,
     revokeAttendeeQrCode,
+    reportLostBadge,
+    verifyLostBadgePhone,
     bulkGenerateQRs,
     getQRPool,
     checkQRCode,

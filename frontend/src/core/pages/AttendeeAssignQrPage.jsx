@@ -18,6 +18,9 @@ import SearchInput from '../components/common/SearchInput';
 import RegistrationHeader from '../components/registration/RegistrationHeader';
 import { useCanViewRoster } from '../hooks/useCanViewRoster';
 import QrCode from '../components/common/QrCode';
+import PrintPassesDialog from '../components/print/PrintPassesDialog';
+import usePassTemplates from '../hooks/usePassTemplates';
+import { passDataFromAttendee } from '../utils/passRenderer';
 import {
   ConfirmationNumberIcon, 
   QrCodeScannerIcon, 
@@ -51,6 +54,9 @@ export default function AttendeeAssignQrPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState(null);
   const [successResult, setSuccessResult] = useState(null);
+  const [printItems, setPrintItems] = useState(null);
+  // Categories for the pass print (loaded once a badge is paired; ADR 0005)
+  const { categories: passCategories } = usePassTemplates({ enabled: Boolean(successResult) });
 
   const searchInputRef = useRef(null);
   const scannerCardRef = useRef(null);
@@ -358,6 +364,29 @@ export default function AttendeeAssignQrPage() {
               </button>
               <button
                 type="button"
+                onClick={() => {
+                  const data = passDataFromAttendee({
+                    ...paired,
+                    qr_token: successResult.code,
+                    badge_serial: successResult.badge_serial || paired.badge_serial,
+                    serial_no: successResult.serial_no || paired.serial_no
+                  }, passCategories);
+                  setPrintItems([{ data, categoryCode: data.category_code }]);
+                }}
+                style={{
+                  flex: '1 1 160px', justifyContent: 'center', display: 'inline-flex', alignItems: 'center', gap: '8px',
+                  padding: '10px 18px', borderRadius: '8px',
+                  border: '1px solid var(--fc-border)', background: 'var(--fc-surface-card)',
+                  color: 'var(--fc-text-main)', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--fc-surface-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--fc-surface-card)'; }}
+              >
+                <PrintIcon size={16} />
+                Print pass
+              </button>
+              <button
+                type="button"
                 autoFocus
                 onClick={resetForNext}
                 style={{
@@ -374,6 +403,14 @@ export default function AttendeeAssignQrPage() {
                 Pair next delegate
               </button>
             </div>
+            {printItems && (
+              <PrintPassesDialog
+                items={printItems}
+                defaultMode="full"
+                title={`Print pass for ${paired.name || 'delegate'}`}
+                onClose={() => setPrintItems(null)}
+              />
+            )}
           </div>
         );
       })() : (
@@ -387,6 +424,13 @@ export default function AttendeeAssignQrPage() {
               <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <QrCodeScannerIcon size={18} /> Badge Scanner Deck
               </h2>
+
+              {/* Coming from Registration › Lost Badge: the old badge no longer works */}
+              {location.state?.lostBadge !== undefined && location.state?.lostBadge !== null && (
+                <div className="fc-aq-lost-banner" role="status">
+                  Old badge #{location.state.lostBadge} is marked lost and won't work anymore. Scan or type the new badge below.
+                </div>
+              )}
 
               {/* Prefilled Banner from Bulk Stock */}
               {prefilledCode && (

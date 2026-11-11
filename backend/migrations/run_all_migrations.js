@@ -22,6 +22,13 @@ const MIGRATION_SCRIPTS = [
   path.resolve(__dirname, '014_qr_credential_serial.js'),
   path.resolve(__dirname, '015_vote_badge_link_and_kashish_receipts.js'),
   path.resolve(__dirname, '../src/scripts/migrate_kashish_integration.js'),
+  path.resolve(__dirname, '016_kashish_external_leaderboard.js'),
+  path.resolve(__dirname, '017_saas_qr_lost_flag.js'),
+  path.resolve(__dirname, '018_pass_templates.js'),
+  path.resolve(__dirname, '019_qr_sequence.js'),
+  path.resolve(__dirname, '020_fix_saas_festival_id.js'),
+  path.resolve(__dirname, '021_pass_template_elements.js'),
+  path.resolve(__dirname, '022_pass_print_settings.js'),
   path.resolve(__dirname, '../src/scripts/sync_specs_to_database.js'),
 ];
 

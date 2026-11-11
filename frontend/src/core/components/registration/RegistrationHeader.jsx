@@ -1,19 +1,21 @@
 /**
  * RegistrationHeader — shared header for the Registration sub-module.
  *
- * Breadcrumb, page title, and two route-backed tabs:
+ * Breadcrumb, page title, and three route-backed tabs:
  *   On Spot Registration → /registration/add
  *   Assign QR            → /registration/assign-qr (also /assign-qr/:id and ?code=)
+ *   Lost Badge           → /registration/lost-badge (also /lost-badge/:id)
  * Each tab keeps its own URL, so deep links from the Audience list and Bulk QR stock keep working.
  */
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AddIcon, QrCodeScannerIcon } from '../common/Icons';
+import { AddIcon, QrCodeScannerIcon, WarningIcon } from '../common/Icons';
 import { useCanViewRoster } from '../../hooks/useCanViewRoster';
 
 const TABS = [
   { key: 'spot', label: 'On Spot Registration', to: '/registration/add', Icon: AddIcon },
-  { key: 'assign', label: 'Assign QR', to: '/registration/assign-qr', Icon: QrCodeScannerIcon }
+  { key: 'assign', label: 'Assign QR', to: '/registration/assign-qr', Icon: QrCodeScannerIcon },
+  { key: 'lost', label: 'Lost Badge', to: '/registration/lost-badge', Icon: WarningIcon }
 ];
 
 export default function RegistrationHeader({ active, extraCrumb = null }) {
@@ -46,7 +48,7 @@ export default function RegistrationHeader({ active, extraCrumb = null }) {
           Registration
         </h1>
         <p style={{ color: 'var(--fc-text-muted)', margin: '4px 0 0', fontSize: '0.9rem' }}>
-          Register delegates at the venue desk and pair their pre-printed QR badges.
+          Register delegates at the venue desk, pair their pre-printed QR badges and replace lost ones.
         </p>
       </div>
 

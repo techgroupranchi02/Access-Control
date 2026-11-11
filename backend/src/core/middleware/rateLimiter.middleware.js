@@ -77,7 +77,23 @@ const staffCredentialLimiter = rateLimit({
   message: { error: 'Too many unrecognised badges in a short time. Please wait a few minutes.' },
 });
 
+/**
+ * Lost Badge: wrong "last 4 digits of mobile" attempts, per staff user and delegate.
+ * 5 misses in 15 minutes locks that delegate for that user, so the digits can't be guessed.
+ */
+const lostBadgeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (req, res) => res.statusCode < 400 && !res.locals.credentialMiss,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `lost:${req.user?.id ? `user:${req.user.id}` : `ip:${req.ip}`}:${req.params.id}`,
+  message: { error: 'Too many wrong attempts for this delegate. Please wait 15 minutes or ask an admin.' },
+});
+
 module.exports = {
+  lostBadgeLimiter,
   generalLimiter,
   authLimiter,
   publicVoteIpLimiter,

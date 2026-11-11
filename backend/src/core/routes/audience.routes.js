@@ -14,6 +14,7 @@ const {
   publicVoteBadgeLimiter,
   publicVoteReadLimiter,
   staffCredentialLimiter,
+  lostBadgeLimiter,
 } = require('../middleware/rateLimiter.middleware');
 
 // ── 1. Audience Settings & Categories Router (/api/audience) ─────────────────
@@ -68,6 +69,9 @@ registrationRouter.put('/attendees/:id', requirePermission('registration.create'
 registrationRouter.post('/attendees/:id/issue-qr', requirePermission('registration.create'), audienceController.issueAttendeeQrCode);
 registrationRouter.post('/attendees/:id/assign-qr', requirePermission('registration.create'), audienceController.assignAttendeeQR);
 registrationRouter.post('/attendees/:id/revoke-qr', requirePermission('registration.create'), audienceController.revokeAttendeeQrCode);
+// Lost Badge tab (desk): checks the last 4 mobile digits, then marks the delegate's badge lost (ADR 0001, Amendment 2)
+registrationRouter.post('/attendees/:id/verify-phone', requirePermission('registration.create'), lostBadgeLimiter, audienceController.verifyLostBadgePhone);
+registrationRouter.post('/attendees/:id/report-lost', requirePermission('registration.create'), lostBadgeLimiter, audienceController.reportLostBadge);
 // Bulk badge stock + bulk import belong to the full Audience page (registration.view_roster), not desk volunteers
 registrationRouter.post('/bulk-import', requirePermission('registration.view_roster'), audienceController.bulkImportAttendees);
 registrationRouter.post('/qr/bulk-generate', requirePermission('registration.view_roster'), audienceController.bulkGenerateQRs);

@@ -157,6 +157,10 @@ Features are modules (`core`, `addon` or `custom`) that are switched on per even
 
 Delegate badges encode a random UUID. Staff look badges up by a 6-digit badge number that is unique within each event. Always create and look up badges through `core/services/qrCredential.service.js`, and render QR codes locally with `components/common/QrCode.jsx`. See [ADR 0001](docs/adr/0001-qr-credential-uuid-and-festival-serial.md).
 
+### Badge & pass templates
+
+Each festival designs its passes in Settings › Badges & Passes (`/settings/badges`): a built-in layout or its own uploaded artwork. Staff print them as Pass + QR, Pass only or QR only, on a card printer or A4 sheets, from Bulk QR, the Audience list or Assign QR. All printing goes through `core/utils/passRenderer.js`. See [ADR 0005](docs/adr/0005-pass-templates.md).
+
 ## Database
 
 - **Migrations:**

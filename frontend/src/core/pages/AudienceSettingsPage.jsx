@@ -1424,6 +1424,20 @@ function LiveFormPreviewContent({
   );
 }
 
+// <input type="datetime-local"> works in the viewer's local time; settings store ISO (UTC) strings
+function isoToLocalInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function localInputToIso(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 export default function AudienceSettingsPage() {
   const { currentFestival } = useFestivalConfig();
   const [activeTab, setActiveTab] = useState('form_builder'); // 'form_builder' | 'categories' | 'voting_rules' | 'venues'
@@ -1436,6 +1450,9 @@ export default function AudienceSettingsPage() {
     require_screening_checkin: true,
     enable_did_not_watch_skip: true,
     delegate_registration_enabled: false,
+    voting_source: 'freecomers',
+    kashish_voting_from: null,
+    kashish_voting_to: null,
     festival_name: ''
   });
   const [loading, setLoading] = useState(true);
@@ -1618,7 +1635,7 @@ export default function AudienceSettingsPage() {
       await api.put('/audience/settings', settings);
       alert('Audience settings saved successfully!');
     } catch (err) {
-      alert('Failed to save settings.');
+      alert(err?.response?.data?.error || 'Failed to save settings.');
     } finally {
       setSavingSettings(false);
     }
@@ -3655,6 +3672,60 @@ export default function AudienceSettingsPage() {
               Audience Voting Rules & Screening Parameters
             </h2>
             <form onSubmit={handleSaveSettings}>
+              {/* Vote source (docs/adr/0004) */}
+              <div className="fc-as-vote-source" style={{ marginBottom: '20px', paddingBottom: '18px', borderBottom: '1px solid var(--fc-border)' }}>
+                <label htmlFor="voteSource" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
+                  Where audience votes come from
+                </label>
+                <select
+                  id="voteSource"
+                  value={settings.voting_source || 'freecomers'}
+                  onChange={(e) => setSettings({ ...settings, voting_source: e.target.value })}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
+                >
+                  <option value="freecomers">FestiPlus: delegates scan the screening QR and vote here</option>
+                  <option value="kashish">Kashish Pride app: votes are imported from the Kashish app</option>
+                </select>
+                <small style={{ display: 'block', color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.75rem' }}>
+                  {settings.voting_source === 'kashish'
+                    ? 'The Voting page shows only the leaderboard and sync status. Films come from the Kashish app by name; they don\'t need to be in Submissions. A vote counts only from a registered delegate (matched by email or mobile number) who has checked in.'
+                    : 'Screening windows, the projected QR and the FestiPlus voting page are used.'}
+                </small>
+
+                {settings.voting_source === 'kashish' && (
+                  <div className="fc-as-vote-period" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '14px' }}>
+                    <div>
+                      <label htmlFor="kashishFrom" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
+                        Voting from
+                      </label>
+                      <input
+                        id="kashishFrom"
+                        type="datetime-local"
+                        value={isoToLocalInput(settings.kashish_voting_from)}
+                        onChange={(e) => setSettings({ ...settings, kashish_voting_from: localInputToIso(e.target.value) })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="kashishTo" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
+                        Voting to
+                      </label>
+                      <input
+                        id="kashishTo"
+                        type="datetime-local"
+                        value={isoToLocalInput(settings.kashish_voting_to)}
+                        onChange={(e) => setSettings({ ...settings, kashish_voting_to: localInputToIso(e.target.value) })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
+                      />
+                    </div>
+                    <small style={{ gridColumn: '1 / -1', color: 'var(--fc-text-muted)', fontSize: '0.75rem' }}>
+                      Only votes cast between these times count. Leave empty to count votes from any date. Times are in your local time zone.
+                    </small>
+                  </div>
+                )}
+              </div>
+
+              {settings.voting_source !== 'kashish' && (<>
               {/* Check-in Enforcement */}
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
@@ -3676,6 +3747,7 @@ export default function AudienceSettingsPage() {
                   Prevents non-attendees from scanning shared QR screenshots online.
                 </small>
               </div>
+              </>)}
 
               {/* Bayesian Number */}
               <div style={{ marginBottom: '16px' }}>
@@ -3693,7 +3765,8 @@ export default function AudienceSettingsPage() {
                 </small>
               </div>
 
-              {/* Voting Window */}
+              {/* Voting Window (screening QR voting only) */}
+              {settings.voting_source !== 'kashish' && (
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
                   Default Voting Window (Minutes)
@@ -3708,6 +3781,7 @@ export default function AudienceSettingsPage() {
                   Time window balloting remains active after end credits roll.
                 </small>
               </div>
+              )}
 
               <button 
                 type="submit" 

@@ -40,7 +40,7 @@ import {
   HowToVoteIcon,
   TrophyIcon,
   OpenInNewIcon,
-  AddIcon, CloseIcon } from './common/Icons';
+  AddIcon, CloseIcon, BadgeIcon } from './common/Icons';
 
 function ChevronIcon({ isOpen }) {
   return (
@@ -200,6 +200,7 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
   const canAccessGuests = isModuleEnabled('guests') && (isAdminUser || canAny(['guest.view', 'guest:view', 'guests.view', 'guests:view', 'hospitality.view', 'hospitality:view']));
 
   const isAudienceModEnabled = isModuleEnabled('audience');
+  const canManagePassTemplates = isAudienceModEnabled && (isAdminUser || canAny(['settings.manage', 'settings:manage']));
   const canAccessAudienceSettings = (isAudienceModEnabled || isModuleEnabled('settings')) && (isAdminUser || canAny(['audience.view', 'audience:view', 'audience.manage', 'audience:manage', 'settings.view', 'settings:view', 'settings.manage', 'settings:manage']));
   const canAccessRegistration = isAudienceModEnabled && (isAdminUser || canAny(['registration.view', 'registration:view', 'tickets.view', 'tickets:view']));
   const canAccessAttendance = isAudienceModEnabled && (isAdminUser || canAny(['attendance.view', 'attendance:view']));
@@ -583,7 +584,7 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
                       <NavLink
                         to="/registration/add"
                         title="Registration"
-                        className={({ isActive }) => `fc-nav-item ${isActive || currentPath === '/registration/add' || currentPath.startsWith('/registration/assign-qr') ? 'active' : ''}`}
+                        className={({ isActive }) => `fc-nav-item ${isActive || currentPath === '/registration/add' || currentPath.startsWith('/registration/assign-qr') || currentPath.startsWith('/registration/lost-badge') ? 'active' : ''}`}
                       >
                         <AddIcon size={15} style={{ marginRight: '8px' }} />
                         <span>Registration</span>
@@ -699,6 +700,16 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
                     >
                       <PeopleIcon size={15} style={{ marginRight: '8px' }} />
                       <span>Audience</span>
+                    </NavLink>
+                  )}
+                  {canManagePassTemplates && (
+                    <NavLink
+                      to="/settings/badges"
+                      title="Badges & Passes"
+                      className={({ isActive }) => `fc-nav-item ${isActive || currentPath.startsWith('/settings/badges') ? 'active' : ''}`}
+                    >
+                      <BadgeIcon size={15} style={{ marginRight: '8px' }} />
+                      <span>Badges &amp; Passes</span>
                     </NavLink>
                   )}
                 </div>

@@ -40,12 +40,14 @@ import SponsorsPage from './core/pages/SponsorsPage';
 
 // Audience Module Pages
 import AudienceSettingsPage from './core/pages/AudienceSettingsPage';
+import PassTemplatesPage from './core/pages/PassTemplatesPage';
 import AttendancePage from './core/pages/AttendancePage';
 import VotingPage from './core/pages/VotingPage';
 import RegistrationPage from './core/pages/RegistrationPage';
 import AttendeeCreatePage from './core/pages/AttendeeCreatePage';
 import AttendeeEditPage from './core/pages/AttendeeEditPage';
 import AttendeeAssignQrPage from './core/pages/AttendeeAssignQrPage';
+import LostBadgePage from './core/pages/LostBadgePage';
 import BulkQrManagementPage from './core/pages/BulkQrManagementPage';
 import PublicVotingPage from './core/pages/PublicVotingPage';
 import PublicResultsPage from './core/pages/PublicResultsPage';
@@ -596,6 +598,20 @@ function App() {
               }
             />
             <Route path="/settings/Audience" element={<Navigate to="/settings/audience" replace />} />
+            {/* Badges & Passes (pass templates) under Settings: /settings/badges, /settings/badges/:id (ADR 0005) */}
+            {['/settings/badges', '/settings/badges/:id'].map((path) => (
+              <Route
+                key={path}
+                path={path}
+                element={
+                  <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                    <PermissionGate anyPermissions={['settings.manage', 'settings:manage']} fallback={<AccessDenied />}>
+                      <PassTemplatesPage />
+                    </PermissionGate>
+                  </ModuleGate>
+                }
+              />
+            ))}
             <Route
               path="/audience"
               element={
@@ -665,6 +681,26 @@ function App() {
                 <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
                   <PermissionGate anyPermissions={['registration.create', 'registration:create', 'registration.view', 'registration:view']} fallback={<AccessDenied />}>
                     <AttendeeAssignQrPage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/registration/lost-badge"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate anyPermissions={['registration.create', 'registration:create']} fallback={<AccessDenied />}>
+                    <LostBadgePage />
+                  </PermissionGate>
+                </ModuleGate>
+              }
+            />
+            <Route
+              path="/registration/lost-badge/:id"
+              element={
+                <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
+                  <PermissionGate anyPermissions={['registration.create', 'registration:create']} fallback={<AccessDenied />}>
+                    <LostBadgePage />
                   </PermissionGate>
                 </ModuleGate>
               }

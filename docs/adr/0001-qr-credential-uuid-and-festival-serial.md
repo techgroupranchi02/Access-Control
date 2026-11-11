@@ -94,3 +94,61 @@ The production data and the other writers of `saas_qr` changed some details of t
 **Follow-ups (not done here)**
 - ~~**QR images are rendered by `api.qrserver.com`.**~~ **Done (2026-11-04):** QR codes are now drawn locally as inline SVG (`components/common/QrCode.jsx`, `qrcode` package). This removes the third-party leak, and also the 5–10 s (sometimes 100 s+) load delays caused by that service stalling.
 - **festease and Laravel.** If `festease_backend` is ever restarted, or Laravel issuance is kept, they should create rows with a `serial_no` too. Until then, their badges can only be scanned, not typed.
+
+## Amendment 2: Lost badges (2026-11-10)
+
+**Context.** `saas_qr` had no state:
+- Giving a delegate a new badge unlinked the old one and returned it to blank stock, where it could be handed to someone else.
+- Admin "Revoke QR" deleted the badge rows.
+- Volunteers had no way to deal with a lost badge, and a lost badge kept working for whoever found it.
+
+**Decision**
+1. **Three additive columns** on the shared `saas_qr` table, added in migration `017_saas_qr_lost_flag.js`:
+   - `is_lost TINYINT(1) NOT NULL DEFAULT 0`
+   - `lost_at DATETIME NULL`
+   - `lost_by_user_id BIGINT UNSIGNED NULL`
+
+   Other writers (Laravel, festease) insert without them and get `is_lost = 0`.
+2. **Marking a badge lost** is done by `qrCredential.markBadgesLost(eventId, attendeeId, userId)`:
+   - It sets the three columns on all of the delegate's active badges in the event.
+   - It clears `saas_attendees.qr_token`, which closes the second credential path.
+   - The row keeps its `attendee_id` (history) and its `serial_no`, so `uk_event_serial` keeps that 6-digit number reserved and it is never reissued.
+3. **A lost badge is refused everywhere:**
+   - `resolveAttendee` returns `{ lost: true }`, so gate check-in and public voting answer 403 with "This badge was reported lost on …".
+   - `checkQRCode` returns `status: 'lost'`.
+   - `assignAttendeeQR` refuses to pair it.
+   - When a delegate gets a new badge, release skips lost rows, so lost badges never go back into stock.
+   - "Current badge" lookups (display serial, vote `qr_id`, Kashish lookups) ignore lost rows.
+4. **Desk flow: Registration › Lost Badge** (`/registration/lost-badge`, permission `registration.create`):
+   - The volunteer finds the delegate by name, phone, email or badge number. Searching by a lost badge number still finds its owner.
+   - They enter the **last 4 digits of the delegate's registered mobile**. The server checks them with `phoneLast4Matches` in `POST /api/registration/attendees/:id/report-lost`.
+   - Wrong digits are limited to 5 per staff user per delegate per 15 minutes (`lostBadgeLimiter`).
+   - A delegate with no mobile on file can only be handled by an admin.
+   - After marking, Assign QR opens for that delegate.
+5. **Admin "Revoke QR"** on the Audience page now marks the badge lost through the same helper, instead of deleting it. Vote and Kashish receipt links (`qr_id`) stay valid.
+6. **Bulk QR stock** shows a **Lost** filter and status. Lost badges don't count as stock.
+
+**Consequences**
+- **No undo.** A lost badge that turns up again stays blocked; the delegate keeps their new badge.
+- **Fixing a wrong pairing still works.** Re-pairing a badge that was not lost still frees that badge, as before.
+
+## Amendment 3: Badge sequence numbers (2026-11-10)
+
+**Context.** Staff wanted to see the order in which a festival's badges were generated. `qr_id` is global across all festivals, and the "#001" printed on stickers was only the position in that print job, so the same badge could print with different numbers.
+
+**Decision**
+1. **Every badge has a permanent running number within its event:** `saas_qr.sequence_no` (#1, #2, #3 … in creation order), unique per event (`uk_event_sequence`). It is display only and **not a credential**.
+2. **No counter table.** The next number is the event's highest `sequence_no` + 1, read from `saas_qr` itself. Numbering runs under a per-event MySQL named lock (`GET_LOCK`), released after the commit, so parallel generation never duplicates or skips a number. A separate `qr_sequence_counters` table was tried first and removed as unnecessary (2026-11-11).
+3. **All badges count:** bulk stock, digital passes and on-spot registration all go through `qrCredential.createQrRows()`, which numbers rows after they land, so serial collisions don't create gaps.
+4. **Rows inserted by Laravel / festease_backend** (no number) are numbered by `assignMissingSequences()` in `qr_id` order, the next time the pool is listed or badges are generated.
+5. **Numbers are never recomputed.** Losing a badge, or deleting one from the middle, leaves the other numbers as they are. The one case where a number comes back: if the highest-numbered badges are deleted from the database, the next badges take those numbers again (and an emptied festival restarts at #1). The app itself never deletes badges; it marks them lost. Migration `019_qr_sequence.js` numbered existing rows per event in `qr_id` order.
+6. **Where it shows:**
+   - Bulk QR: a "No." column, `#45` search, a #from–#to range filter (which **Print badges** follows), and the View QR dialog;
+   - the "Show this batch" link after generating;
+   - CSV export;
+   - the sticker's side number;
+   - an optional "Badge sequence no." field on pass templates (ADR 0005).
+
+**Consequences**
+- `saas_qr` gains one nullable column and one unique index, which is additive. Other services' inserts are unaffected.
+- **Don't compute the number** from `qr_id` or `ROW_NUMBER()`, and always create badges through `createQrRows()`.

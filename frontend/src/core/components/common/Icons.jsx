@@ -577,3 +577,35 @@ export function CalendarTodayIcon({ size = 16, className = '', style = {} }) {
 
 
 
+
+export function ContentCopyIcon({ size = 16, className = '', style = {} }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={`fc-icon ${className}`} style={{ flexShrink: 0, ...style }}>
+      <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+    </svg>
+  );
+}
+
+export function ImageIcon({ size = 16, className = '', style = {} }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={`fc-icon ${className}`} style={{ flexShrink: 0, ...style }}>
+      <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+    </svg>
+  );
+}
+
+export function TextFieldsIcon({ size = 16, className = '', style = {} }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={`fc-icon ${className}`} style={{ flexShrink: 0, ...style }}>
+      <path d="M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z" />
+    </svg>
+  );
+}
+
+export function ChecklistIcon({ size = 16, className = '', style = {} }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={`fc-icon ${className}`} style={{ flexShrink: 0, ...style }}>
+      <path d="M22 7h-9v2h9V7zm0 8h-9v2h9v-2zM5.54 11L2 7.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 11zm0 8L2 15.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 19z" />
+    </svg>
+  );
+}

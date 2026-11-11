@@ -10,29 +10,39 @@
  * - Zero dialog boxes / completely route-driven
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import SearchInput from '../components/common/SearchInput';
-import QrCode, { qrSvgMarkup } from '../components/common/QrCode';
+import QrCode from '../components/common/QrCode';
+import PrintPassesDialog from '../components/print/PrintPassesDialog';
+import { passDataFromBadge, formatSequence, escapeHtml } from '../utils/passRenderer';
 import { printInPage } from '../utils/printInPage';
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
+import Pagination from '../components/common/Pagination';
 
-// Escape user-provided text placed into print HTML
-const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 import {
   ConfirmationNumberIcon, 
   PrintIcon, 
-  UploadFileIcon, 
+  UploadFileIcon, FileDownloadIcon, ArrowDropDownIcon, DescriptionIcon, 
   CheckCircleIcon,
-  QrCodeScannerIcon, CloseIcon
+  QrCodeScannerIcon, CloseIcon, VisibilityIcon
 } from '../components/common/Icons';
+
+const STATUS_LABEL = { unassigned: 'In stock', assigned: 'Assigned', lost: 'Lost' };
+const PAGE_SIZES = [25, 50, 100];
+
+function formatDay(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 export default function BulkQrManagementPage() {
   const navigate = useNavigate();
   const { currentFestival } = useFestivalConfig();
 
-  const [stats, setStats] = useState({ total: 0, unassigned: 0, assigned: 0 });
+  const [stats, setStats] = useState({ total: 0, unassigned: 0, assigned: 0, lost: 0 });
   const [qrs, setQrs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -43,56 +53,52 @@ export default function BulkQrManagementPage() {
   const poolRequestIdRef = useRef(0);
   const poolLoadedRef = useRef(false);
 
+  // Sequence range filter (#from – #to), ADR 0001 Amendment 3
+  const [seqFromInput, setSeqFromInput] = useState('');
+  const [seqToInput, setSeqToInput] = useState('');
+  const [seqRange, setSeqRange] = useState({ from: '', to: '' });
+
   // Debounce typing so the pool is fetched once the user pauses, not on every keystroke
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput.trim()), 300);
     return () => clearTimeout(t);
   }, [searchInput]);
+  useEffect(() => {
+    const clean = (v) => String(v).replace(/\D/g, '').slice(0, 7);
+    const t = setTimeout(() => setSeqRange({ from: clean(seqFromInput), to: clean(seqToInput) }), 300);
+    return () => clearTimeout(t);
+  }, [seqFromInput, seqToInput]);
+  const hasSeqRange = Boolean(seqRange.from || seqRange.to);
   const [filterStatus, setFilterStatus] = useState('unassigned'); // 'unassigned' | 'all' | 'assigned'
   const [recentBatch, setRecentBatch] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
   const [successBanner, setSuccessBanner] = useState(null);
 
-  // Dynamic full-row pagination states
-  const gridContainerRef = useRef(null);
-  const [columnsCount, setColumnsCount] = useState(7);
-  const [rowsPerPage, setRowsPerPage] = useState(3); // 3 complete rows by default
+  // Table pagination + View QR dialog
+  const [pageSize, setPageSize] = useState(25);
   const [currentPage, setCurrentPage] = useState(1);
+  const [qrModal, setQrModal] = useState(null);
+  const [printJob, setPrintJob] = useState(null);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const downloadRef = useRef(null);
 
-  // Dynamically compute how many card columns fit in the container to always display 100% full rows.
-  // The grid mounts only after the first load, so measure when its element appears (callback ref),
-  // not once on mount (that left the default of 7 per row on every screen).
-  const [gridEl, setGridEl] = useState(null);
-  const setGridRef = useCallback((node) => { gridContainerRef.current = node; setGridEl(node); }, []);
+  // Close the Download menu on an outside click or Esc
   useEffect(() => {
-    const el = gridEl;
-    if (!el) return;
+    if (!downloadOpen) return undefined;
+    const onDown = (e) => { if (downloadRef.current && !downloadRef.current.contains(e.target)) setDownloadOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setDownloadOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [downloadOpen]);
+  const tableTopRef = useRef(null);
 
-    const updateColumns = () => {
-      const width = el.clientWidth;
-      if (!width) return;
-      // Each card has min 190px + 18px gap = ~208px per column slot; phones (≤ 640px, same breakpoint
-      // as index.css) show 2 compact cards per row
-      const isPhone = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
-      const cols = isPhone ? 2 : Math.max(1, Math.floor((width + 18) / 208));
-      setColumnsCount(cols);
-    };
-
-    updateColumns();
-
-    let ro;
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => updateColumns());
-      ro.observe(el);
-    } else {
-      window.addEventListener('resize', updateColumns);
-    }
-
-    return () => {
-      if (ro) ro.disconnect();
-      else window.removeEventListener('resize', updateColumns);
-    };
-  }, [gridEl]);
+  useEffect(() => {
+    if (!qrModal) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') setQrModal(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [qrModal]);
 
   // Only the newest request updates the grid; after the first load the grid stays visible while refetching
   const fetchPool = async () => {
@@ -100,7 +106,7 @@ export default function BulkQrManagementPage() {
     try {
       if (poolLoadedRef.current) setSearching(true); else setLoading(true);
       const res = await api.get('/registration/qr/pool', {
-        params: { status: filterStatus, search, limit: 1000 }
+        params: { status: filterStatus, search, limit: 1000, seq_from: seqRange.from || undefined, seq_to: seqRange.to || undefined }
       });
       if (requestId !== poolRequestIdRef.current) return;
       if (res.data?.stats) setStats(res.data.stats);
@@ -120,17 +126,16 @@ export default function BulkQrManagementPage() {
 
   useEffect(() => {
     fetchPool();
-  }, [filterStatus, search]);
+  }, [filterStatus, search, seqRange]);
 
   // Reset to first page when filtering, searching, or changing row density
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterStatus, search, rowsPerPage]);
+  }, [filterStatus, search, seqRange, pageSize]);
 
   // Calculate paginated slices ensuring complete, full rows without blank holes
   const totalFiltered = qrs.length;
-  const isAll = rowsPerPage === 'all';
-  const effectivePageSize = isAll ? Math.max(1, totalFiltered) : Math.max(1, columnsCount * rowsPerPage);
+  const effectivePageSize = pageSize;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / effectivePageSize));
   const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
   const startIndex = totalFiltered > 0 ? (validCurrentPage - 1) * effectivePageSize : 0;
@@ -149,8 +154,10 @@ export default function BulkQrManagementPage() {
       setErrorMessage(null);
       const res = await api.post('/registration/qr/bulk-generate', { count: qty });
       if (res.data?.pool_stats) setStats(res.data.pool_stats);
-      setRecentBatch(res.data?.batch || []);
-      setSuccessBanner(`Successfully generated ${res.data?.generated_count ?? qty} new physical badges (secure QR + 6-digit badge number).`);
+      setRecentBatch(res.data?.sequence_range || null);
+      const range = res.data?.sequence_range;
+      const rangeText = range?.from ? ` Badge numbers ${formatSequence(range.from)}–${formatSequence(range.to)}.` : '';
+      setSuccessBanner(`Generated ${res.data?.generated_count ?? qty} new badges (secure QR + 6-digit badge number).${rangeText}`);
       await fetchPool();
     } catch (err) {
       console.error('Failed to generate bulk QRs:', err);
@@ -165,8 +172,9 @@ export default function BulkQrManagementPage() {
       setErrorMessage('No QR badges available to export.');
       return;
     }
-    const headers = ['QR_ID', 'Badge_Number', 'QR_Payload', 'Status', 'Attendee_ID', 'Attendee_Name', 'Serial_No', 'Category', 'Created_At'];
+    const headers = ['Sequence', 'QR_ID', 'Badge_Number', 'QR_Payload', 'Status', 'Attendee_ID', 'Attendee_Name', 'Serial_No', 'Category', 'Created_At'];
     const rows = qrs.map(q => [
+      q.sequence_no ?? '',
       q.qr_id,
       `"${q.badge_serial || ''}"`,
       `"${q.qr_data}"`,
@@ -187,114 +195,65 @@ export default function BulkQrManagementPage() {
     document.body.removeChild(link);
   };
 
-  const handlePrintSheet = () => {
-    const badgesToPrint = qrs.slice(0, 120);
-    if (badgesToPrint.length === 0) {
-      setErrorMessage('No badges to print in current view.');
+  // PDF: a clean A4 list of the badges in view, opened in the print dialog ("Save as PDF")
+  const handleExportPdf = () => {
+    if (!qrs || qrs.length === 0) {
+      setErrorMessage('No QR badges available to export.');
       return;
     }
-
-    const festivalLabel = escapeHtml((currentFestival?.name || 'Festival').toUpperCase());
-    const badgeCardsHtml = badgesToPrint.map((item, idx) => `
-      <div class="badge-card">
-        <div class="festival-title">${festivalLabel}</div>
-        <div class="badge-subtitle">DELEGATE PASS BADGE</div>
-        <div class="qr-container">
-          <div class="qr-wrap">
-            <div>${qrSvgMarkup(item.qr_data, 180)}</div>
-            <div class="stock-index">#${String(idx + 1).padStart(3, '0')}</div>
-          </div>
-        </div>
-        <div class="code-box">${item.badge_serial ? 'BADGE NO: ' + item.badge_serial : 'CODE: ' + item.qr_data}</div>
-      </div>
-    `).join('');
-
-    // Opens the print / save-as-PDF dialog straight from this page (no new tab first)
+    const festival = currentFestival?.name || 'Festival';
+    const scope = STATUS_LABEL[filterStatus] ? `${STATUS_LABEL[filterStatus]} badges` : 'All badges';
+    const date = new Date().toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+    const rows = qrs.map((q) => `
+      <tr>
+        <td class="seq">${escapeHtml(formatSequence(q.sequence_no))}</td>
+        <td class="no">${escapeHtml(q.badge_serial || 'Legacy code')}</td>
+        <td>${escapeHtml(STATUS_LABEL[q.status] || q.status)}</td>
+        <td>${escapeHtml(q.status === 'unassigned' ? '' : (q.attendee_name || ''))}${q.attendee_serial && q.status === 'assigned' ? ` <span class="muted">${escapeHtml(q.attendee_serial)}</span>` : ''}</td>
+        <td class="muted">${escapeHtml(formatDay(q.created_at))}</td>
+      </tr>`).join('');
     printInPage(
-      `<div class="grid">${badgeCardsHtml}</div>`,
+      `<div class="list">
+        <h1>${escapeHtml(festival)}</h1>
+        <p class="sub">${escapeHtml(scope)} · ${qrs.length} ${qrs.length === 1 ? 'badge' : 'badges'} · ${escapeHtml(date)}</p>
+        <table>
+          <thead><tr><th>No.</th><th>Badge no.</th><th>Status</th><th>Delegate</th><th>Added</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`,
       `
-            @page {
-              size: A4 portrait;
-              margin: 10mm;
-            }
-            #fc-print-root {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-              margin: 0;
-              padding: 0;
-              color: #0f172a;
-              background: #fff;
-            }
-            #fc-print-root .grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
-              gap: 8mm;
-            }
-            #fc-print-root .badge-card {
-              border: 1.5px dashed #cbd5e1;
-              border-radius: 8px;
-              padding: 12px 10px;
-              text-align: center;
-              box-sizing: border-box;
-              page-break-inside: avoid;
-            }
-            #fc-print-root .festival-title {
-              font-size: 10px;
-              font-weight: 800;
-              letter-spacing: 0.05em;
-              color: #a82f2f;
-              text-transform: uppercase;
-              margin-bottom: 2px;
-            }
-            #fc-print-root .badge-subtitle {
-              font-size: 8px;
-              font-weight: 700;
-              color: #64748b;
-              margin-bottom: 8px;
-              letter-spacing: 0.02em;
-            }
-            #fc-print-root .qr-container {
-              display: flex;
-              justify-content: center;
-              margin-bottom: 8px;
-            }
-            #fc-print-root .qr-container svg {
-              width: 125px;
-              height: 125px;
-              display: block;
-            }
-            /* QR + stock number: the number sits vertically on the right, centred on the QR */
-            #fc-print-root .qr-wrap {
-              position: relative;
-              display: inline-block;
-            }
-            #fc-print-root .stock-index {
-              position: absolute;
-              left: 100%;
-              top: 50%;
-              transform: translateY(-50%);
-              margin-left: 4px;
-              writing-mode: vertical-rl;
-              font-size: 7pt;
-              font-weight: 700;
-              color: #64748b;
-              letter-spacing: 0.08em;
-              white-space: nowrap;
-            }
-            #fc-print-root .code-box {
-              font-family: monospace;
-              font-size: 13px;
-              font-weight: 800;
-              background: #f1f5f9;
-              padding: 4px 6px;
-              border-radius: 4px;
-              display: inline-block;
-              letter-spacing: 0.12em;
-              margin-bottom: 4px;
-            }
-          `,
-      `${currentFestival?.name || 'Festival'} badge stickers`
+        @page { size: A4 portrait; margin: 14mm; }
+        #fc-print-root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; }
+        #fc-print-root h1 { font-size: 16pt; margin: 0 0 2mm; }
+        #fc-print-root .sub { font-size: 9.5pt; color: #475569; margin: 0 0 6mm; }
+        #fc-print-root table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+        #fc-print-root thead { display: table-header-group; }
+        #fc-print-root th { text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; border-bottom: 0.4mm solid #0f172a; padding: 2mm 2mm; }
+        #fc-print-root td { border-bottom: 0.2mm solid #e2e8f0; padding: 2mm 2mm; vertical-align: top; }
+        #fc-print-root tr { break-inside: avoid; page-break-inside: avoid; }
+        #fc-print-root .seq, #fc-print-root .no { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
+        #fc-print-root .no { letter-spacing: 0.08em; }
+        #fc-print-root .muted { color: #64748b; }
+      `,
+      `${festival} badge list ${new Date().toISOString().slice(0, 10)}`
     );
   };
+
+  // Print dialog: template, mode (Pass + QR / Pass only / QR only) and paper (ADR 0005).
+  // Lost badges are never printed (ADR 0001, Amendment 2).
+  const openPrint = (badges, title) => {
+    const printableBadges = badges.filter(q => q.status !== 'lost');
+    if (printableBadges.length === 0) {
+      setErrorMessage('No printable badges in the current view (lost badges are never printed).');
+      return;
+    }
+    setPrintJob({
+      title,
+      items: printableBadges.map((q, i) => ({ data: passDataFromBadge(q, i + 1), categoryCode: '' }))
+    });
+  };
+
+  const handlePrintSheet = () => openPrint(qrs, `Export QR: ${STATUS_LABEL[filterStatus] ? STATUS_LABEL[filterStatus].toLowerCase() + ' ' : ''}badges`);
 
   return (
     <div className="fc-bulk-qr-page animate-fade-in" style={{ paddingBottom: '80px', maxWidth: '1280px', margin: '0 auto' }}>
@@ -376,9 +335,19 @@ export default function BulkQrManagementPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <CheckCircleIcon size={16} />
             <span>{successBanner}</span>
+            {recentBatch?.from && (
+              <button
+                type="button"
+                className="fc-bq-batch-link"
+                onClick={() => { setSeqFromInput(String(recentBatch.from)); setSeqToInput(String(recentBatch.to)); setFilterStatus('all'); }}
+              >
+                Show this batch
+              </button>
+            )}
           </div>
           <button
             type="button"
+            aria-label="Dismiss"
             onClick={() => setSuccessBanner(null)}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--fc-success-text)', fontSize: '1.1rem', padding: '0 4px' }}
           >
@@ -519,34 +488,38 @@ export default function BulkQrManagementPage() {
                 gap: '6px',
                 boxShadow: 'var(--shadow-sm)'
               }}
-              title="Print standard A4 3-column sticker sheets"
+              title="Export the QR codes in view: stickers or passes, on A4 or a card printer"
             >
               <PrintIcon size={16} />
-              <span>Print Sticker Sheets</span>
+              <span>Export QR</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleExportCsv}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
-                border: '1px solid var(--fc-border)',
-                background: 'var(--fc-surface)',
-                color: 'var(--fc-text-main)',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: 'var(--shadow-sm)'
-              }}
-              title="Export CSV for physical badge printing vendors"
-            >
-              <UploadFileIcon size={16} />
-              <span>Export CSV</span>
-            </button>
+            <div className="fc-bq-download" ref={downloadRef}>
+              <button
+                type="button"
+                className="fc-bq-download-btn"
+                onClick={() => setDownloadOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={downloadOpen}
+                title="Download the badges in view as a CSV file or a PDF list"
+              >
+                <FileDownloadIcon size={16} />
+                <span>Download</span>
+                <ArrowDropDownIcon size={18} />
+              </button>
+              {downloadOpen && (
+                <div className="fc-bq-download-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => { setDownloadOpen(false); handleExportCsv(); }}>
+                    <UploadFileIcon size={15} />
+                    <span><strong>CSV</strong><small>Spreadsheet, for printing vendors</small></span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setDownloadOpen(false); handleExportPdf(); }}>
+                    <DescriptionIcon size={15} />
+                    <span><strong>PDF</strong><small>Badge list on A4 (choose "Save as PDF")</small></span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -584,17 +557,41 @@ export default function BulkQrManagementPage() {
           >
             Assigned <span className="tab-badge">{stats.assigned}</span>
           </button>
+          {Number(stats.lost) > 0 && (
+            <button
+              type="button"
+              className={`scope-tab-btn ${filterStatus === 'lost' ? 'active' : ''}`}
+              onClick={() => { setFilterStatus('lost'); setCurrentPage(1); }}
+            >
+              Lost <span className="tab-badge">{stats.lost}</span>
+            </button>
+          )}
+        </div>
+
+        <div className="fc-bq-filters">
+        {/* Sequence range: show (and print) badges #from–#to */}
+        <div className="fc-bq-seqrange" role="group" aria-label="Badge sequence range">
+          <span className="fc-bq-seqrange-label">No.</span>
+          <input type="text" inputMode="numeric" placeholder="from" value={seqFromInput} onChange={(e) => setSeqFromInput(e.target.value)} aria-label="From badge number" />
+          <span aria-hidden="true">–</span>
+          <input type="text" inputMode="numeric" placeholder="to" value={seqToInput} onChange={(e) => setSeqToInput(e.target.value)} aria-label="To badge number" />
+          {(seqFromInput || seqToInput) && (
+            <button type="button" className="fc-bq-seqrange-clear" onClick={() => { setSeqFromInput(''); setSeqToInput(''); }} aria-label="Clear number range">
+              <CloseIcon size={12} />
+            </button>
+          )}
         </div>
 
         {/* Search Input on the right */}
-        <div className="fc-bq-search" style={{ paddingBottom: '6px', display: 'flex', flex: '0 1 320px', minWidth: '220px' }}>
+        <div className="fc-bq-search" style={{ paddingBottom: '6px', display: 'flex', flex: '0 1 280px', minWidth: '200px' }}>
           <SearchInput
             value={searchInput}
             onChange={setSearchInput}
             loading={searching}
-            placeholder="Search badge no., name, phone or email"
+            placeholder="Search badge no., #no., name or phone"
             maxWidth="320px"
           />
+        </div>
         </div>
       </div>
 
@@ -615,7 +612,7 @@ export default function BulkQrManagementPage() {
           <div style={{ textAlign: 'center', padding: '80px 20px', color: 'var(--fc-text-muted)' }}>
             <div style={{ marginBottom: '12px' }}><ConfirmationNumberIcon size={40} style={{ color: 'var(--fc-text-muted)' }} /></div>
             <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
-              {search ? `No badges match "${search}"` : 'No QR badges found for this filter'}
+              {search ? `No badges match "${search}"` : hasSeqRange ? 'No badges in this number range' : 'No QR badges found for this filter'}
             </div>
             <div style={{ fontSize: '0.85rem', maxWidth: '440px', margin: '0 auto 18px auto' }}>
               {search ? (
@@ -629,293 +626,162 @@ export default function BulkQrManagementPage() {
           </div>
         ) : (
           <div>
-            <div 
-              ref={setGridRef}
-              className="fc-bq-grid"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
-                gap: '18px'
-              }}
-            >
-              {currentQrs.map((item) => {
-                const isAssigned = Boolean(item.attendee_id);
-                const codeStr = String(item.badge_serial || item.qr_data || '');
-                const isCompactCode = codeStr.length <= 8;
-
-                return (
-                  <div
-                    key={item.qr_id}
-                    className="fc-bq-card"
-                    style={{
-                      background: 'var(--fc-surface)',
-                      border: isAssigned ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid var(--fc-border)',
-                      borderRadius: '12px',
-                      padding: '16px 14px',
-                      textAlign: 'center',
-                      boxShadow: 'var(--shadow-sm)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      minHeight: '280px',
-                      boxSizing: 'border-box',
-                      overflow: 'hidden',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--fc-brand-text)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '2px' }}>
-                        {currentFestival?.name || 'Festival'}
-                      </div>
-                      <div style={{ fontSize: '0.64rem', fontWeight: 600, color: 'var(--fc-text-muted)', marginBottom: '10px' }}>
-                        DELEGATE PASS BADGE
-                      </div>
-
-                      <div style={{ background: '#ffffff', padding: '8px', borderRadius: '8px', border: '1px solid var(--fc-border)', marginBottom: '10px', boxShadow: 'inset 0 0 4px rgba(0,0,0,0.05)' }}>
-                        <QrCode value={item.qr_data} size={120} />
-                      </div>
-                    </div>
-
-                    <div style={{ width: '100%', boxSizing: 'border-box' }}>
-                      <div 
-                        title={codeStr}
-                        style={{
-                          width: '100%',
-                          maxWidth: '100%',
-                          boxSizing: 'border-box',
-                          fontFamily: 'monospace',
-                          fontSize: isCompactCode ? '1.05rem' : '0.8rem',
-                          fontWeight: 900,
-                          letterSpacing: isCompactCode ? '0.12em' : '0.02em',
-                          color: 'var(--fc-text-main)',
-                          background: 'var(--fc-surface-card)',
-                          border: '1px solid var(--fc-border)',
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          marginBottom: '8px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          textAlign: 'center'
-                        }}
-                      >
-                        {codeStr}
-                      </div>
-
-                      {isAssigned ? (
-                        <div style={{
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          background: 'rgba(37, 99, 235, 0.06)',
-                          border: '1px solid rgba(37, 99, 235, 0.2)',
-                          borderRadius: '6px',
-                          padding: '6px 8px',
-                          textAlign: 'center',
-                          overflow: 'hidden'
-                        }}>
-                          <div 
-                            style={{ 
-                              fontSize: '0.76rem', 
-                              fontWeight: 700, 
-                              color: 'var(--fc-info-text)', 
-                              overflow: 'hidden', 
-                              textOverflow: 'ellipsis', 
-                              whiteSpace: 'nowrap' 
-                            }}
-                            title={`Assigned to ${item.attendee_name || 'Delegate'}`}
-                          >
-                            Assigned: {item.attendee_name || 'Delegate'}
-                          </div>
-                          <div style={{ 
-                            fontSize: '0.68rem', 
-                            fontWeight: 600, 
-                            color: 'var(--fc-text-muted)', 
-                            fontFamily: 'monospace', 
-                            marginTop: '2px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            {item.attendee_serial || '—'}
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={{ width: '100%' }}>
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/registration/assign-qr?code=${encodeURIComponent(item.qr_data)}`)}
-                            style={{
-                              width: '100%',
-                              padding: '6px 10px',
-                              borderRadius: '6px',
-                              border: '1px solid var(--fc-border)',
-                              background: 'var(--fc-surface-card)',
-                              color: 'var(--fc-brand, var(--fc-brand-text))',
-                              fontSize: '0.76rem',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = 'var(--fc-brand)';
-                              e.currentTarget.style.background = 'rgba(168, 47, 47, 0.08)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.borderColor = 'var(--fc-border)';
-                              e.currentTarget.style.background = 'var(--fc-surface-card)';
-                            }}
-                          >
-                            Pair with Delegate
+            <div ref={tableTopRef} className="fc-bq-table-wrap">
+              <table className="fc-bq-table">
+                <thead>
+                  <tr>
+                    <th className="fc-bq-th-seq">No.</th>
+                    <th>Badge no.</th>
+                    <th>Status</th>
+                    <th>Delegate</th>
+                    <th>Added</th>
+                    <th className="fc-bq-th-actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentQrs.map((item) => {
+                    const isLegacy = !item.badge_serial;
+                    const code = item.badge_serial || item.qr_data || '';
+                    return (
+                      <tr key={item.qr_id} className={`is-${item.status}`}>
+                        <td className="fc-bq-c-seq" data-label="No.">
+                          <span className="fc-bq-seq" title="Sequence: the order this badge was generated in for this festival">{formatSequence(item.sequence_no) || '—'}</span>
+                        </td>
+                        <td className="fc-bq-c-badge" data-label="Badge no.">
+                          {isLegacy ? (
+                            <span className="fc-bq-legacy" title={code}>
+                              <span className="fc-bq-legacy-tag">Legacy code</span>
+                              <span className="fc-bq-legacy-code">{code}</span>
+                            </span>
+                          ) : (
+                            <span className="fc-bq-serial">{code}</span>
+                          )}
+                        </td>
+                        <td className="fc-bq-c-status" data-label="Status">
+                          <span className={`fc-bq-status is-${item.status}`}>{STATUS_LABEL[item.status] || item.status}</span>
+                        </td>
+                        <td className={`fc-bq-c-delegate ${item.status === 'unassigned' ? 'is-empty' : ''}`} data-label="Delegate">
+                          {item.status === 'assigned' ? (
+                            <>
+                              <span className="fc-bq-del-name">{item.attendee_name || 'Delegate'}</span>
+                              {item.attendee_serial && <span className="fc-bq-del-meta">{item.attendee_serial}</span>}
+                            </>
+                          ) : item.status === 'lost' ? (
+                            <>
+                              <span className="fc-bq-del-name">{item.attendee_name ? `Was ${item.attendee_name}'s` : 'Not linked'}</span>
+                              {item.lost_at && <span className="fc-bq-del-meta">Lost {formatDay(item.lost_at)}</span>}
+                            </>
+                          ) : (
+                            <span className="fc-bq-del-meta">—</span>
+                          )}
+                        </td>
+                        <td className="fc-bq-c-added" data-label="Added">{formatDay(item.created_at)}</td>
+                        <td className="fc-bq-c-actions">
+                          <button type="button" className="fc-bq-icon-btn" onClick={() => setQrModal(item)} title="View QR" aria-label={`View QR for badge ${code}`}>
+                            <VisibilityIcon size={16} />
                           </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                          {item.status === 'unassigned' && (
+                            <button type="button" className="fc-bq-action is-primary" onClick={() => navigate(`/registration/assign-qr?code=${encodeURIComponent(item.qr_data)}`)}>
+                              Pair with delegate
+                            </button>
+                          )}
+                          {item.status === 'assigned' && item.attendee_id && (
+                            <button type="button" className="fc-bq-action" onClick={() => navigate(`/registration/edit/${item.attendee_id}`)}>
+                              Open delegate
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
-            {/* ── Pagination Controls Toolbar ────────────────────────────── */}
-            <div className="fc-bq-pager" style={{
-              marginTop: '28px',
-              paddingTop: '18px',
-              borderTop: '1px solid var(--fc-border)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '14px'
-            }}>
-              {/* Left Info & Per Page Options */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ fontSize: '0.84rem', color: 'var(--fc-text-secondary)', fontWeight: 500 }}>
-                  Showing <strong>{totalFiltered > 0 ? startIndex + 1 : 0}</strong>–<strong>{endIndex}</strong> of <strong>{totalFiltered}</strong> physical badges
-                  {totalPages > 1 && <span> (Page <strong>{validCurrentPage}</strong> of <strong>{totalPages}</strong>)</span>}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: 'var(--fc-text-muted)' }}>
-                  <span>Rows:</span>
-                  {[
-                    { label: '3 Rows', val: 3 },
-                    { label: '4 Rows', val: 4 },
-                    { label: '5 Rows', val: 5 },
-                    { label: 'All', val: 'all' }
-                  ].map(opt => {
-                    const isSelected = rowsPerPage === opt.val;
-                    return (
-                      <button
-                        key={opt.label}
-                        type="button"
-                        onClick={() => { setRowsPerPage(opt.val); setCurrentPage(1); }}
-                        style={{
-                          padding: '3px 9px',
-                          borderRadius: '6px',
-                          border: isSelected ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
-                          background: isSelected ? 'rgba(168, 47, 47, 0.1)' : 'var(--fc-surface)',
-                          color: isSelected ? 'var(--fc-brand-text)' : 'var(--fc-text-main)',
-                          fontWeight: isSelected ? 800 : 600,
-                          fontSize: '0.76rem',
-                          cursor: 'pointer'
-                        }}
-                        title={opt.val === 'all' ? 'Show all cards' : `Display ${opt.val * columnsCount} cards (${opt.val} full rows)`}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* ── Pagination ───────────────────────────────────────────── */}
+            <div className="fc-pg-bar fc-bq-pager">
+              <div className="fc-bq-pager-left">
+                <span className="fc-pg-summary">
+                  Showing <strong>{totalFiltered > 0 ? startIndex + 1 : 0}</strong>–<strong>{endIndex}</strong> of <strong>{totalFiltered}</strong> badges
+                </span>
+                <label className="fc-bq-pagesize">
+                  Rows per page
+                  <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+                    {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
               </div>
-
-              {/* Right: Page Navigation Buttons */}
-              {totalPages > 1 && (
-                <div className="fc-bq-pages" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {/* Previous Button */}
-                  <button
-                    type="button"
-                    disabled={validCurrentPage <= 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--fc-border)',
-                      background: validCurrentPage <= 1 ? 'var(--fc-surface-subtle)' : 'var(--fc-surface)',
-                      color: validCurrentPage <= 1 ? 'var(--fc-text-muted)' : 'var(--fc-text-main)',
-                      cursor: validCurrentPage <= 1 ? 'not-allowed' : 'pointer',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      opacity: validCurrentPage <= 1 ? 0.5 : 1,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    Previous
-                  </button>
-
-                  {/* Page Numbers: first, last and the pages around the current one; gaps shown as "…" */}
-                  {(() => {
-                    const keep = new Set([1, totalPages, validCurrentPage - 1, validCurrentPage, validCurrentPage + 1]);
-                    const items = [];
-                    for (let p = 1; p <= totalPages; p += 1) {
-                      if (keep.has(p)) items.push(p);
-                      else if (items[items.length - 1] !== '…') items.push('…');
-                    }
-                    return items;
-                  })().map((pageNum, idx) => {
-                    if (pageNum === '…') {
-                      return <span key={`gap-${idx}`} aria-hidden="true" style={{ padding: '0 2px', color: 'var(--fc-text-muted)', fontWeight: 700 }}>…</span>;
-                    }
-                    const isActive = pageNum === validCurrentPage;
-                    return (
-                      <button
-                        key={pageNum}
-                        aria-current={isActive ? 'page' : undefined}
-                        type="button"
-                        onClick={() => setCurrentPage(pageNum)}
-                        style={{
-                          minWidth: '34px',
-                          height: '34px',
-                          padding: '0 8px',
-                          borderRadius: '6px',
-                          border: isActive ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
-                          background: isActive ? 'var(--fc-brand)' : 'var(--fc-surface)',
-                          color: isActive ? '#ffffff' : 'var(--fc-text-main)',
-                          fontWeight: isActive ? 800 : 600,
-                          fontSize: '0.82rem',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-
-                  {/* Next Button */}
-                  <button
-                    type="button"
-                    disabled={validCurrentPage >= totalPages}
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--fc-border)',
-                      background: validCurrentPage >= totalPages ? 'var(--fc-surface-subtle)' : 'var(--fc-surface)',
-                      color: validCurrentPage >= totalPages ? 'var(--fc-text-muted)' : 'var(--fc-text-main)',
-                      cursor: validCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      opacity: validCurrentPage >= totalPages ? 0.5 : 1,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
+              <Pagination
+                page={validCurrentPage}
+                totalPages={totalPages}
+                onChange={(p) => {
+                  setCurrentPage(p);
+                  requestAnimationFrame(() => tableTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                }}
+              />
             </div>
           </div>
         )}
       </div>
+
+      {/* ── View QR dialog ──────────────────────────────────────────────────── */}
+      {qrModal && (
+        <div className="fc-modal-overlay" onClick={() => setQrModal(null)}>
+          <div className="fc-modal-card fc-bq-qr-dialog" role="dialog" aria-modal="true" aria-labelledby="fc-bq-qr-title" onClick={(e) => e.stopPropagation()}>
+            <div className="fc-modal-header">
+              <div>
+                <h2 id="fc-bq-qr-title" style={{ margin: 0, fontSize: '1.05rem', color: 'var(--fc-text-main)' }}>
+                  {[qrModal.sequence_no ? `Badge ${formatSequence(qrModal.sequence_no)}` : 'Badge', qrModal.badge_serial].filter(Boolean).join(' · ')}
+                </h2>
+                <div style={{ fontSize: '0.78rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>
+                  {currentFestival?.name || 'Festival'} · Delegate pass badge
+                </div>
+              </div>
+              <button type="button" className="fc-modal-close" onClick={() => setQrModal(null)} aria-label="Close">
+                <CloseIcon size={14} />
+              </button>
+            </div>
+            <div className="fc-bq-qr-body">
+              <div className={`fc-bq-qr-box ${qrModal.status === 'lost' ? 'is-lost' : ''}`}>
+                <QrCode value={qrModal.qr_data} size={240} />
+              </div>
+              <div className="fc-bq-qr-code">{qrModal.badge_serial || qrModal.qr_data}</div>
+              <span className={`fc-bq-status is-${qrModal.status}`}>{STATUS_LABEL[qrModal.status] || qrModal.status}</span>
+              {qrModal.status === 'assigned' && (
+                <p className="fc-bq-qr-note">Assigned to <strong>{qrModal.attendee_name || 'a delegate'}</strong>{qrModal.attendee_serial ? ` (${qrModal.attendee_serial})` : ''}</p>
+              )}
+              {qrModal.status === 'lost' && (
+                <p className="fc-bq-qr-note is-lost">
+                  Reported lost{qrModal.lost_at ? ` on ${formatDay(qrModal.lost_at)}` : ''}{qrModal.attendee_name ? `, was ${qrModal.attendee_name}'s` : ''}. This badge can't be used or printed.
+                </p>
+              )}
+            </div>
+            <div className="fc-modal-footer fc-bq-qr-footer">
+              <button type="button" className="fc-bq-action" onClick={() => setQrModal(null)}>Close</button>
+              {qrModal.status !== 'lost' && (
+                <button type="button" className="fc-bq-action" onClick={() => { const badge = qrModal; setQrModal(null); openPrint([badge], `Print badge ${badge.badge_serial || ''}`.trim()); }}>
+                  <PrintIcon size={14} /> Print this badge
+                </button>
+              )}
+              {qrModal.status === 'unassigned' && (
+                <button type="button" className="fc-bq-action is-primary" onClick={() => navigate(`/registration/assign-qr?code=${encodeURIComponent(qrModal.qr_data)}`)}>
+                  Pair with delegate
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {printJob && (
+        <PrintPassesDialog
+          items={printJob.items}
+          defaultMode="full"
+          title={printJob.title}
+          jobTitle={`${currentFestival?.name || 'Festival'} badges`}
+          onClose={() => setPrintJob(null)}
+        />
+      )}
     </div>
   );
 }

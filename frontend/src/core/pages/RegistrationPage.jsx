@@ -32,6 +32,10 @@ import AttendeeFilterDrawer from '../components/registration/AttendeeFilterDrawe
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
 
 import QrCode from '../components/common/QrCode';
+import Pagination from '../components/common/Pagination';
+import PrintPassesDialog from '../components/print/PrintPassesDialog';
+import usePassTemplates from '../hooks/usePassTemplates';
+import { passDataFromAttendee } from '../utils/passRenderer';
 // ── CSV export helpers ─────────────────────────────────────────────────────
 // Neutralise spreadsheet formulas in user-entered text (=, @, or +/- followed by a non-number)
 function csvCell(value) {
@@ -145,6 +149,7 @@ export default function RegistrationPage() {
     return '';
   };
   const searchInputRef = useRef(null);
+  const paginationTopRef = useRef(null);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCat, setSelectedCat] = useState('');
@@ -223,6 +228,18 @@ export default function RegistrationPage() {
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [badgeModal, setBadgeModal] = useState(null);
+  const [printJob, setPrintJob] = useState(null);
+  // Festival venue / dates / categories for passes (ADR 0005); never hard-coded
+  const { festival: passFestival, categories: passCategories } = usePassTemplates();
+  const openPrintPasses = (list, title) => {
+    setPrintJob({
+      title,
+      items: list.map((a) => {
+        const data = passDataFromAttendee(a, passCategories);
+        return { data, categoryCode: data.category_code };
+      })
+    });
+  };
   const [showImportModal, setShowImportModal] = useState(false);
   const [showFaqModal, setShowFaqModal] = useState(false);
   const [csvText, setCsvText] = useState('');
@@ -264,16 +281,24 @@ export default function RegistrationPage() {
   };
 
   const handleRevokeQrBadge = async (attendee) => {
-    if (!window.confirm(`Revoke QR badge credential for ${attendee.name}? This will invalidate their gate pass.`)) return;
+    if (!window.confirm(`Revoke the badge of ${attendee.name}? It will be marked lost: it stops working at the gate and for voting, and can never be used again. You can then assign a new badge.`)) return;
     try {
       setIssuingId(attendee.attendee_id);
-      await api.post(`/registration/attendees/${attendee.attendee_id}/revoke-qr`);
+      const res = await api.post(`/registration/attendees/${attendee.attendee_id}/revoke-qr`);
+      const lostCount = (res.data?.lost_badges || []).length;
+      const patch = (a) => ({
+        ...a,
+        qr_token: null,
+        badge_serial: null,
+        status: a.status === 'badge_issued' ? 'registered' : a.status,
+        lost_badge_count: Number(a.lost_badge_count || 0) + lostCount
+      });
 
-      setAttendees(prev => prev.map(a => a.attendee_id === attendee.attendee_id ? { ...a, qr_token: null, status: 'registered' } : a));
+      setAttendees(prev => prev.map(a => a.attendee_id === attendee.attendee_id ? patch(a) : a));
       if (badgeModal && badgeModal.attendee_id === attendee.attendee_id) {
-        setBadgeModal(prev => ({ ...prev, qr_token: null, status: 'registered' }));
+        setBadgeModal(prev => patch(prev));
       }
-      alert('QR badge credential revoked. Attendee returned to pre-registered state.');
+      alert(res.data?.message || 'Badge revoked and marked lost.');
     } catch (err) {
       alert('Failed to revoke QR badge: ' + (err.response?.data?.error || err.message));
     } finally {
@@ -976,6 +1001,18 @@ return (
               <FileDownloadIcon size={16} />
               <span>Export CSV</span>
             </button>
+
+            {/* Print passes for the delegates currently listed (ADR 0005) */}
+            <button
+              type="button"
+              className="fc-aud-print-btn"
+              onClick={() => openPrintPasses(filteredAttendees, `Print passes for ${filteredAttendees.length} delegate${filteredAttendees.length === 1 ? '' : 's'}`)}
+              disabled={filteredAttendees.length === 0}
+              title={`Print passes for the ${filteredAttendees.length} delegate${filteredAttendees.length === 1 ? '' : 's'} in this view`}
+            >
+              <PrintIcon size={16} />
+              <span>Print passes</span>
+            </button>
           </div>
 
           <div style={{ fontSize: '0.85rem', color: 'var(--fc-text-muted)', fontWeight: 600 }}>
@@ -1304,7 +1341,7 @@ return (
             )}
           </div>
         ) : (
-              <div style={{ overflowX: 'auto' }}>
+              <div ref={paginationTopRef} className="fc-pg-anchor" style={{ overflowX: 'auto' }}>
                 <table className="fc-delegate-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
                   <thead>
                     <tr style={{ background: 'var(--fc-surface)', borderBottom: '1px solid var(--fc-border)', textAlign: 'left', color: 'var(--fc-text-muted)' }}>
@@ -1379,94 +1416,21 @@ return (
               </div>
             )}
 
-            {/* ── Pagination Toolbar (10 per page) ─────────────────────────── */}
+            {/* ── Pagination (10 per page) ─────────────────────────────────── */}
             {filteredAttendees.length > 0 && totalPages > 1 && (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginTop: '18px',
-                  paddingTop: '16px',
-                  borderTop: '1px solid var(--fc-border)',
-                  flexWrap: 'wrap',
-                  gap: '12px'
-                }}
-              >
-                <div style={{ fontSize: '0.85rem', color: 'var(--fc-text-secondary)', fontWeight: 500 }}>
-                  Showing <strong>{startIndex + 1}</strong>–<strong>{endIndex}</strong> of <strong>{filteredAttendees.length}</strong> delegates (Page {validCurrentPage} of {totalPages})
+              <div className="fc-pg-bar">
+                <div className="fc-pg-summary">
+                  Showing <strong>{startIndex + 1}</strong>–<strong>{endIndex}</strong> of <strong>{filteredAttendees.length}</strong> delegates
                 </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {/* Previous Page */}
-                  <button
-                    type="button"
-                    disabled={validCurrentPage <= 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--fc-border)',
-                      background: validCurrentPage <= 1 ? 'var(--fc-surface-hover, #f3f4f6)' : 'var(--fc-surface)',
-                      color: validCurrentPage <= 1 ? 'var(--fc-text-muted)' : 'var(--fc-text-main)',
-                      cursor: validCurrentPage <= 1 ? 'not-allowed' : 'pointer',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      opacity: validCurrentPage <= 1 ? 0.5 : 1,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    Previous
-                  </button>
-
-                  {/* Page Number Buttons */}
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
-                    const isActive = pageNum === validCurrentPage;
-                    return (
-                      <button
-                        key={pageNum}
-                        type="button"
-                        onClick={() => setCurrentPage(pageNum)}
-                        style={{
-                          minWidth: '34px',
-                          height: '34px',
-                          padding: '0 8px',
-                          borderRadius: '6px',
-                          border: isActive ? '1px solid var(--fc-brand)' : '1px solid var(--fc-border)',
-                          background: isActive ? 'var(--fc-brand)' : 'var(--fc-surface)',
-                          color: isActive ? '#ffffff' : 'var(--fc-text-main)',
-                          fontWeight: isActive ? 700 : 600,
-                          fontSize: '0.82rem',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-
-                  {/* Next Page */}
-                  <button
-                    type="button"
-                    disabled={validCurrentPage >= totalPages}
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--fc-border)',
-                      background: validCurrentPage >= totalPages ? 'var(--fc-surface-hover, #f3f4f6)' : 'var(--fc-surface)',
-                      color: validCurrentPage >= totalPages ? 'var(--fc-text-muted)' : 'var(--fc-text-main)',
-                      cursor: validCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      opacity: validCurrentPage >= totalPages ? 0.5 : 1,
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    Next
-                  </button>
-                </div>
+                <Pagination
+                  page={validCurrentPage}
+                  totalPages={totalPages}
+                  onChange={(p) => {
+                    setCurrentPage(p);
+                    // Keep the list in view: the pager sits below it
+                    requestAnimationFrame(() => paginationTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                  }}
+                />
               </div>
             )}
           </div>
@@ -1505,119 +1469,34 @@ return (
             ? (() => { try { return JSON.parse(badgeModal.custom_data); } catch (e) { return {}; } })()
             : (badgeModal.custom_data || {});
 
-          const serialNo = badgeModal.serial_no || customData.serial_no || ('KB26-' + String(badgeModal.attendee_id).padStart(4, '0'));
+          // Everything below comes from the delegate's record or the festival's own details (ADR 0005)
+          const serialNo = badgeModal.serial_no || customData.serial_no || '';
           const passDaysList = Array.isArray(badgeModal.pass_days)
             ? badgeModal.pass_days
             : (customData.pass_days
               ? (Array.isArray(customData.pass_days) ? customData.pass_days : [customData.pass_days])
-              : ['Nov 20–22, 2026 (All Festival Days)']);
-          const validDaysStr = passDaysList.length > 0 ? passDaysList.join(', ') : 'Nov 20–22, 2026';
+              : []);
+          const validDaysStr = passDaysList.filter(Boolean).length > 0 ? passDaysList.filter(Boolean).join(', ') : (passFestival.dates || '');
 
-          const badgeRibbonText = badgeModal.badge_ribbon || customData.badge_ribbon || 'AUDIENCE PASS';
-          const badgeColor = badgeModal.badge_color || customData.badge_color || '#4f46e5';
-          const delegateCategoryName = customData.delegate_category || badgeModal.delegate_category_name || badgeModal.delegate_category || 'Bangalore Attendee';
-          const passTypeStr = badgeModal.pass_type || customData.pass_type || 'Full-Festival Pass';
+          const badgeRibbonText = badgeModal.badge_ribbon || customData.badge_ribbon || '';
+          const badgeColor = badgeModal.badge_color || customData.badge_color || 'var(--fc-brand)';
+          const categoryRecord = passCategories.find(c => c.code === badgeModal.delegate_category || c.name === badgeModal.delegate_category);
+          const delegateCategoryName = categoryRecord?.name || badgeModal.delegate_category_name || badgeModal.delegate_category || customData.delegate_category || '';
+          const passTypeStr = badgeModal.pass_type || customData.pass_type || '';
+          const categoryAndPass = [delegateCategoryName, passTypeStr].filter(Boolean).join(' • ');
+          const festivalName = passFestival.name || currentFestival?.name || '';
+          const venueWhen = [passFestival.dates, passFestival.timing].filter(Boolean).join(' • ');
 
           const isIssued = Boolean(badgeModal.qr_token || badgeModal.status === 'badge_issued');
           const regDate = badgeModal.registered_at
             ? new Date(badgeModal.registered_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-            : (customData.registration_date || '28 Oct 2026');
+            : (customData.registration_date || '');
           const screeningsCount = badgeModal.screenings_attended || 0;
 
           const handlePrintPass = () => {
-            const cardEl = document.getElementById('printable-delegate-pass');
-            if (!cardEl) {
-              window.print();
-              return;
-            }
-
-            const clone = cardEl.cloneNode(true);
-            // Strip out interactive buttons and close icon
-            clone.querySelectorAll('.no-print').forEach(el => el.remove());
-
-            const iframe = document.createElement('iframe');
-            iframe.style.position = 'fixed';
-            iframe.style.right = '0';
-            iframe.style.bottom = '0';
-            iframe.style.width = '0';
-            iframe.style.height = '0';
-            iframe.style.border = '0';
-            iframe.style.opacity = '0';
-            iframe.style.pointerEvents = 'none';
-            document.body.appendChild(iframe);
-
-            const doc = iframe.contentWindow.document;
-            doc.open();
-            doc.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Accreditation Pass - ${badgeModal?.name || 'Kashish'}</title>
-  <style>
-    @page {
-      size: auto;
-      margin: 10mm;
-    }
-    :root {
-      --fc-surface-card: #ffffff;
-      --fc-surface: #f8fafc;
-      --fc-surface-subtle: #f8fafc;
-      --fc-text-main: #0f172a;
-      --fc-text-secondary: #475569;
-      --fc-text-muted: #64748b;
-      --fc-border: #e2e8f0;
-    }
-    * {
-      box-sizing: border-box;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    body {
-      margin: 0;
-      padding: 24px;
-      background: #ffffff;
-      color: #0f172a;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-    }
-    .print-pass-container {
-      width: 100%;
-      max-width: 480px;
-      margin: 0 auto;
-      background: #ffffff;
-      border: 1px solid #cbd5e1;
-      border-radius: 14px;
-      padding: 22px;
-      box-shadow: none;
-    }
-    .no-print {
-      display: none !important;
-    }
-  </style>
-</head>
-<body>
-  <div class="print-pass-container">
-    ${clone.innerHTML}
-  </div>
-</body>
-</html>`);
-            doc.close();
-
-            setTimeout(() => {
-              try {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-              } catch (err) {
-                console.error('Print iframe error:', err);
-              } finally {
-                setTimeout(() => {
-                  if (iframe && iframe.parentNode) {
-                    iframe.parentNode.removeChild(iframe);
-                  }
-                }, 3000);
-              }
-            }, 250);
+            const attendee = badgeModal;
+            setBadgeModal(null);
+            openPrintPasses([attendee], `Print pass for ${attendee.name || 'delegate'}`);
           };
 
           return (
@@ -1664,16 +1543,20 @@ return (
                   {/* Official Pass Header Ribbon */}
                   <div style={{ background: 'var(--fc-brand-active)', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ background: badgeColor, color: '#ffffff', fontWeight: 800, fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                        {badgeRibbonText}
-                      </span>
+                      {badgeRibbonText && (
+                        <span style={{ background: badgeColor, color: '#ffffff', fontWeight: 800, fontSize: '0.7rem', padding: '2px 8px', borderRadius: '4px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                          {badgeRibbonText}
+                        </span>
+                      )}
                       <span style={{ color: 'rgba(255, 255, 255, 0.95)', fontWeight: 700, fontSize: '0.78rem', letterSpacing: '0.03em', textTransform: 'uppercase' }}>
-                        KASHISH x BENGALURU 2026
+                        {festivalName}
                       </span>
                     </div>
-                    <span style={{ background: 'rgba(0, 0, 0, 0.28)', border: '1px solid rgba(255, 255, 255, 0.3)', color: '#ffffff', fontWeight: 800, fontSize: '0.76rem', padding: '2px 10px', borderRadius: '6px', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
-                      {serialNo}
-                    </span>
+                    {serialNo && (
+                      <span style={{ background: 'rgba(0, 0, 0, 0.28)', border: '1px solid rgba(255, 255, 255, 0.3)', color: '#ffffff', fontWeight: 800, fontSize: '0.76rem', padding: '2px 10px', borderRadius: '6px', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                        {serialNo}
+                      </span>
+                    )}
                   </div>
 
                   {/* Attendee Name Header */}
@@ -1693,7 +1576,7 @@ return (
                         Category &amp; Pass
                       </div>
                       <div style={{ fontWeight: 700, color: 'var(--fc-brand-text)' }}>
-                        {delegateCategoryName} • {passTypeStr}
+                        {categoryAndPass || '—'}
                       </div>
                     </div>
 
@@ -1702,7 +1585,7 @@ return (
                         Valid Dates
                       </div>
                       <div style={{ fontWeight: 700, color: 'var(--fc-text-main)' }}>
-                        {validDaysStr}
+                        {validDaysStr || '—'}
                       </div>
                     </div>
 
@@ -1729,7 +1612,7 @@ return (
                         Registration Record
                       </div>
                       <div style={{ color: 'var(--fc-text-secondary)' }}>
-                        {regDate} • Online
+                        {[regDate, 'Online'].filter(Boolean).join(' • ')}
                       </div>
                     </div>
 
@@ -1802,8 +1685,13 @@ return (
                         </span>
                       </div>
                       <div style={{ fontSize: '0.76rem', color: 'var(--fc-text-secondary)', lineHeight: 1.45, marginBottom: '12px' }}>
-                        Verify attendee photo ID (18+) at the NGMA registration desk, then proceed to pair a pre-printed physical badge or issue a digital pass.
+                        Verify attendee photo ID (18+) at the registration desk, then proceed to pair a pre-printed physical badge or issue a digital pass.
                       </div>
+                      {Number(badgeModal.lost_badge_count) > 0 && (
+                        <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--fc-danger-text)', marginBottom: '12px' }}>
+                          {Number(badgeModal.lost_badge_count) === 1 ? 'An earlier badge was' : `${badgeModal.lost_badge_count} earlier badges were`} reported lost and no longer work.
+                        </div>
+                      )}
                       <button
                         type="button"
                         className="no-print"
@@ -1838,17 +1726,22 @@ return (
                     </div>
                   )}
 
-                  {/* Venue Pickup Info (Compact single-line operational info) */}
+                  {/* Venue Pickup Info: the festival's own venue, dates and hours (Settings › Audience) */}
+                  {(passFestival.venue || venueWhen) && (
                   <div style={{ margin: '0 14px 14px 14px', padding: '8px 12px', background: 'var(--fc-surface-subtle)', border: '1px solid var(--fc-border)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px', fontSize: '0.74rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--fc-text-secondary)' }}>
-                      <PlaceIcon size={14} style={{ color: 'var(--fc-brand-text)' }} />
-                      <strong style={{ color: 'var(--fc-text-main)' }}>NGMA, Bengaluru</strong>
-                      <span>• Entrance Gate Desk 2</span>
-                    </div>
-                    <div style={{ color: 'var(--fc-text-muted)' }}>
-                      Nov 20–22, 2026 • 10:15 AM to 6:00 PM
-                    </div>
+                    {passFestival.venue && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--fc-text-secondary)' }}>
+                        <PlaceIcon size={14} style={{ color: 'var(--fc-brand-text)' }} />
+                        <strong style={{ color: 'var(--fc-text-main)' }}>{passFestival.venue}</strong>
+                      </div>
+                    )}
+                    {venueWhen && (
+                      <div style={{ color: 'var(--fc-text-muted)' }}>
+                        {venueWhen}
+                      </div>
+                    )}
                   </div>
+                  )}
 
                 </div>
 
@@ -1883,7 +1776,7 @@ return (
                     onClick={handlePrintPass}
                     style={{ flex: 1, padding: '10px 18px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', border: '1px solid var(--fc-border)', borderRadius: '8px', fontWeight: 700, fontSize: '0.86rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                   >
-                    <PrintIcon size={16} /> Print / Save Confirmation
+                    <PrintIcon size={16} /> Print pass
                   </button>
                   {badgeModal.qr_token && (
                     <button
@@ -1891,7 +1784,7 @@ return (
                       onClick={() => handleRevokeQrBadge(badgeModal)}
                       disabled={issuingId === badgeModal.attendee_id}
                       style={{ padding: '10px 14px', background: 'transparent', color: 'var(--fc-danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}
-                      title="Revoke QR credential if physical pass was lost"
+                      title="Mark this badge lost (it stops working for good) so a new one can be assigned"
                     >
                       Revoke QR
                     </button>
@@ -1908,6 +1801,16 @@ return (
             </div>
           );
         })()}
+
+        {printJob && (
+          <PrintPassesDialog
+            items={printJob.items}
+            defaultMode="full"
+            title={printJob.title}
+            jobTitle={`${passFestival.name || currentFestival?.name || 'Festival'} passes`}
+            onClose={() => setPrintJob(null)}
+          />
+        )}
 
         {/* ── MODAL: CSV EXPORT, CHOOSE COLUMNS ─────────────────────────────── */}
         {showExportModal && (

@@ -7,6 +7,7 @@
 const { query } = require('../../config/database');
 const { fetchAllKashishVotes } = require('../services/kashish-api.service');
 const { recalculateScores } = require('./audience.controller');
+const kashishExternal = require('../services/kashishExternalVotes.service');
 
 function getEventId(req) {
   return req.headers['x-event-id'] ||
@@ -79,6 +80,11 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'all' }
     `, [eventId, userId]);
     logId = logRes.insertId;
 
+    // Festivals whose films live only in the Kashish app (docs/adr/0004)
+    if (await kashishExternal.isKashishSource(eventId)) {
+      return await kashishExternal.syncExternalVotes(eventId, { apiKey, source, logId });
+    }
+
     const { votes } = await fetchAllKashishVotes(apiKey, source);
 
     // Existing receipts: skip votes already final
@@ -94,13 +100,7 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'all' }
       .forEach(sub => { const n = normalizeTitle(sub.title); if (n) titleToSubMap.set(n, sub.id); });
 
     // User mappings (only to real, registered delegates of this event)
-    const userMap = new Map();
-    (await query(`
-      SELECT m.kashish_user_id, m.freecomers_attendee_id
-      FROM kashish_user_mappings m
-      JOIN saas_attendees a ON a.attendee_id = m.freecomers_attendee_id
-      WHERE m.event_id = ? AND m.matched_by <> 'auto_created'
-    `, [eventId])).forEach(u => userMap.set(String(u.kashish_user_id), u.freecomers_attendee_id));
+    const userCache = { map: await kashishExternal.loadUserMappings(eventId), misses: new Set() };
 
     const badgeCache = new Map();
     const blocksForFilmCache = new Map();
@@ -112,11 +112,9 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'all' }
       const kMovieId = String(v.movie?.id || v.movie?._id || '');
       const kMovieTitle = v.movie?.title || v.movie?.name || 'Untitled';
       const kUserId = String(v.user?.id || v.user?._id || '');
-      const kUserName = v.user?.name || 'Kashish Delegate';
-      const kUserEmail = v.user?.email && v.user.email !== 'Anonymous' ? v.user.email.toLowerCase().trim() : null;
-      const kUserMobile = v.user?.mobileNumber || v.user?.mobile || null;
       const kashishVoteId = String(v.id || `${kUserId}_${kMovieId}`);
-      const stars = Math.max(1, Math.min(5, parseInt(v.vote?.stars ?? v.rating, 10) || 0)) || null;
+      const starsNum = Number(v.vote?.stars ?? v.rating);
+      const stars = Number.isInteger(starsNum) && starsNum >= 1 && starsNum <= 5 ? starsNum : null;
       const voteSource = (v.vote?.source || v.source || 'scan') === 'scan' ? 'scan' : 'normal';
       const votedAt = v.vote?.timestamp ? new Date(v.vote.timestamp) : new Date();
       const base = { kashishVoteId, kUserId, kMovieId, stars, source: voteSource, votedAt, payload: v };
@@ -146,38 +144,9 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'all' }
       }
 
       // B. Registered delegate (email, then phone ignoring formatting). Never auto-created.
-      let attendeeId = userMap.get(kUserId);
-      if (!attendeeId) {
-        let matchedBy = null;
-        if (kUserEmail) {
-          const r = await query(
-            'SELECT attendee_id FROM saas_attendees WHERE (event_id = ? OR festival_id = ?) AND LOWER(email) = ? LIMIT 1',
-            [eventId, eventId, kUserEmail]
-          );
-          if (r.length) { attendeeId = r[0].attendee_id; matchedBy = 'email'; }
-        }
-        const mobile10 = kUserMobile ? String(kUserMobile).replace(/\D/g, '').slice(-10) : '';
-        if (!attendeeId && mobile10.length === 10) {
-          const r = await query(`
-            SELECT attendee_id FROM saas_attendees
-            WHERE (event_id = ? OR festival_id = ?)
-              AND REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') LIKE ?
-            LIMIT 1
-          `, [eventId, eventId, `%${mobile10}`]);
-          if (r.length) { attendeeId = r[0].attendee_id; matchedBy = 'phone'; }
-        }
-        if (attendeeId) {
-          counts.users_matched++;
-          userMap.set(kUserId, attendeeId);
-          await query(`
-            INSERT INTO kashish_user_mappings (
-              event_id, kashish_user_id, kashish_user_email, kashish_user_name, kashish_user_mobile, freecomers_attendee_id, matched_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE freecomers_attendee_id = VALUES(freecomers_attendee_id), matched_by = VALUES(matched_by)
-          `, [eventId, kUserId, kUserEmail, kUserName, kUserMobile, attendeeId, matchedBy])
-            .catch(e => console.warn('[KashishSync] User mapping notice:', e.message));
-        }
-      }
+      const match = await kashishExternal.matchKashishUserToAttendee(eventId, v.user, userCache);
+      if (match.newlyMatched) counts.users_matched++;
+      const attendeeId = match.attendeeId;
       if (!attendeeId) {
         await upsertReceipt(eventId, { ...base, filmId, outcome: 'unregistered', reason: 'Voter is not a registered delegate of this festival (no email/phone match)' });
         counts.unregistered++;
@@ -186,7 +155,7 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'all' }
 
       // C. Delegate's badge (QR / badge number captured on the vote)
       if (!badgeCache.has(attendeeId)) {
-        const b = await query('SELECT qr_id FROM saas_qr WHERE attendee_id = ? ORDER BY qr_id DESC LIMIT 1', [attendeeId]);
+        const b = await query('SELECT qr_id FROM saas_qr WHERE attendee_id = ? AND is_lost = 0 ORDER BY qr_id DESC LIMIT 1', [attendeeId]);
         badgeCache.set(attendeeId, b.length ? b[0].qr_id : null);
       }
       const qrId = badgeCache.get(attendeeId);
@@ -304,6 +273,14 @@ async function syncKashishVotes(req, res) {
     });
     if (summary.skipped) {
       return res.status(409).json({ error: summary.reason });
+    }
+    if (summary.mode === 'kashish') {
+      const o = summary.outcomes;
+      return res.json({
+        success: true,
+        message: `Sync completed: ${o.counted} of ${summary.total_fetched} votes counted. Skipped: ${o.unregistered} not registered, ${o.not_checked_in} not checked in, ${o.outside_period} outside the voting period.`,
+        summary
+      });
     }
     res.json({
       success: true,
@@ -513,7 +490,25 @@ async function listVoteReceipts(req, res) {
   }
 }
 
+/**
+ * GET /api/kashish-sync/external-summary   (docs/adr/0004)
+ * Sync status for a festival whose votes come from the Kashish app: voting period, counts per
+ * outcome, per-film counted / skipped votes and recent syncs. Needs an explicit event id.
+ */
+async function getExternalSummary(req, res) {
+  try {
+    const eventId = parseInt(req.headers['x-event-id'] || req.headers['x-edition-id'] || req.query.eventId, 10);
+    if (!eventId) return res.status(400).json({ error: 'Festival (event) id is required.' });
+    const summary = await kashishExternal.getExternalSummary(eventId);
+    res.json({ success: true, ...summary });
+  } catch (error) {
+    console.error('[KashishSync] getExternalSummary error:', error.message);
+    res.status(500).json({ error: 'Failed to load Kashish sync status.' });
+  }
+}
+
 module.exports = {
+  getExternalSummary,
   listVoteReceipts,
   syncEventVotes,
   syncKashishVotes,

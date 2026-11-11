@@ -13,6 +13,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import QrCode from '../components/common/QrCode';
+import KashishVotingBoard from '../components/voting/KashishVotingBoard';
+import { useFestivalConfig } from '../hooks/useFestivalConfig';
 import {
   MovieIcon,
   TrophyIcon,
@@ -50,6 +52,10 @@ const formatScreeningSchedule = (dateStr, startStr, endStr) => {
 };
 
 export default function VotingPage() {
+  const { currentFestival } = useFestivalConfig();
+  // 'freecomers' (screening QR voting) or 'kashish' (votes come from the Kashish app, docs/adr/0004)
+  const [voteSource, setVoteSource] = useState(null);
+  const [kashishInitial, setKashishInitial] = useState(null);
   const [activeTab, setActiveTab] = useState('controller'); // 'controller' | 'leaderboard' | 'fraud' | 'kashish' | 'reviews'
   const [screenings, setScreenings] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
@@ -85,9 +91,15 @@ export default function VotingPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [screeningsRes, leaderRes, flaggedRes] = await Promise.all([
+      const leaderRes = await api.get('/voting/leaderboard');
+      if (leaderRes.data?.source === 'kashish') {
+        setKashishInitial(leaderRes.data);
+        setVoteSource('kashish');
+        return;
+      }
+      setVoteSource('freecomers');
+      const [screeningsRes, flaggedRes] = await Promise.all([
         api.get('/audience/screenings'),
-        api.get('/voting/leaderboard'),
         api.get('/voting/flagged')
       ]);
       setScreenings(screeningsRes.data.screenings || []);
@@ -153,7 +165,7 @@ export default function VotingPage() {
 
   // Live leaderboard: refresh silently every 15s while the tab is open (Kashish auto-sync feeds new votes)
   useEffect(() => {
-    if (activeTab !== 'leaderboard') return undefined;
+    if (activeTab !== 'leaderboard' || voteSource !== 'freecomers') return undefined;
     const t = setInterval(() => {
       api.get('/voting/leaderboard')
         .then(res => {
@@ -163,15 +175,16 @@ export default function VotingPage() {
         .catch(() => { });
     }, 15000);
     return () => clearInterval(t);
-  }, [activeTab]);
+  }, [activeTab, voteSource]);
 
   useEffect(() => {
+    if (voteSource !== 'freecomers') return;
     if (activeTab === 'kashish') {
       fetchKashishData();
     } else if (activeTab === 'reviews') {
       fetchModerationReviews();
     }
-  }, [activeTab, reviewStatusFilter, reviewSearch]);
+  }, [activeTab, reviewStatusFilter, reviewSearch, voteSource]);
 
   const handleOpenVoting = async (blockId) => {
     try {
@@ -292,6 +305,31 @@ export default function VotingPage() {
       alert('Failed to delete review: ' + (err.response?.data?.error || err.message));
     }
   };
+
+  // Wait for the vote source before choosing a layout (avoids flashing the screening-window tabs)
+  if (voteSource === null) {
+    return (
+      <div className="fc-voting-page" style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto', color: 'var(--fc-text-muted)' }}>
+        {loading ? 'Loading voting…' : 'Could not load voting. Please refresh the page.'}
+      </div>
+    );
+  }
+
+  if (voteSource === 'kashish') {
+    return (
+      <div className="fc-voting-page" style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+        <div className="fc-page-header" style={{ marginBottom: '20px' }}>
+          <h1 className="fc-page-title" style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: 'var(--fc-text-main)' }}>
+            Voting
+          </h1>
+          <p className="fc-page-subtitle" style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem' }}>
+            Audience Choice leaderboard from votes cast in the Kashish Pride app
+          </p>
+        </div>
+        <KashishVotingBoard initialData={kashishInitial} festivalId={currentFestival?.id} />
+      </div>
+    );
+  }
 
   return (
     <div className="fc-voting-page" style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
@@ -632,7 +670,7 @@ export default function VotingPage() {
 
             {approvalStatus.is_approved && (
               <a
-                href={`/results/${(() => { try { return localStorage.getItem('currentEditionId') || localStorage.getItem('currentFestivalId') || ''; } catch { return ''; } })()}`}
+                href={`/results/${currentFestival?.id || ''}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

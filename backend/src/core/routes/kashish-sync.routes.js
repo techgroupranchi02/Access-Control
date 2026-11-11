@@ -21,6 +21,7 @@ kashishSyncRouter.delete('/movie-mappings/:id', requirePermission('audience.mana
 
 // User mappings & sync history
 kashishSyncRouter.get('/user-mappings', requirePermission('audience.view'), kashishSyncController.listUserMappings);
+kashishSyncRouter.get('/external-summary', requirePermission('audience.view'), kashishSyncController.getExternalSummary);
 kashishSyncRouter.get('/sync-logs', requirePermission('audience.view'), kashishSyncController.getSyncLogs);
 kashishSyncRouter.get('/receipts', requirePermission('voting.audit_fraud'), kashishSyncController.listVoteReceipts);
 

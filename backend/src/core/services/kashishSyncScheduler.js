@@ -2,7 +2,8 @@
  * Kashish Auto-Sync Scheduler (docs/adr/0003)
  *
  * Every KASHISH_SYNC_INTERVAL_SEC seconds (default 120; 0 disables), pulls Kashish votes for every
- * event that currently has a screening voting window OPEN. Uses the same code path as the manual
+ * event that currently has a screening voting window OPEN, plus every festival whose votes come
+ * from the Kashish app (voting_source = 'kashish') until a day after its voting period ends. Uses the same code path as the manual
  * "Sync Kashish votes" button (syncEventVotes), which holds a per-event lock, so runs never overlap.
  * Each run is recorded in kashish_sync_logs with synced_by_user_id = NULL (automatic).
  */
@@ -18,11 +19,21 @@ async function tick() {
   try {
     // Lazy require avoids a circular import at startup (controller -> audience.controller -> ...)
     const { syncEventVotes } = require('../controllers/kashish-sync.controller');
-    const events = await query("SELECT DISTINCT event_id FROM screening_blocks WHERE voting_status = 'open'");
-    for (const { event_id: eventId } of events) {
+    const { listKashishSyncEvents } = require('./kashishExternalVotes.service');
+    const openWindowEvents = await query("SELECT DISTINCT event_id FROM screening_blocks WHERE voting_status = 'open'");
+    // Festivals whose votes come from the Kashish app sync until a day after their voting period ends
+    const eventIds = [...new Set([
+      ...openWindowEvents.map(e => Number(e.event_id)),
+      ...(await listKashishSyncEvents()).map(Number)
+    ])];
+    for (const eventId of eventIds) {
       try {
         const summary = await syncEventVotes(eventId, { userId: null });
-        if (!summary.skipped && (summary.counted || summary.flagged_not_checked_in || summary.rejected_unregistered)) {
+        if (summary.mode === 'kashish') {
+          if (summary.new_rows || summary.updated_rows) {
+            console.log(`[KashishAutoSync] Event ${eventId} (Kashish films): ${summary.counted} counted of ${summary.total_fetched}, ${summary.new_rows} new, ${summary.updated_rows} changed`);
+          }
+        } else if (!summary.skipped && (summary.counted || summary.flagged_not_checked_in || summary.rejected_unregistered)) {
           console.log(`[KashishAutoSync] Event ${eventId}: +${summary.counted} counted, ${summary.flagged_not_checked_in} flagged, ${summary.rejected_unregistered} unregistered`);
         }
       } catch (err) {
@@ -45,7 +56,7 @@ function startKashishAutoSync() {
   const intervalMs = Math.max(30, seconds) * 1000;
   timer = setInterval(tick, intervalMs);
   timer.unref();
-  console.log(`[KashishAutoSync] Enabled: every ${intervalMs / 1000}s while a voting window is open.`);
+  console.log(`[KashishAutoSync] Enabled: every ${intervalMs / 1000}s (open voting windows and Kashish-source festivals).`);
 }
 
 function stopKashishAutoSync() {

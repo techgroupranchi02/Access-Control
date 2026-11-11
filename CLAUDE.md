@@ -105,17 +105,38 @@ npm run lint
   - Code: `core/controllers/audience.controller.js` and `audience.routes.js`.
 - **Delegates**: registered attendees in `saas_attendees`, grouped by `audience_categories`.
 - **QR badges**: `saas_qr` rows, which are issued, assigned, revoked or bulk-generated as pre-printed stock. See [ADR 0001](docs/adr/0001-qr-credential-uuid-and-festival-serial.md).
+  - **Lost badges** (ADR 0001, Amendment 2): `saas_qr.is_lost` / `lost_at` / `lost_by_user_id`.
+    - A lost badge is refused at check-in, voting and pairing, and never returns to stock.
+    - Mark badges lost only through `qrCredential.markBadgesLost()`. This covers the Registration › Lost Badge tab (`/registration/lost-badge`, with a last-4-mobile-digits check) and admin Revoke QR.
+    - Any new "current badge" query must add `AND is_lost = 0`.
   - `qr_data` is a UUID, encoded in the QR image.
   - `serial_no` is a random 6-digit badge number, unique per `event_id`. The API returns it as **`badge_serial`**.
   - `serial_no` in API responses is still the `KB26-xxxx` delegate label, which is display only and **never a credential**.
   - Always create and look up badges through `core/services/qrCredential.service.js`.
+  - `sequence_no` is the badge's permanent running number within its event (#1, #2 …, ADR 0001 Amendment 3), stored in `saas_qr.sequence_no`. `createQrRows()` assigns the event's highest number + 1 under a per-event lock; there is no counter table. Display only; never compute it from `qr_id`.
   - `saas_qr` is also written by Laravel and by `festease_backend`, so keep schema changes additive.
+  - **`festival_id` on saas_* tables is `film_festivals.film_festival_id`, not the event id** (event 40 = film festival 29).
+    - Filter saas_* rows by `event_id` only; never `event_id = ? OR festival_id = ?` with the same value.
+    - When inserting, write `festival_id` from `getFilmFestivalId(eventId)` in `core/services/festivalIds.service.js`.
+- **Pass templates** (Settings › Badges & Passes, `/settings/badges`): `pass_templates`, one festival can have several. See [ADR 0005](docs/adr/0005-pass-templates.md).
+  - Every template is a background plus **elements** in `pass_template_elements` (type `text` / `image` / `checklist`, name, position JSON in mm, metadata JSON, sort_order). Design types: `layout` (colour background; elements placed by `buildLayoutElements()`) and `artwork` (uploaded design). See ADR 0005 Amendment 1.
+    - Text uses merge fields (`{{name}}`, `{{custom.<field>}}` …) and one of 7 fonts; images are `upload` (`pass_template_assets`), `festival_logo` or `badge_qr`; colours can be `accent` or `category`.
+    - Each template prints as Pass + QR, Pass only or QR only, on a card printer or A4 (orientation and columns × rows chosen in the print dialog; `sheetLayout()`).
+    - QR-only stickers don't use a template: they follow the festival's **QR Settings** (`pass_print_settings`, set in the print dialog; saving the default needs `settings.manage`).
+  - API: `/api/pass-templates` (`pass-templates.controller.js`, validation and starters in `passTemplates.service.js`). Listing needs `registration.view`; changes need `settings.manage`.
+  - Print badges and passes only through `frontend/src/core/utils/passRenderer.js` and `components/print/PrintPassesDialog.jsx`. Never hard-code festival text (name, venue, dates) on a pass; it comes from the festival's records or the template.
 - **Screening blocks**: venue time slots with a film playlist (`screening_blocks`, `screening_block_films`).
 - **Attendance**: gate check-ins recorded in `screening_checkins`.
 - **Audience voting**: done through `/vote/:token`, stored in `audience_votes`, with scores in `audience_voting_scores`.
 - **Jury ballots**: kept separately in `jury_ballots`.
 - **Review stages**: submissions move through a 6-stage pipeline: Screening, Consideration, Official Selection, Jury & Voting, Finalist, Winner.
 - **Kashish**: the external app delegates vote in. See [ADR 0003](docs/adr/0003-kashish-vote-verification-and-results-publication.md).
+  - **Kashish-source festivals** (`audience_settings.settings_json.voting_source = 'kashish'`, set in Settings › Audience › Voting Rules) rank films by Kashish's own movie ID and title, with no link to `submissions`. See [ADR 0004](docs/adr/0004-kashish-external-leaderboard.md).
+    - Code: `core/services/kashishExternalVotes.service.js`.
+    - Tables: `kashish_external_votes` and `kashish_results_publications`.
+    - A vote counts only from a registered delegate (matched by email, then phone) who has checked in, inside the voting period.
+    - Published results are frozen snapshots.
+    - FestiPlus `/vote` is off for these festivals.
   - Votes are pulled from its API by `syncEventVotes()` in `kashish-sync.controller.js`, which runs automatically every `KASHISH_SYNC_INTERVAL_SEC` while a voting window is open (`core/services/kashishSyncScheduler.js`), plus a manual button.
   - A vote counts only for a registered, checked-in delegate. Attendees are never auto-created. Every vote gets a row in `kashish_vote_receipts`, and `audience_votes.qr_id` records the badge it was cast with.
 - **Results**: `GET /api/public/results/:eventId` and the public winners screen `/results/:eventId` show standings only after the team approves them; before that the endpoint returns 403.

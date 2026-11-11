@@ -9,10 +9,13 @@
  * @param {string} bodyHtml   markup to print
  * @param {string} css        styles for that markup
  * @param {string} [title]    used by most browsers as the suggested PDF file name
+ * @param {object} [opts]
+ * @param {(root: HTMLElement) => Promise|void} [opts.prepare]  runs on the rendered markup before
+ *        printing, with the root laid out off-screen (for example to load fonts and fit text)
  */
 const ROOT_ID = 'fc-print-root';
 
-export function printInPage(bodyHtml, css = '', title) {
+export function printInPage(bodyHtml, css = '', title, opts = {}) {
   document.getElementById(ROOT_ID)?.remove();
   document.getElementById(`${ROOT_ID}-style`)?.remove();
 
@@ -46,6 +49,26 @@ export function printInPage(bodyHtml, css = '', title) {
   };
   window.addEventListener('afterprint', cleanup);
 
-  // Let the browser lay out the new content before opening the dialog
-  setTimeout(() => window.print(), 50);
+  // Optional preparation with the root laid out off-screen (it is display:none on screen)
+  const prepared = typeof opts.prepare === 'function'
+    ? (async () => {
+      root.style.cssText = 'display:block;position:fixed;left:-100000px;top:0;';
+      try { await opts.prepare(root); } catch { /* print anyway */ }
+      root.style.cssText = '';
+    })()
+    : Promise.resolve();
+
+  // Let the browser lay out the new content (and load any logo / artwork images, up to 4 s)
+  // before opening the dialog, so images aren't missing from the print
+  const pending = [...root.querySelectorAll('img')].filter((img) => !img.complete);
+  const ready = pending.length === 0
+    ? Promise.resolve()
+    : Promise.race([
+      Promise.all(pending.map((img) => new Promise((resolve) => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+      }))),
+      new Promise((resolve) => setTimeout(resolve, 4000))
+    ]);
+  Promise.all([ready, prepared]).then(() => setTimeout(() => window.print(), 50));
 }
