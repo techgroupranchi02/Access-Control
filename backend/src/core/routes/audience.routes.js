@@ -76,6 +76,9 @@ registrationRouter.post('/attendees/:id/report-lost', requirePermission('registr
 registrationRouter.post('/bulk-import', requirePermission('registration.view_roster'), audienceController.bulkImportAttendees);
 registrationRouter.post('/qr/bulk-generate', requirePermission('registration.view_roster'), audienceController.bulkGenerateQRs);
 registrationRouter.get('/qr/pool', requirePermission('registration.view_roster'), audienceController.getQRPool);
+// Badge print history: every print dialog (Bulk QR, Audience, Assign QR desk) checks and records it (ADR 0005, Amendment 3)
+registrationRouter.post('/qr/print-status', requirePermission('registration.view'), audienceController.getQrPrintStatus);
+registrationRouter.post('/qr/print-log', requirePermission('registration.view'), audienceController.logQrPrints);
 registrationRouter.get('/qr/check/:code', requirePermission('registration.view'), staffCredentialLimiter, audienceController.checkQRCode);
 
 // ── 5. Public Mobile Voter Router (/api/public/vote) [No Staff Auth] ──────────

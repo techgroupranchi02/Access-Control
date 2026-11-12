@@ -1,5 +1,5 @@
 /**
- * PassElementProperties: the settings panel for the selected pass element (ADR 0005, Amendment 1).
+ * PassElementProperties: the settings panel for the selected pass element (ADR 0005, Amendment 3).
  *
  * Common: name, position (mm) and rotation. Then by type:
  *   text       content with merge fields, font (7), size, weight, style, colours, alignment, box fill

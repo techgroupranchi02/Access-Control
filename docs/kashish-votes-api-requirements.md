@@ -51,6 +51,21 @@ Plus `pagination` (`total`, `page`, `limit`, `totalPages`, `hasMore`) and `summa
 8. **A separate API key for each festival edition.**
 9. **The voter's FestiPlus badge number on each vote,** if your app captures it. We'd use it as a backup match when a voter's email or phone differs between the two apps.
 
+## Status (updated 12 Nov 2026, after the Kashish "Votes & Activity Log API" guide)
+
+| # | Request | Status |
+| --- | --- | --- |
+| 1 | Which festival each vote is for | ✅ Done: `?eventId=` filter and `eventId` on every vote. KASHISH x BENGALURU 2026 = **EF3j920261**, set in Settings › Audience › Voting Rules. |
+| 2 | Keep email and mobile on every vote | ✅ Still sent. |
+| 3 | Status values; changed or deleted votes | ✅ Answered: votes are **never updated** once cast. Every vote so far is "Verified Vote". |
+| 4 | `scan` vs `normal` | ✅ Answered: **only `scan` votes** are sent to us. FestiPlus also requests `source=scan` and ignores anything else. |
+| 5 | One vote per person per film | ✅ Confirmed by the vote ID format `{userId}_{movieId}`. |
+| 6 | Films list endpoint | ⏳ Open. |
+| 7 | Incremental sync and rate limits | ✅ `updatedSince` + `sync.syncedAt` (FestiPlus uses them every 2 minutes). Rate limit: **50** by default. |
+| 8 | A key per festival edition | ⏳ Open. |
+| 9 | FestiPlus badge number on each vote | ⏳ Open. |
+| — | **API key published in the guide** | ⚠️ The guide's examples show our live key. Please issue a new key and revoke the old one. |
+
 ## Questions or changes
 
 Contact the FestiPlus (Freecomers) team. We can adapt to your field names as long as the information above is there.

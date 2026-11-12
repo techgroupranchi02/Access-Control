@@ -7,7 +7,13 @@
  * kashish_external_votes. Nothing here reads or writes submissions, audience_votes,
  * audience_voting_scores or kashish_movie_mappings.
  *
+ * Votes are fetched for the festival's Kashish event ID (setting kashish_event_id), scan votes
+ * only. Scheduled runs fetch only votes new since the last run (updatedSince); a full sync (manual
+ * "Sync now", the first run, or a changed event ID) re-reads the event's whole feed and marks
+ * stored votes that aren't in it as 'removed'. Kashish votes are never edited after they're cast.
+ *
  * A vote counts only when all of these hold (checked in this order):
+ *   0. it belongs to the configured Kashish event and is a scan vote   else 'invalid'
  *   1. stars is a whole number 1-5                         else 'invalid'
  *   2. Kashish marks it "Verified Vote"                    else 'not_verified'
  *   3. it was cast inside the festival's voting period     else 'outside_period'
@@ -15,14 +21,15 @@
  *      matched by email, then by mobile number             else 'unregistered'
  *   5. that delegate has a check-in at this festival       else 'not_checked_in'
  *   6. it is the voter's first vote for that film          else 'duplicate'
- * Every vote is re-evaluated on every sync, so a later registration, a late check-in or a
- * changed voting period takes effect on the next sync.
+ * Every stored vote is re-evaluated on every sync (voter details are stored with it), so a later
+ * registration, a late check-in or a changed voting period takes effect on the next sync.
  */
 
 const { query } = require('../../config/database');
 const { fetchAllKashishVotes } = require('./kashish-api.service');
 
 const VERIFIED_STATUS = 'verified vote';
+const KASHISH_EVENT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const DEFAULT_ADJUSTMENT = 10;
 const DEFAULT_FESTIVAL_MEAN = 4.0;
 
@@ -41,8 +48,8 @@ function toDate(value) {
 }
 
 /**
- * The festival's vote source and Kashish voting period.
- * @returns {Promise<{source: 'freecomers'|'kashish', from: Date|null, to: Date|null, adjustment: number}>}
+ * The festival's vote source, Kashish event ID and voting period.
+ * @returns {Promise<{source: 'freecomers'|'kashish', kashishEventId: string|null, from: Date|null, to: Date|null, adjustment: number}>}
  */
 async function getVotingConfig(eventId) {
   const rows = await query('SELECT settings_json FROM audience_settings WHERE event_id = ? LIMIT 1', [eventId]);
@@ -50,6 +57,7 @@ async function getVotingConfig(eventId) {
   const adjustment = parseInt(s.adjustment_number, 10);
   return {
     source: s.voting_source === 'kashish' ? 'kashish' : 'freecomers',
+    kashishEventId: typeof s.kashish_event_id === 'string' && KASHISH_EVENT_ID_RE.test(s.kashish_event_id.trim()) ? s.kashish_event_id.trim() : null,
     from: toDate(s.kashish_voting_from),
     to: toDate(s.kashish_voting_to),
     adjustment: Number.isFinite(adjustment) && adjustment >= 0 ? adjustment : DEFAULT_ADJUSTMENT
@@ -164,11 +172,49 @@ const OUTCOME_REASON = {
   unregistered: 'Voter is not a registered delegate of this festival (no email or phone match)',
   not_checked_in: 'Delegate has not checked in at this festival',
   duplicate: 'Delegate already has a counted vote for this film',
-  removed: 'No longer returned by the Kashish API'
+  removed: "Not in this festival's Kashish event feed",
+  other_event: 'Belongs to a different Kashish event',
+  not_scan: 'Not a scan (QR) vote'
 };
 
-const COMPARE_FIELDS = ['kashish_user_id', 'kashish_movie_id', 'kashish_movie_title', 'stars', 'source',
+const COMPARE_FIELDS = ['kashish_event_id', 'kashish_user_id', 'kashish_user_email', 'kashish_user_name', 'kashish_user_mobile',
+  'kashish_user_country', 'kashish_movie_id', 'kashish_movie_title', 'stars', 'source',
   'kashish_status', 'attendee_id', 'qr_id', 'checkin_block_id', 'outcome', 'reason'];
+
+/** A Kashish API record in the shape the evaluator uses. */
+function fromApi(v) {
+  const kUserId = String(v.user?.id || v.user?._id || '');
+  const kMovieId = String(v.movie?.id || v.movie?._id || '');
+  return {
+    id: String(v.id || (kUserId && kMovieId ? `${kUserId}_${kMovieId}` : '')),
+    eventId: v.eventId || v.vote?.eventId || null,
+    user: { id: kUserId, email: v.user?.email || null, name: v.user?.name || null, mobileNumber: v.user?.mobileNumber || v.user?.mobile || null, countryCode: v.user?.countryCode || null },
+    movie: { id: kMovieId, title: v.movie?.title || v.movie?.name || null },
+    stars: v.vote?.stars ?? v.rating,
+    source: v.vote?.source || v.source || null,
+    status: v.vote?.status || null,
+    timestamp: v.vote?.timestamp || null
+  };
+}
+
+/** A stored vote row in the same shape, so stored votes are re-checked without fetching them again. */
+function fromRow(r) {
+  return {
+    id: r.kashish_vote_id,
+    eventId: r.kashish_event_id,
+    user: { id: r.kashish_user_id, email: r.kashish_user_email, name: r.kashish_user_name, mobileNumber: r.kashish_user_mobile, countryCode: r.kashish_user_country },
+    movie: { id: r.kashish_movie_id, title: r.kashish_movie_title },
+    stars: r.stars,
+    source: r.source,
+    status: r.kashish_status,
+    timestamp: r.voted_at
+  };
+}
+
+async function getSyncState(eventId) {
+  const rows = await query('SELECT kashish_event_id, last_synced_at, last_full_sync_at FROM kashish_sync_state WHERE event_id = ? LIMIT 1', [eventId]);
+  return rows[0] || null;
+}
 
 function sameValue(a, b) {
   if (a === null || a === undefined) return b === null || b === undefined;
@@ -176,20 +222,37 @@ function sameValue(a, b) {
 }
 
 /**
- * Pull every Kashish vote and (re)evaluate it for one festival in Kashish mode.
- * The caller holds the per-event lock and owns the kashish_sync_logs row.
+ * Sync one festival in Kashish mode: fetch votes (new since the last run, or the whole event feed on
+ * a full sync), then (re)evaluate every stored vote. The caller holds the per-event lock and owns
+ * the kashish_sync_logs row.
  *
+ * @param {number} eventId
+ * @param {{ apiKey?: string, logId?: number, full?: boolean }} opts  full: re-read the whole feed
  * @returns {Promise<object>} summary with counts per outcome
  */
-async function syncExternalVotes(eventId, { apiKey, source = 'all', logId = null } = {}) {
+async function syncExternalVotes(eventId, { apiKey, logId = null, full = false } = {}) {
   const config = await getVotingConfig(eventId);
-  const { votes } = await fetchAllKashishVotes(apiKey, source);
+  const state = await getSyncState(eventId);
+  // A full sync is needed the first time and whenever the Kashish event ID changes
+  const isFull = full || !state || !state.last_synced_at || (state.kashish_event_id || null) !== config.kashishEventId;
+  const fetched = await fetchAllKashishVotes(apiKey, {
+    source: 'scan',
+    eventId: config.kashishEventId || undefined,
+    updatedSince: isFull ? undefined : state.last_synced_at
+  });
+  const votes = fetched.votes;
 
   const existingRows = await query(`
     SELECT id, kashish_vote_id, ${COMPARE_FIELDS.join(', ')}, voted_at
     FROM kashish_external_votes WHERE event_id = ?
   `, [eventId]);
   const existing = new Map(existingRows.map(r => [r.kashish_vote_id, r]));
+
+  // What to evaluate: on a full sync, the event's feed; otherwise every stored vote (except
+  // removed ones) plus whatever is new since the last run
+  const toEvaluate = new Map();
+  if (!isFull) existingRows.filter(r => r.outcome !== 'removed').forEach(r => toEvaluate.set(r.kashish_vote_id, fromRow(r)));
+  votes.map(fromApi).forEach(v => { if (v.id) toEvaluate.set(v.id.slice(0, 160), v); });
 
   const userCache = { map: await loadUserMappings(eventId), misses: new Set() };
   const checkinCache = new Map();
@@ -198,21 +261,23 @@ async function syncExternalVotes(eventId, { apiKey, source = 'all', logId = null
 
   // 1. Evaluate every vote on its own
   const evaluated = [];
-  for (const v of votes) {
-    const kUserId = String(v.user?.id || v.user?._id || '');
-    const kMovieId = String(v.movie?.id || v.movie?._id || '');
-    const kashishVoteId = String(v.id || (kUserId && kMovieId ? `${kUserId}_${kMovieId}` : ''));
-    if (!kashishVoteId || !kUserId || !kMovieId) continue; // unusable record
+  for (const v of toEvaluate.values()) {
+    if (!v.id || !v.user.id || !v.movie.id) continue; // unusable record
 
     const row = {
-      kashish_vote_id: kashishVoteId.slice(0, 160),
-      kashish_user_id: kUserId.slice(0, 128),
-      kashish_movie_id: kMovieId.slice(0, 128),
-      kashish_movie_title: String(v.movie?.title || v.movie?.name || 'Untitled').trim().slice(0, 255),
-      stars: parseStars(v.vote?.stars ?? v.rating),
-      source: String(v.vote?.source || v.source || '').slice(0, 16) || null,
-      kashish_status: String(v.vote?.status || '').slice(0, 64) || null,
-      voted_at: wholeSecond(toDate(v.vote?.timestamp)),
+      kashish_vote_id: v.id.slice(0, 160),
+      kashish_event_id: v.eventId ? String(v.eventId).slice(0, 64) : null,
+      kashish_user_id: String(v.user.id).slice(0, 128),
+      kashish_user_email: v.user.email ? String(v.user.email).slice(0, 255) : null,
+      kashish_user_name: v.user.name ? String(v.user.name).slice(0, 255) : null,
+      kashish_user_mobile: v.user.mobileNumber ? String(v.user.mobileNumber).slice(0, 32) : null,
+      kashish_user_country: v.user.countryCode ? String(v.user.countryCode).slice(0, 8) : null,
+      kashish_movie_id: String(v.movie.id).slice(0, 128),
+      kashish_movie_title: String(v.movie.title || 'Untitled').trim().slice(0, 255),
+      stars: parseStars(v.stars),
+      source: v.source ? String(v.source).slice(0, 16) : null,
+      kashish_status: v.status ? String(v.status).slice(0, 64) : null,
+      voted_at: wholeSecond(toDate(v.timestamp)),
       attendee_id: null,
       qr_id: null,
       checkin_block_id: null,
@@ -220,7 +285,12 @@ async function syncExternalVotes(eventId, { apiKey, source = 'all', logId = null
       reason: null
     };
 
-    if (row.stars === null) row.outcome = 'invalid';
+    // Guards in case an API filter is ignored: another Kashish event, or not a scan vote
+    if (config.kashishEventId && row.kashish_event_id !== config.kashishEventId) {
+      row.outcome = 'invalid'; row.reason = OUTCOME_REASON.other_event;
+    } else if (String(row.source || '').toLowerCase() !== 'scan') {
+      row.outcome = 'invalid'; row.reason = OUTCOME_REASON.not_scan;
+    } else if (row.stars === null) row.outcome = 'invalid';
     else if (String(row.kashish_status || '').toLowerCase() !== VERIFIED_STATUS) row.outcome = 'not_verified';
     else if (!row.voted_at || (config.from && row.voted_at < config.from) || (config.to && row.voted_at > config.to)) row.outcome = 'outside_period';
 
@@ -265,9 +335,10 @@ async function syncExternalVotes(eventId, { apiKey, source = 'all', logId = null
       if (firstCounted.has(key)) r.outcome = 'duplicate';
       else firstCounted.set(key, r);
     });
-  evaluated.forEach(r => { if (r.outcome !== 'counted') r.reason = OUTCOME_REASON[r.outcome]; });
+  evaluated.forEach(r => { if (r.outcome !== 'counted' && !r.reason) r.reason = OUTCOME_REASON[r.outcome]; });
 
-  // 3. Write: insert new votes, update changed ones, mark votes Kashish no longer returns
+  // 3. Write: insert new votes, update changed ones; on a full sync, mark stored votes that aren't
+  //    in the event's feed as removed
   const seen = new Set();
   const inserts = [];
   let updated = 0;
@@ -281,10 +352,12 @@ async function syncExternalVotes(eventId, { apiKey, source = 'all', logId = null
     if (changed) {
       await query(`
         UPDATE kashish_external_votes SET
-          kashish_user_id = ?, kashish_movie_id = ?, kashish_movie_title = ?, stars = ?, source = ?, kashish_status = ?,
+          kashish_event_id = ?, kashish_user_id = ?, kashish_user_email = ?, kashish_user_name = ?, kashish_user_mobile = ?, kashish_user_country = ?,
+          kashish_movie_id = ?, kashish_movie_title = ?, stars = ?, source = ?, kashish_status = ?,
           voted_at = ?, attendee_id = ?, qr_id = ?, checkin_block_id = ?, outcome = ?, reason = ?, last_evaluated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `, [r.kashish_user_id, r.kashish_movie_id, r.kashish_movie_title, r.stars, r.source, r.kashish_status,
+      `, [r.kashish_event_id, r.kashish_user_id, r.kashish_user_email, r.kashish_user_name, r.kashish_user_mobile, r.kashish_user_country,
+        r.kashish_movie_id, r.kashish_movie_title, r.stars, r.source, r.kashish_status,
         r.voted_at, r.attendee_id, r.qr_id, r.checkin_block_id, r.outcome, r.reason, prev.id]);
       updated++;
     }
@@ -293,25 +366,35 @@ async function syncExternalVotes(eventId, { apiKey, source = 'all', logId = null
     const chunk = inserts.slice(i, i + 200);
     await query(`
       INSERT INTO kashish_external_votes (
-        event_id, kashish_vote_id, kashish_user_id, kashish_movie_id, kashish_movie_title, stars, source,
+        event_id, kashish_vote_id, kashish_event_id, kashish_user_id, kashish_user_email, kashish_user_name, kashish_user_mobile,
+        kashish_user_country, kashish_movie_id, kashish_movie_title, stars, source,
         kashish_status, voted_at, attendee_id, qr_id, checkin_block_id, outcome, reason
-      ) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}
-    `, chunk.flatMap(r => [eventId, r.kashish_vote_id, r.kashish_user_id, r.kashish_movie_id, r.kashish_movie_title,
+      ) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}
+    `, chunk.flatMap(r => [eventId, r.kashish_vote_id, r.kashish_event_id, r.kashish_user_id, r.kashish_user_email, r.kashish_user_name,
+      r.kashish_user_mobile, r.kashish_user_country, r.kashish_movie_id, r.kashish_movie_title,
       r.stars, r.source, r.kashish_status, r.voted_at, r.attendee_id, r.qr_id, r.checkin_block_id, r.outcome, r.reason]));
   }
-  const removedIds = existingRows
-    .filter(p => !seen.has(p.kashish_vote_id) && !(p.outcome === 'not_verified' && p.reason === OUTCOME_REASON.removed))
-    .map(p => p.id);
+  const removedIds = isFull
+    ? existingRows.filter(p => !seen.has(p.kashish_vote_id) && p.outcome !== 'removed').map(p => p.id)
+    : [];
   for (let i = 0; i < removedIds.length; i += 500) {
     const ids = removedIds.slice(i, i + 500);
     await query(
-      `UPDATE kashish_external_votes SET outcome = 'not_verified', reason = ?, last_evaluated_at = CURRENT_TIMESTAMP
+      `UPDATE kashish_external_votes SET outcome = 'removed', reason = ?, attendee_id = NULL, last_evaluated_at = CURRENT_TIMESTAMP
        WHERE id IN (${ids.map(() => '?').join(',')})`,
       [OUTCOME_REASON.removed, ...ids]
     );
   }
 
-  const outcomes = { counted: 0, unregistered: 0, not_checked_in: 0, outside_period: 0, not_verified: 0, invalid: 0, duplicate: 0 };
+  // Remember where to resume: the API's syncedAt is passed back as updatedSince next time
+  await query(`
+    INSERT INTO kashish_sync_state (event_id, kashish_event_id, last_synced_at, last_full_sync_at)
+    VALUES (?, ?, ?, ${isFull ? 'CURRENT_TIMESTAMP' : 'NULL'})
+    ON DUPLICATE KEY UPDATE kashish_event_id = VALUES(kashish_event_id), last_synced_at = VALUES(last_synced_at)
+      ${isFull ? ', last_full_sync_at = CURRENT_TIMESTAMP' : ''}
+  `, [eventId, config.kashishEventId, fetched.syncedAt || new Date().toISOString()]);
+
+  const outcomes = { counted: 0, unregistered: 0, not_checked_in: 0, outside_period: 0, not_verified: 0, invalid: 0, duplicate: 0, removed: removedIds.length };
   evaluated.forEach(r => { outcomes[r.outcome]++; });
 
   if (logId) {
@@ -325,6 +408,8 @@ async function syncExternalVotes(eventId, { apiKey, source = 'all', logId = null
 
   return {
     mode: 'kashish',
+    sync_type: isFull ? 'full' : 'incremental',
+    kashish_event_id: config.kashishEventId,
     total_fetched: votes.length,
     counted: outcomes.counted,
     outcomes,
@@ -341,7 +426,7 @@ async function syncExternalVotes(eventId, { apiKey, source = 'all', logId = null
  * Rank Kashish films for one festival from counted votes.
  * Bayesian score W = v/(v+m)·R + m/(v+m)·C (same formula as recalculateScores), where C is the
  * mean of all counted votes. Ties: more votes, then higher raw average.
- * Films with only out-of-period votes are left out; films with in-period votes that didn't count
+ * Films with only out-of-period or removed (other-event) votes are left out; films with in-period votes that didn't count
  * are listed with 0 votes so the team can see them.
  */
 async function computeExternalStandings(eventId, config = null) {
@@ -354,7 +439,7 @@ async function computeExternalStandings(eventId, config = null) {
            SUM(outcome = 'counted') AS v,
            COALESCE(SUM(CASE WHEN outcome = 'counted' THEN stars END), 0) AS sum_stars
     FROM kashish_external_votes
-    WHERE event_id = ? AND outcome <> 'outside_period'
+    WHERE event_id = ? AND outcome NOT IN ('outside_period', 'removed')
     GROUP BY kashish_movie_id
   `, [eventId]);
 
@@ -421,8 +506,9 @@ async function getExternalSummary(eventId) {
     'SELECT outcome, COUNT(*) AS n FROM kashish_external_votes WHERE event_id = ? GROUP BY outcome',
     [eventId]
   );
-  const outcomes = { counted: 0, unregistered: 0, not_checked_in: 0, outside_period: 0, not_verified: 0, invalid: 0, duplicate: 0 };
+  const outcomes = { counted: 0, unregistered: 0, not_checked_in: 0, outside_period: 0, not_verified: 0, invalid: 0, duplicate: 0, removed: 0 };
   outcomeRows.forEach(r => { outcomes[r.outcome] = Number(r.n); });
+  const state = await getSyncState(eventId);
 
   const films = await query(`
     SELECT kashish_movie_id AS film_id, MAX(kashish_movie_title) AS film_title,
@@ -432,7 +518,7 @@ async function getExternalSummary(eventId) {
            SUM(outcome = 'outside_period') AS outside_period,
            SUM(outcome IN ('not_verified', 'invalid', 'duplicate')) AS other_skipped,
            COUNT(*) AS total
-    FROM kashish_external_votes WHERE event_id = ?
+    FROM kashish_external_votes WHERE event_id = ? AND outcome <> 'removed'
     GROUP BY kashish_movie_id
     ORDER BY counted DESC, total DESC, film_title ASC
   `, [eventId]);
@@ -446,6 +532,12 @@ async function getExternalSummary(eventId) {
   return {
     source: cfg.source,
     voting_period: { from: cfg.from, to: cfg.to },
+    kashish_event_id: cfg.kashishEventId,
+    sync_state: {
+      kashish_event_id: state?.kashish_event_id || null,
+      last_synced_at: state?.last_synced_at || null,
+      last_full_sync_at: state?.last_full_sync_at || null
+    },
     outcomes,
     total: Object.values(outcomes).reduce((t, n) => t + n, 0),
     films: films.map(f => ({

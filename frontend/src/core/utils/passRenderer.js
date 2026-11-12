@@ -35,6 +35,25 @@ export const SIZE_PRESETS = [
   { key: 'sticker50', label: 'Square sticker (50 mm)', w: 50, h: 50 }
 ];
 
+/** Bleed of an artwork template: extra artwork on each side beyond the pass size, in mm (ADR 0005, Amendment 4). */
+export const MAX_BLEED_MM = 12.7;
+export function bleedOf(template) {
+  if (!template || template.design_mode !== 'artwork') return 0;
+  const b = Number(template.config?.bleedMm);
+  return Number.isFinite(b) ? Math.min(MAX_BLEED_MM, Math.max(0, b)) : 0;
+}
+
+/** "4 × 6 in" when both sides are whole eighths of an inch (within 0.05 mm), else ''. */
+export function inchLabel(wMm, hMm) {
+  const inch = (v) => {
+    const eighths = Math.round((Number(v) / 25.4) * 8);
+    return Math.abs(eighths * 3.175 - Number(v)) < 0.05 && eighths > 0 ? String(Math.round((eighths / 8) * 1000) / 1000) : null;
+  };
+  const w = inch(wMm);
+  const h = inch(hMm);
+  return w && h ? `${w} × ${h} in` : '';
+}
+
 /** "#045": a badge's permanent running number within the festival (ADR 0001, Amendment 3). */
 export const formatSequence = (n) => (n === null || n === undefined || n === '' ? '' : `#${String(n).padStart(3, '0')}`);
 
@@ -246,7 +265,10 @@ function renderElements(template, data, mode, ctx) {
   const artwork = template.design_mode === 'artwork';
   let background = '';
   if (artwork) {
-    background = bgImg ? `<img class="ppc-bg ppc-bg-fill" src="${bgImg}" alt="" />` : '<div class="ppc-art-missing">Upload the artwork</div>';
+    // With bleed the artwork is larger than the pass: centre it and let the pass edge crop it
+    const b = bleedOf(template);
+    const bleedStyle = b > 0 ? ` style="inset:auto;left:${mm(-b)};top:${mm(-b)};width:${mm(W + 2 * b)};height:${mm(H + 2 * b)}"` : '';
+    background = bgImg ? `<img class="ppc-bg ppc-bg-fill" src="${bgImg}" alt=""${bleedStyle} />` : '<div class="ppc-art-missing">Upload the artwork</div>';
   } else if (bgImg) {
     background = `<img class="ppc-bg" src="${bgImg}" alt="" />`;
   }
@@ -382,7 +404,7 @@ export function passCss(scope) {
     ${S} .pps-title { font-weight: 700; color: #64748b; letter-spacing: 0.02em; margin-bottom: 2mm; }
     ${S} .pps-qr { display: flex; justify-content: center; margin-bottom: 2mm; }
     ${S} .pps-qr-wrap { position: relative; }
-    ${S} .pps-index { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 1mm; writing-mode: vertical-rl; font-weight: 700; color: #64748b; letter-spacing: 0.08em; white-space: nowrap; }
+    ${S} .pps-index { position: absolute; left: 100%; top: 50%; transform: translateY(-50%) rotate(180deg); margin-left: 1mm; writing-mode: vertical-rl; /* reads bottom to top */ font-weight: 700; color: #64748b; letter-spacing: 0.08em; white-space: nowrap; }
     ${S} .pps-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 800; background: #f1f5f9; padding: 1mm 1.5mm; border-radius: 1mm; letter-spacing: 0.12em; max-width: 100%; overflow-wrap: anywhere; }
   `;
 }
@@ -420,7 +442,7 @@ export function sheetLayout(pieceW, pieceH, opts = {}) {
   const fitsTrueSize = fitScale >= 0.9999;
   const scale = fitsTrueSize ? 1 : (opts.shrink ? Math.round(fitScale * 1000) / 1000 : null);
   const k = scale ?? Math.round(fitScale * 1000) / 1000; // positions (and the preview) use the fit factor
-  // Would "No margins" make this grid fit at 100%?
+  // Would turning margins off make this grid fit at 100%?
   const noMarginsFits = c * pieceW <= pageW + 0.01 && r * pieceH <= pageH + 0.01;
 
   const w = pieceW * k;
@@ -535,7 +557,7 @@ export function renderSheet(items, mode, paper, ctx, layoutOpts = {}) {
 
   const piece = jobPieceSize(items, mode, ctx);
   const layout = sheetLayout(piece.w || 1, piece.h || 1, layoutOpts);
-  if (!layout.printable) throw new Error('This grid doesn\'t fit on the page at true size. Turn on "Shrink to fit" or choose "No margins".');
+  if (!layout.printable) throw new Error('This grid doesn\'t fit on the page at true size. Turn on "Shrink to fit" or turn "Margins" off.');
   const pages = [];
   for (let i = 0; i < items.length; i += layout.perPage) {
     pages.push(sheetPageHtml(items.slice(i, i + layout.perPage), layout, mode, ctx));

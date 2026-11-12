@@ -52,3 +52,21 @@ The Kashish API sends, per vote: `id`, `user {id, email, name, countryCode, mobi
 - **Creating hidden submissions for Kashish films.** Rejected: it adds records to our event tables, which the team explicitly ruled out.
 - **Trusting Kashish's "Verified Vote" alone.** Rejected by the team, which wants FestiPlus registration and check-in verification.
 - **Live (unfrozen) public results.** Rejected: late votes could change announced winners.
+
+## Amendment 1: Event filter and incremental sync (2026-11-12)
+
+**Context.** The Kashish API added an `eventId` filter (and `eventId` on every vote) and `updatedSince` incremental sync, returning `sync.syncedAt`. The Kashish team confirmed that votes are never updated after they're cast, that only `scan` votes are sent to us, and that the rate limit is 50. The live feed mixed 77 untagged June–October votes with 3 votes tagged `EF3j920261` (KASHISH x BENGALURU 2026).
+
+**Decision**
+1. **Kashish event ID per festival.** Stored in `audience_settings.settings_json.kashish_event_id` and set in Settings › Audience › Voting Rules (letters, digits, `-`, `_`, up to 64 characters). Every fetch passes `eventId` and `source=scan`. If the ID is empty, the feed is read unfiltered and the Sync tab warns about it.
+2. **Incremental sync.** `kashish_sync_state` stores the last `syncedAt` per festival.
+   - **Scheduled runs (every 2 minutes):** they pass it back as `updatedSince` and fetch only new votes.
+   - **Full sync:** it reads the event's whole feed. It runs on **Sync now**, the first time, and whenever the event ID changes.
+   - There is no periodic full sync, because votes never change.
+3. **Re-checking without re-fetching.** Voter email, name, mobile and country are stored on `kashish_external_votes`. Every run re-evaluates all stored votes, so late registrations and check-ins still count.
+4. **`removed` outcome.** After a full sync, stored votes that aren't in the event feed become `removed`. They are kept for audit, excluded from standings and from the per-film list, and shown as "Not in this event". On the first run, event 40 got 78 removed rows, 1 counted and 2 unregistered.
+5. **Guards.** A vote tagged with a different event, or one that isn't a scan vote, is stored as `invalid` with its reason.
+6. **Rate limit.** An HTTP 429 is retried once after 5 seconds; after that the run stops with `KASHISH_RATE_LIMITED`, and the next run carries on.
+7. **No key in code.** `KASHISH_API_KEY` must come from `.env`. The old fallback was removed because the guide published that key.
+
+Migration: `023_kashish_sync_state.js`.

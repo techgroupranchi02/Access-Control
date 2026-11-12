@@ -14,6 +14,7 @@ const { festivalImageUrl } = require('../utils/media.utils');
 const { query, getConnection } = require('../../config/database');
 const { PREBUILT_TEMPLATES, getAvailableTemplates, getTemplateByKey } = require('../services/registration-form-templates');
 const qrCredential = require('../services/qrCredential.service');
+const qrPrintLog = require('../services/qrPrintLog.service');
 const kashishExternal = require('../services/kashishExternalVotes.service');
 const { getFilmFestivalId } = require('../services/festivalIds.service');
 
@@ -230,7 +231,8 @@ async function getAudienceSettings(req, res) {
       // Where audience votes come from: 'freecomers' (screening QR / /vote) or 'kashish' (Kashish app, docs/adr/0004)
       voting_source: 'freecomers',
       kashish_voting_from: null,
-      kashish_voting_to: null
+      kashish_voting_to: null,
+      kashish_event_id: null
     };
 
     let config = defaultConfig;
@@ -280,6 +282,12 @@ async function updateAudienceSettings(req, res) {
       const d = settings[key] ? new Date(settings[key]) : null;
       settings[key] = d && !Number.isNaN(d.getTime()) ? d.toISOString() : null;
     }
+    // Kashish event ID: the votes API's eventId filter (e.g. "EF3j920261"); empty = not set
+    const kEvent = typeof settings.kashish_event_id === 'string' ? settings.kashish_event_id.trim() : '';
+    if (kEvent && !/^[A-Za-z0-9_-]{1,64}$/.test(kEvent)) {
+      return res.status(400).json({ error: 'The Kashish event ID can only contain letters, numbers, "-" and "_" (up to 64 characters).' });
+    }
+    settings.kashish_event_id = kEvent || null;
     if (settings.kashish_voting_from && settings.kashish_voting_to && settings.kashish_voting_from > settings.kashish_voting_to) {
       return res.status(400).json({ error: '"Voting from" must be before "Voting to".' });
     }
@@ -1135,6 +1143,45 @@ async function listAttendance(req, res) {
     } catch (error) {
       console.error('[AudienceController] bulkGenerateQRs error:', error.message);
       res.status(500).json({ error: 'Failed to generate bulk QR codes: ' + error.message });
+    }
+  }
+
+  /**
+   * POST /api/registration/qr/print-status   { qr_values: [] }
+   * Which of these badges were sent to print before (docs/adr/0005, Amendment 3).
+   */
+  async function getQrPrintStatus(req, res) {
+    try {
+      const eventId = getEventId(req);
+      const values = Array.isArray(req.body?.qr_values) ? req.body.qr_values : [];
+      if (values.length > qrPrintLog.MAX_ITEMS) {
+        return res.status(400).json({ success: false, message: `Check up to ${qrPrintLog.MAX_ITEMS} badges at a time.` });
+      }
+      const printed = await qrPrintLog.getPrintStatus(eventId, values);
+      res.json({ success: true, printed });
+    } catch (err) {
+      console.error('Error reading badge print history:', err);
+      res.status(500).json({ success: false, message: 'Could not check which badges were printed before.' });
+    }
+  }
+
+  /**
+   * POST /api/registration/qr/print-log   { mode: 'full'|'qr-only', items: [{ qr_value, template_id }] }
+   * Records the badges of one Print press.
+   */
+  async function logQrPrints(req, res) {
+    try {
+      const eventId = getEventId(req);
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (items.length > qrPrintLog.MAX_ITEMS) {
+        return res.status(400).json({ success: false, message: `Record up to ${qrPrintLog.MAX_ITEMS} badges at a time.` });
+      }
+      const result = await qrPrintLog.recordPrints(eventId, items, { mode: req.body?.mode, userId: req.user ? req.user.id : null });
+      res.json({ success: true, ...result });
+    } catch (err) {
+      if (err.status === 400) return res.status(400).json({ success: false, message: err.message });
+      console.error('Error recording badge prints:', err);
+      res.status(500).json({ success: false, message: 'Could not record the print.' });
     }
   }
 
@@ -2966,6 +3013,8 @@ async function listAttendance(req, res) {
     verifyLostBadgePhone,
     bulkGenerateQRs,
     getQRPool,
+    getQrPrintStatus,
+    logQrPrints,
     checkQRCode,
     assignAttendeeQR,
     listAttendees,

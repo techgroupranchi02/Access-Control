@@ -65,7 +65,7 @@ async function upsertReceipt(eventId, r) {
  *     re-evaluated on each sync (e.g. late registration or late check-in).
  * Returns a summary object. Throws on API/DB failure.
  */
-async function syncEventVotes(eventId, { userId = null, apiKey, source = 'all' } = {}) {
+async function syncEventVotes(eventId, { userId = null, apiKey, source = 'scan', full = false } = {}) {
   eventId = parseInt(eventId, 10);
   if (runningEvents.has(eventId)) {
     return { skipped: true, reason: 'A sync for this event is already running.' };
@@ -82,10 +82,12 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'all' }
 
     // Festivals whose films live only in the Kashish app (docs/adr/0004)
     if (await kashishExternal.isKashishSource(eventId)) {
-      return await kashishExternal.syncExternalVotes(eventId, { apiKey, source, logId });
+      return await kashishExternal.syncExternalVotes(eventId, { apiKey, logId, full });
     }
 
-    const { votes } = await fetchAllKashishVotes(apiKey, source);
+    // Submissions-mapped festivals: full fetch, filtered to the festival's Kashish event when set
+    const { kashishEventId } = await kashishExternal.getVotingConfig(eventId);
+    const { votes } = await fetchAllKashishVotes(apiKey, { source, eventId: kashishEventId || undefined });
 
     // Existing receipts: skip votes already final
     const receiptRows = await query('SELECT kashish_vote_id, outcome FROM kashish_vote_receipts WHERE event_id = ?', [eventId]);
@@ -267,9 +269,11 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'all' }
  */
 async function syncKashishVotes(req, res) {
   try {
+    // "Sync now" re-reads the festival's whole Kashish feed (the timer fetches only new votes)
     const summary = await syncEventVotes(getEventId(req), {
       userId: req.user ? req.user.id : null,
-      source: req.body?.source || 'all'
+      source: req.body?.source || 'scan',
+      full: true
     });
     if (summary.skipped) {
       return res.status(409).json({ error: summary.reason });
@@ -278,7 +282,7 @@ async function syncKashishVotes(req, res) {
       const o = summary.outcomes;
       return res.json({
         success: true,
-        message: `Sync completed: ${o.counted} of ${summary.total_fetched} votes counted. Skipped: ${o.unregistered} not registered, ${o.not_checked_in} not checked in, ${o.outside_period} outside the voting period.`,
+        message: `Sync completed: ${o.counted} counted of ${summary.total_fetched} fetched${summary.kashish_event_id ? ` for Kashish event ${summary.kashish_event_id}` : ''}. Skipped: ${o.unregistered} not registered, ${o.not_checked_in} not checked in, ${o.outside_period} outside the voting period${summary.removed_from_feed ? `; ${summary.removed_from_feed} no longer in the event feed` : ''}.`,
         summary
       });
     }

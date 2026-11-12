@@ -121,7 +121,9 @@ npm run lint
 - **Pass templates** (Settings › Badges & Passes, `/settings/badges`): `pass_templates`, one festival can have several. See [ADR 0005](docs/adr/0005-pass-templates.md).
   - Every template is a background plus **elements** in `pass_template_elements` (type `text` / `image` / `checklist`, name, position JSON in mm, metadata JSON, sort_order). Design types: `layout` (colour background; elements placed by `buildLayoutElements()`) and `artwork` (uploaded design). See ADR 0005 Amendment 1.
     - Text uses merge fields (`{{name}}`, `{{custom.<field>}}` …) and one of 7 fonts; images are `upload` (`pass_template_assets`), `festival_logo` or `badge_qr`; colours can be `accent` or `category`.
-    - Each template prints as Pass + QR, Pass only or QR only, on a card printer or A4 (orientation and columns × rows chosen in the print dialog; `sheetLayout()`).
+    - Each template prints as Pass + QR or QR only, on A4 (orientation, margins and columns × rows; `sheetLayout()`) or one pre-cut card per page at the pass size.
+    - Artwork templates can have a bleed (`config.bleedMm`): the template size is the card, the artwork covers card + bleed and is cropped at the card edge (`bleedOf()`). See ADR 0005 Amendment 4.
+    - The print dialog lets staff pick a badge range (From / To), shows it (#001–#075) and records each Print press per badge in `qr_print_log` (`qrPrintLog.service.js`); badges printed before get a warning with "Leave out". See ADR 0005 Amendment 3.
     - QR-only stickers don't use a template: they follow the festival's **QR Settings** (`pass_print_settings`, set in the print dialog; saving the default needs `settings.manage`).
   - API: `/api/pass-templates` (`pass-templates.controller.js`, validation and starters in `passTemplates.service.js`). Listing needs `registration.view`; changes need `settings.manage`.
   - Print badges and passes only through `frontend/src/core/utils/passRenderer.js` and `components/print/PrintPassesDialog.jsx`. Never hard-code festival text (name, venue, dates) on a pass; it comes from the festival's records or the template.
@@ -135,6 +137,7 @@ npm run lint
     - Code: `core/services/kashishExternalVotes.service.js`.
     - Tables: `kashish_external_votes` and `kashish_results_publications`.
     - A vote counts only from a registered delegate (matched by email, then phone) who has checked in, inside the voting period.
+    - Votes are fetched for the festival's **Kashish event ID** (`settings_json.kashish_event_id`, KASHISH = `EF3j920261`), scan votes only. Scheduled runs use `updatedSince` (state in `kashish_sync_state`); "Sync now" is a full sync that marks votes outside the event `removed`. See ADR 0004 Amendment 1.
     - Published results are frozen snapshots.
     - FestiPlus `/vote` is off for these festivals.
   - Votes are pulled from its API by `syncEventVotes()` in `kashish-sync.controller.js`, which runs automatically every `KASHISH_SYNC_INTERVAL_SEC` while a voting window is open (`core/services/kashishSyncScheduler.js`), plus a manual button.
@@ -164,5 +167,5 @@ npm run lint
 - ADRs live in `docs/adr/NNNN-kebab-title.md`. Read the relevant ADRs before changing that area, and add a new ADR for any significant decision.
 
 ## Known risks (not yet fixed)
-- `config/environment.js` hardcodes a fallback `KASHISH_API_KEY`.
+- The Kashish API key printed in Kashish's own guide is still the live key until Kashish rotates it (the code no longer has a fallback; it comes from `.env`).
 - The rate limits are effectively off: the general limit is 50000 requests per 15 minutes, and credential and public-vote endpoints have no limiter of their own.

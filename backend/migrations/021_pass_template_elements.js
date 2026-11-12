@@ -1,5 +1,5 @@
 /**
- * Migration 021: pass template elements (docs/adr/0005-pass-templates.md, Amendment 1)
+ * Migration 021: pass template elements (docs/adr/0005-pass-templates.md, Amendment 3)
  *
  * Every template becomes a background plus generic elements (text, image, checklist):
  *   pass_template_elements  one row per element: type, name, position (JSON), metadata (JSON), sort_order

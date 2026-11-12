@@ -35,12 +35,64 @@ _Nothing in progress._
 
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
+| 2026-11-12 | Ask Kashish to rotate the API key printed in their guide, then update `KASHISH_API_KEY` in dev and prod `.env` | Team | The guide's examples show our live key. |
+| 2026-11-12 | Set the Kashish event ID on production (Settings › Audience › Voting Rules → EF3j920261) after deploying | Festival team | Until set, production keeps reading every Kashish event. |
 | 2026-11-10 | Send the Kashish API requests to the Kashish team | Team | [kashish-votes-api-requirements.md](kashish-votes-api-requirements.md). Most important: a festival/edition filter, plus keep sending email and mobile on every vote. |
 | 2026-11-10 | Set the KASHISH voting period | Festival team | Settings › Audience › Voting Rules → "Voting from / to". Until it is set, votes from any date count, including 77 votes from before July. |
 | — | Set `FREECOMERS_API_URL` in the production `.env` | DevOps | If it is unset, it falls back to a host worked out from `FRONTEND_URL`. |
 | — | Deploy the pending Laravel and Next.js fixes to production | DevOps | Production deploy only; they are not in this repo. |
 
 ## Done
+
+- **2026-11-12: artwork bleed and printing on pre-cut cards** (`deployed` 2026-11-12). [ADR 0005, Amendment 4](adr/0005-pass-templates.md).
+  - **What:**
+    - artwork templates get a bleed (`config.bleedMm`, 0–12.7 mm): the template size is the card, and the larger artwork is centred and cropped at the card edge;
+    - editor: Bleed field (None / 3 mm / ¼ in), artwork size in mm and inches, the preview shows the bleed dimmed with a dashed cut line, and size or bleed changes keep elements on the same spot of the artwork;
+    - print dialog: Paper = A4 sheet or Card (e.g. "Card 4 × 6 in"), one card per page at the card size, remembered per viewer.
+  - **Where:** `passTemplates.service.js` (`sanitizeConfig`), `passRenderer.js` (`bleedOf`, `inchLabel`, `renderElements`), `PassTemplateEditor.jsx`, `PrintPassesDialog.jsx`, `index.css`.
+  - **Checked:** a temporary 4 × 6 in template with ¼ in bleed: the editor showed "101.6 × 152.4 mm (4 × 6 in) + 6.35 mm bleed" with the cut line on the artwork's own crop marks; printing as Card gave 3 pages of `@page 101.6mm 152.4mm` with the artwork at 114.3 × 165.1 mm offset −6.35 mm; converting template 13 (not saved) kept both elements on the same artwork spot. Light, dark and phone checked. Temporary template and test print rows deleted.
+- **2026-11-12: fix the flickering ⓘ popover in the print dialog** (`deployed` 2026-11-12). The popover sat inside the dialog's scrolling body and overflowed it, adding a scrollbar that moved the icon away from the pointer, so it opened and closed repeatedly. It is now `InfoPopover` in `PrintPassesDialog.jsx`: portalled to `<body>` with `position: fixed`, below the icon or above when there's no room; hover only for a real mouse (touch browsers send a mouseleave right after a tap). Checked with Puppeteer: visible for 1.5 s straight with no layout change at 1887 light, 1440 dark and 390 phone (tap); opens above near the bottom; closes when the mouse leaves.
+- **2026-11-12: "Margins" switch, on by default** (`deployed` 2026-11-12). [ADR 0005, Amendment 2](adr/0005-pass-templates.md), item 7. "No margins" renamed **Margins** (on = 8 mm margin, 4 mm cut gaps); on every time the dialog opens, and a saved "off" from before is ignored. Tooltip and the shrink fallback ("Turn margins off instead (100%)") reworded. `PrintPassesDialog.jsx`, `passRenderer.js`. Checked with Puppeteer: on at open even with an old saved "off", switching off changes the fit to 97.9%, reopening is on again.
+- **2026-11-12: print dialog closes only with ×** (`deployed` 2026-11-12). [ADR 0005, Amendment 3](adr/0005-pass-templates.md), item 5. No closing on an outside click, Escape or Print; Cancel removed; after Print the footer shows "Sent N … (#range) to print." and the warning refreshes. `PrintPassesDialog.jsx`, `index.css`. Checked with Puppeteer at desktop and phone width; test print rows deleted (Saurav's 75 real QR only prints kept).
+- **2026-11-12: sticker sequence number reads bottom to top** (`deployed` 2026-11-12). The #001 label beside the QR on QR only stickers is turned 180° (still on the right, centred). `passRenderer.js` (`.pps-index`). Checked in the editor's QR only preview.
+- **2026-11-12: choose the badge range in the print dialog** (`deployed` 2026-11-12). [ADR 0005, Amendment 3](adr/0005-pass-templates.md), item 3.
+  - **What:** "Badges to print" From / To fields, filled in with the whole list; count, footer range, preview, page count and the printed-before warning follow the range; "All badges" resets; From above To shows an error, selects nothing and disables Print.
+  - **Where:** `PrintPassesDialog.jsx`, `index.css` (`.fc-pp-seq-*`).
+  - **Checked:** Puppeteer: #005–#006 gave 2 passes; after printing them, #001–#010 showed "2 of 10 badges were printed before: #005–#006"; 20 → 10 showed the error with 0 passes and Print disabled; light, dark and phone checked. Test print rows deleted.
+- **2026-11-12: badge range and "printed before" warning in the print dialog** (`deployed` 2026-11-12). [ADR 0005, Amendment 3](adr/0005-pass-templates.md).
+  - **What:**
+    - the footer shows the badge numbers in the print ("Badges #001–#075") and the preview shows page 1's range; Bulk QR prints in number order;
+    - each Print press is recorded per badge in the new `qr_print_log` table (migration `024_qr_print_log.js`), from Bulk QR, Audience and Assign QR;
+    - badges printed before get a warning (count, range, last time, who, mode) with "Leave out the N already printed".
+  - **Where:** `qrPrintLog.service.js`, `audience.controller.js` (`getQrPrintStatus`, `logQrPrints`), `audience.routes.js`, `PrintPassesDialog.jsx`, `BulkQrManagementPage.jsx`, `index.css`.
+  - **Checked:** Puppeteer: printed #001–#004 → reopening showed "All 4 badges were printed before"; the full stock showed "4 of 75 … #001–#004", and Leave out gave 71 passes, #005–#075; light, dark and phone checked; desk volunteer gets 200. The 4 test rows were deleted.
+  - **Deploy:** run migration 024.
+- **2026-11-12: grid in the pass template editor preview** (`deployed` 2026-11-12).
+  - **What:**
+    - a Grid switch and a spacing choice (1, 2, 5 or 10 mm) in the preview header; lines run from the pass's top-left corner, with every 10 mm drawn stronger and the centre lines dashed;
+    - a centre line turns solid when the selected element is exactly centred, grid on or off;
+    - dragging snaps an element's centre onto the pass centre (Alt places it freely);
+    - the choice is remembered per browser; on screen only, never printed.
+  - **Where:** `PassTemplateEditor.jsx` (`GridOverlay`), `index.css` (`.fc-pte-guides`, `.fc-pte-grid-*`).
+  - **Checked:** Puppeteer at 1916 light, 1440 dark and 390 phone: 52 lines at 5 mm on a 105 × 151.69 mm pass, the snap leaves the element 0.01 px from centre, no horizontal scroll.
+- **2026-11-12: Kashish API update: event filter and incremental sync** (`deployed` 2026-11-12). [ADR 0004, Amendment 1](adr/0004-kashish-external-leaderboard.md).
+  - **What:**
+    - `kashish_event_id` setting (Voting Rules; KASHISH = EF3j920261);
+    - fetches pass `eventId` and `source=scan`;
+    - scheduled runs use `updatedSince`; Sync now does a full sync that marks votes outside the event `removed`;
+    - guards for other-event and non-scan votes;
+    - 429 retry;
+    - voter details stored for re-checks;
+    - Sync tab shows the event ID, sync times and "Not in this event";
+    - hard-coded API key fallback removed;
+    - migration `023_kashish_sync_state.js`.
+  - **Files:** `kashish-api.service.js`, `kashishExternalVotes.service.js`, `kashish-sync.controller.js`, `audience.controller.js`, `environment.js`, `AudienceSettingsPage.jsx`, `KashishVotingBoard.jsx`.
+  - **Verified on dev:**
+    - first full sync fetched 3 votes and marked 78 old ones removed (1 counted kept);
+    - the next scheduled run sent `source=scan&eventId=EF3j920261&updatedSince=…` and got 0 new votes;
+    - guards and 429 retry tested with a stubbed API;
+    - the leaderboard lists only this event's films;
+    - settings field and Sync tab checked in light and dark mode.
 
 - **2026-11-11: Element rotation in 45° steps, line height and "Centre on the pass"** (`deployed` 2026-11-11).
   - **What:** [PassElementProperties.jsx](../frontend/src/core/components/print/PassElementProperties.jsx), [passRenderer.js](../frontend/src/core/utils/passRenderer.js), `passTemplates.service.js`:

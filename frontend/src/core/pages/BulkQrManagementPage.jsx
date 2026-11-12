@@ -239,10 +239,12 @@ export default function BulkQrManagementPage() {
     );
   };
 
-  // Print dialog: template, mode (Pass + QR / Pass only / QR only) and paper (ADR 0005).
-  // Lost badges are never printed (ADR 0001, Amendment 2).
+  // Print dialog: Pass + QR or QR only, template and A4 layout (ADR 0005).
+  // Lost badges are never printed (ADR 0001, Amendment 2). Badges print in number order
+  // (#001 first), so each A4 page holds a run of numbers.
   const openPrint = (badges, title) => {
-    const printableBadges = badges.filter(q => q.status !== 'lost');
+    const seq = (q) => (q.sequence_no === null || q.sequence_no === undefined ? Infinity : Number(q.sequence_no));
+    const printableBadges = badges.filter(q => q.status !== 'lost').sort((a, b) => seq(a) - seq(b));
     if (printableBadges.length === 0) {
       setErrorMessage('No printable badges in the current view (lost badges are never printed).');
       return;

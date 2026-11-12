@@ -25,7 +25,8 @@ const OUTCOME_TILES = [
   { key: 'unregistered', label: 'Not a registered delegate', hint: 'No KASHISH registration with the same email or mobile number', tone: 'warning' },
   { key: 'not_checked_in', label: 'Not checked in', hint: 'Registered, but no check-in at the festival yet', tone: 'warning' },
   { key: 'outside_period', label: 'Outside voting period', hint: 'Cast before or after the voting dates in Settings', tone: 'neutral' },
-  { key: 'other', label: 'Other', hint: 'Not verified by Kashish, invalid rating, or a repeat vote', tone: 'neutral' }
+  { key: 'other', label: 'Other', hint: 'Not verified, invalid, a repeat vote, another Kashish event or not a scan vote', tone: 'neutral' },
+  { key: 'removed', label: 'Not in this event', hint: "Earlier votes that aren't in this festival's Kashish event feed", tone: 'neutral' }
 ];
 
 function formatDateTime(value) {
@@ -245,14 +246,35 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
             <div>
               <h2>Kashish Pride app sync</h2>
               <p>
-                Votes are pulled automatically every few minutes during the voting period.
-                {summary?.last_sync ? ` Last sync ${formatDateTime(summary.last_sync.completed_at)}.` : ''}
+                New votes are pulled automatically every few minutes during the voting period. "Sync now" re-reads the festival's whole Kashish feed.
               </p>
             </div>
             <button type="button" className="fc-kv-btn fc-kv-btn--primary" onClick={handleSync} disabled={syncing}>
               <SyncIcon size={13} /> {syncing ? 'Syncing…' : 'Sync now'}
             </button>
           </div>
+
+          {summary && (
+            <dl className="fc-kv-sync-meta">
+              <div>
+                <dt>Kashish event ID</dt>
+                <dd>{summary.kashish_event_id ? <code>{summary.kashish_event_id}</code> : <span className="fc-kv-warn-text">Not set</span>}</dd>
+              </div>
+              <div>
+                <dt>Last check for new votes</dt>
+                <dd>{summary.sync_state?.last_synced_at ? formatDateTime(summary.sync_state.last_synced_at) : 'Not yet'}</dd>
+              </div>
+              <div>
+                <dt>Last full sync</dt>
+                <dd>{summary.sync_state?.last_full_sync_at ? formatDateTime(summary.sync_state.last_full_sync_at) : 'Not yet'}</dd>
+              </div>
+            </dl>
+          )}
+          {summary && !summary.kashish_event_id && (
+            <p className="fc-kv-banner is-warning" role="status">
+              No Kashish event ID is set, so votes from every Kashish event are read. Add it in Settings › Audience › Voting Rules.
+            </p>
+          )}
 
           {!summary ? (
             <div className="fc-kv-empty">Loading sync status…</div>
@@ -272,7 +294,7 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
                 })}
               </div>
               <p className="fc-kv-note">
-                {summary.total} votes received from the Kashish app. Voters are matched to KASHISH delegates by email, then by mobile number, so delegates should use the same email or phone in the Kashish app as when they registered.
+                {summary.total - (summary.outcomes?.removed || 0)} votes received for this festival from the Kashish app. Voters are matched to KASHISH delegates by email, then by mobile number, so delegates should use the same email or phone in the Kashish app as when they registered.
               </p>
 
               <h3 className="fc-kv-subhead">Votes by film</h3>

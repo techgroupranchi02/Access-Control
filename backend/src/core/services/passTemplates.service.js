@@ -1,5 +1,5 @@
 /**
- * Badge & pass templates (docs/adr/0005-pass-templates.md, Amendment 1)
+ * Badge & pass templates (docs/adr/0005-pass-templates.md, Amendment 3)
  *
  * A template is a background plus a list of **elements**. The frontend renderer
  * (frontend/src/core/utils/passRenderer.js) turns a template + delegate/badge data into print HTML
@@ -24,7 +24,10 @@
  *   Colours accept '#hex', 'accent' (template accent; the category colour when useCategoryColor)
  *   or 'category' (the delegate's category colour).
  *
- * config_json: { background, accent, useCategoryColor }
+ * config_json: { background, accent, useCategoryColor, bleedMm }
+ *   bleedMm  artwork only: extra artwork on each side beyond the pass (card) size, 0–12.7 mm
+ *            (e.g. a 4.5 × 6.5 in artwork on a 4 × 6 in card has 6.35 mm). The pass shows the
+ *            middle of the artwork; the bleed is cut off or printed past the card edge (ADR 0005, Amendment 4).
  * QR-only sticker settings are festival-wide (table pass_print_settings, sanitizeQrSettings).
  * Starter templates are generated here, never stored; saving one creates a real copy.
  */
@@ -276,7 +279,8 @@ function sanitizeConfig(raw) {
   return {
     background: hex(c.background, '#ffffff'),
     accent: hex(c.accent, '#a82f2f'),
-    useCategoryColor: bool(c.useCategoryColor, true)
+    useCategoryColor: bool(c.useCategoryColor, true),
+    bleedMm: Number.isFinite(Number(c.bleedMm)) ? Math.round(Math.min(12.7, Math.max(0, Number(c.bleedMm))) * 100) / 100 : 0
   };
 }
 

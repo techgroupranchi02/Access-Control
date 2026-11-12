@@ -2,7 +2,8 @@
  * PrintPassesDialog: the one print dialog for badges and passes (docs/adr/0005-pass-templates.md).
  *
  * Staff pick what to print (Pass + QR, the default, or QR only), the template (not for QR only),
- * the A4 page layout (orientation, margins on/off, columns × rows), then print. The preview shows
+ * the paper (A4 sheet, or one pre-cut card per page at the pass size, ADR 0005 Amendment 4), the
+ * A4 page layout (orientation, margins on/off, columns × rows), then print. The preview shows
  * the whole first A4 page. QR only shows the festival's QR Settings (sticker
  * size and lines); admins can save them as the festival default.
  *
@@ -13,14 +14,22 @@
  *   defaultMode  'full' (Pass + QR, the default) | 'qr-only'
  *   title        dialog heading
  *   jobTitle     suggested PDF file name
- *   onClose()
+ *   onClose()    only the close (×) button closes the dialog: not an outside click, Escape or
+ *                Print, so staff can print one batch after another
+ *
+ * Staff can narrow the print to a badge range (From / To). The footer and the preview show which
+ * badge numbers (#001–#075) print. Each Print press is
+ * recorded per badge (qr_print_log), and badges printed before get a warning with the option to
+ * leave them out (ADR 0005, Amendment 3).
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import api from '../../services/api';
 import usePassTemplates from '../../hooks/usePassTemplates';
 import { printInPage } from '../../utils/printInPage';
 import {
   PASS_MODES, DEFAULT_QR_SETTINGS, MM_PX, MAX_GRID, passCss, pickTemplate, renderPass, renderSheet, renderPagePreview,
-  pieceSize, fitWhenReady, ensurePassFonts
+  pieceSize, fitWhenReady, ensurePassFonts, formatSequence, inchLabel
 } from '../../utils/passRenderer';
 import { NumInput } from './PassElementProperties';
 import { CloseIcon, PrintIcon, InfoIcon, SaveIcon, CheckCircleIcon, WarningIcon } from '../common/Icons';
@@ -43,6 +52,104 @@ function savePrefs(p) {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(p)); } catch { /* private mode */ }
 }
 
+/**
+ * Badge sequence numbers as ranges: [1,2,3,7,8] → "#001–#003, #007–#008".
+ * Long lists keep the first `maxParts` ranges and add "+ N more".
+ */
+function sequenceRanges(nums, maxParts = 4) {
+  const sorted = [...new Set(nums.filter((n) => Number.isFinite(n)))].sort((a, b) => a - b);
+  const parts = [];
+  for (const n of sorted) {
+    const last = parts[parts.length - 1];
+    if (last && n === last[1] + 1) last[1] = n;
+    else parts.push([n, n]);
+  }
+  const label = ([a, b]) => (a === b ? formatSequence(a) : `${formatSequence(a)}–${formatSequence(b)}`);
+  const shown = parts.slice(0, maxParts).map(label).join(', ');
+  const rest = parts.slice(maxParts).reduce((sum, [a, b]) => sum + (b - a + 1), 0);
+  return rest ? `${shown} + ${rest} more` : shown;
+}
+
+const seqOf = (item) => {
+  const n = Number(item?.data?.sequence_no);
+  return item?.data?.sequence_no !== null && item?.data?.sequence_no !== undefined && Number.isFinite(n) ? n : null;
+};
+
+const formatWhen = (value) => {
+  const d = value ? new Date(value) : null;
+  return d && !Number.isNaN(d.getTime())
+    ? d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '';
+};
+
+/**
+ * ⓘ button with a themed popover. The popover is portalled to <body> with position: fixed, so it
+ * never changes the dialog's scroll area: a popover inside the scrolling body added a scrollbar,
+ * which shifted the icon away from the pointer and made the popover flicker.
+ * Opens on mouse hover, focus or tap (a tap elsewhere closes it); placed below the icon, or above
+ * when there's no room.
+ */
+function InfoPopover({ id, label, children }) {
+  const btnRef = useRef(null);
+  const popRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+
+  useLayoutEffect(() => {
+    if (!open) { setPos(null); return undefined; }
+    const place = () => {
+      const b = btnRef.current?.getBoundingClientRect();
+      const p = popRef.current;
+      if (!b || !p) return;
+      const w = p.offsetWidth;
+      const h = p.offsetHeight;
+      const below = window.innerHeight - b.bottom >= h + 16 || b.top < h + 16;
+      const left = Math.min(Math.max(8, b.right + 6 - w), window.innerWidth - w - 8);
+      setPos({ left, top: below ? b.bottom + 8 : b.top - h - 8, below, arrow: Math.min(Math.max(12, b.left + b.width / 2 - left), w - 12) });
+    };
+    place();
+    const close = () => setOpen(false);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    return () => { window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true); };
+  }, [open]);
+
+  return (
+    <>
+      <span
+        ref={btnRef}
+        className="fc-pp-info"
+        tabIndex={0}
+        role="button"
+        aria-label={label}
+        aria-describedby={open ? id : undefined}
+        aria-expanded={open}
+        // Hover only for a real mouse: touch browsers send a synthetic mouseleave right after a tap
+        onPointerEnter={(e) => { if (e.pointerType === 'mouse') setOpen(true); }}
+        onPointerLeave={(e) => { if (e.pointerType === 'mouse') setOpen(false); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } }}
+      >
+        <InfoIcon size={14} />
+      </span>
+      {open && createPortal(
+        <span
+          ref={popRef}
+          id={id}
+          role="tooltip"
+          className={`fc-pp-info-pop ${pos && !pos.below ? 'is-above' : ''}`}
+          style={{ left: pos?.left ?? -9999, top: pos?.top ?? 0, visibility: pos ? 'visible' : 'hidden', '--fc-pp-arrow': `${pos?.arrow ?? 12}px` }}
+        >
+          {children}
+        </span>,
+        document.body
+      )}
+    </>
+  );
+}
+
 function Segmented({ label, value, options, onChange }) {
   return (
     <div className="fc-pp-segment" role="radiogroup" aria-label={label}>
@@ -62,15 +169,39 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
   const previewRef = useRef(null);
   const prefs = useMemo(readPrefs, []);
   const [mode, setMode] = useState(defaultMode);
-  // Always A4 sheets (the card-printer option was removed)
-  const paper = 'a4';
-  const [layoutPrefs, setLayoutPrefs] = useState(() => prefs.layout || {}); // { [mode]: { orientation, cols, rows } }
+  // A4 sheet, or 'card': one pre-cut card per page at the pass size (remembered per viewer)
+  const [paper, setPaper] = useState(prefs.paper === 'card' ? 'card' : 'a4');
+  // { [mode]: { orientation, cols, rows } }. Margins are never restored: every print starts with them on.
+  const [layoutPrefs, setLayoutPrefs] = useState(() => Object.fromEntries(
+    Object.entries(prefs.layout || {}).map(([m, l]) => {
+      const { margins, ...rest } = l || {}; // eslint-disable-line no-unused-vars
+      return [m, rest];
+    })
+  ));
   const [choice, setChoice] = useState(AUTO);
   const [fulls, setFulls] = useState(new Map()); // template id → full template, for the preview
   const [qr, setQr] = useState(null);
   const [qrSaved, setQrSaved] = useState('');
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState('');
+  const [printed, setPrinted] = useState({}); // qr value → { count, last_printed_at, last_printed_by, last_mode }
+  const [skipPrinted, setSkipPrinted] = useState(false);
+  const [range, setRange] = useState({ from: null, to: null }); // typed text; null = not changed (whole set)
+  const [statusTick, setStatusTick] = useState(0); // bumps after a print is recorded, to refresh the warning
+  const [lastSent, setLastSent] = useState('');
+
+  // Which of these badges were printed before (a failed check just shows no warning)
+  const qrValuesKey = items.map((i) => i.data?.qr_value || '').join('|');
+  useEffect(() => {
+    let cancelled = false;
+    const values = [...new Set(items.map((i) => i.data?.qr_value).filter(Boolean))];
+    if (!values.length) { setPrinted({}); return undefined; }
+    api.post('/registration/qr/print-status', { qr_values: values })
+      .then((res) => { if (!cancelled) setPrinted(res.data?.printed || {}); })
+      .catch(() => { if (!cancelled) setPrinted({}); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrValuesKey, statusTick]);
 
   // QR Settings: start from the festival default; changes apply to this print
   useEffect(() => { if (savedQr && !qr) setQr(savedQr); }, [savedQr, qr]);
@@ -84,13 +215,45 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
   const categoryCount = new Set(items.map((i) => i.categoryCode).filter(Boolean)).size;
   const isQrOnly = mode === 'qr-only';
   const isA4 = paper === 'a4';
-  // Standard margins by default; a viewer's saved choice (No margins on) still wins
+  // Margins are on each time the dialog opens; switching them off applies to this dialog only
   const layout = { margins: 'standard', ...(layoutPrefs[mode] || {}) };
   const setLayout = (patch) => setLayoutPrefs((p) => ({ ...p, [mode]: { ...(p[mode] || {}), ...patch } }));
 
-  // Items that can print in this mode: QR only needs a QR
-  const printable = useMemo(() => (isQrOnly ? items.filter((i) => i.data?.qr_value) : items), [items, isQrOnly]);
+  // Items that can print in this mode: QR only needs a QR. Badges printed before can be left out.
+  const isPrinted = (i) => Boolean(i.data?.qr_value && printed[i.data.qr_value]);
+  const inMode = useMemo(() => (isQrOnly ? items.filter((i) => i.data?.qr_value) : items), [items, isQrOnly]);
+
+  // Badge range (From / To sequence numbers); starts as the whole set
+  const numbers = inMode.map(seqOf).filter((n) => n !== null);
+  const minSeq = numbers.length ? Math.min(...numbers) : null;
+  const maxSeq = numbers.length ? Math.max(...numbers) : null;
+  const parseSeq = (text) => { const d = String(text ?? '').replace(/\D/g, ''); return d ? parseInt(d, 10) : null; };
+  const fromSeq = range.from === null ? minSeq : (parseSeq(range.from) ?? minSeq);
+  const toSeq = range.to === null ? maxSeq : (parseSeq(range.to) ?? maxSeq);
+  const showRange = numbers.length >= 2;
+  const rangeActive = showRange && (fromSeq !== minSeq || toSeq !== maxSeq);
+  const rangeError = showRange && fromSeq !== null && toSeq !== null && fromSeq > toSeq;
+  // While From > To nothing is selected (the error under the fields explains why)
+  const inRange = useMemo(() => (rangeError ? [] : !rangeActive ? inMode : inMode.filter((i) => {
+    const n = seqOf(i);
+    return n !== null && n >= fromSeq && n <= toSeq;
+  })), [inMode, rangeActive, rangeError, fromSeq, toSeq]);
+  const pad = (n) => (n === null ? '' : String(n).padStart(3, '0'));
+
+  const printable = useMemo(() => (skipPrinted ? inRange.filter((i) => !isPrinted(i)) : inRange),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [inRange, skipPrinted, printed]);
   const withoutQr = items.filter((i) => !i.data?.qr_value).length;
+
+  // Badge numbers in this print, and those printed before
+  const printedBefore = inRange.filter(isPrinted);
+  const lastPrint = printedBefore.reduce((best, i) => {
+    const p = printed[i.data.qr_value];
+    return !best || new Date(p.last_printed_at) > new Date(best.last_printed_at) ? p : best;
+  }, null);
+  const rangeOf = (list) => sequenceRanges(list.map(seqOf));
+  const jobRange = rangeOf(printable);
+  const unnumbered = printable.filter((i) => seqOf(i) === null && i.data?.qr_value).length;
 
   // QR only has no template choice: the sticker uses the festival's QR Settings
   const templateFor = (item) => {
@@ -100,16 +263,16 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
     return pickTemplate(templates, starters, item.categoryCode, mode);
   };
 
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   // Templates needed for the preview: the first pass, or every pass on the first A4 page
   const previewCount = isA4 ? Math.min(printable.length, 60) : Math.min(printable.length, 1);
   const previewMetas = loading ? [] : printable.slice(0, previewCount).map(templateFor).filter(Boolean);
   const previewKey = previewMetas.map((m) => m.id).join(',');
+
+  // Card paper: the page is the pass size (or sticker size for QR only)
+  const firstMeta = !loading && printable[0] ? templateFor(printable[0]) : null;
+  const cardSize = firstMeta ? pieceSize(firstMeta, mode, ctx) : null;
+  const cardLabel = cardSize ? (inchLabel(cardSize.w, cardSize.h) || `${Math.round(cardSize.w * 10) / 10} × ${Math.round(cardSize.h * 10) / 10} mm`) : '';
+  const mixedSizes = !isQrOnly && new Set(printable.slice(0, 200).map(templateFor).filter(Boolean).map((t) => `${t.width_mm}x${t.height_mm}`)).size > 1;
   useEffect(() => {
     let cancelled = false;
     const unique = [...new Map(previewMetas.map((m) => [m.id, m])).values()].filter((m) => !fulls.has(m.id));
@@ -147,9 +310,16 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
       for (const m of unique) loaded.set(m.id, await loadFull(m));
       const jobItems = printable.map((item, i) => ({ template: loaded.get(metas[i].id), data: item.data }));
       const { html, css } = renderSheet(jobItems, mode, paper, ctx, layout);
-      savePrefs({ ...prefs, layout: layoutPrefs });
+      savePrefs({ ...prefs, layout: layoutPrefs, paper });
+      // Record which badges were sent to print (the next print warns about them); never blocks printing
+      const logItems = printable.map((item, i) => ({ qr_value: item.data?.qr_value, template_id: isQrOnly ? null : metas[i].id })).filter((x) => x.qr_value);
+      if (logItems.length) {
+        api.post('/registration/qr/print-log', { mode, items: logItems })
+          .then(() => setStatusTick((t) => t + 1))
+          .catch(() => {});
+      }
+      setLastSent(`Sent ${printable.length} ${printable.length === 1 ? unit[0] : unit[1]}${jobRange ? ` (${jobRange})` : ''} to print.`);
       printInPage(html, css, jobTitle || `${festival.name || 'Festival'} ${PASS_MODES.find((m) => m.key === mode)?.label || ''}`.trim(), { prepare: fitWhenReady });
-      onClose();
     } catch (err) {
       setPrintError(err.response?.data?.message || err.message || 'Could not prepare the print.');
     } finally {
@@ -198,8 +368,8 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
   const unit = isQrOnly ? ['sticker', 'stickers'] : ['pass', 'passes'];
 
   return (
-    <div className="fc-modal-overlay" onClick={onClose} role="presentation">
-      <div className="fc-modal-card fc-pp-dialog" role="dialog" aria-modal="true" aria-labelledby="fc-pp-title" onClick={(e) => e.stopPropagation()}>
+    <div className="fc-modal-overlay" role="presentation">
+      <div className="fc-modal-card fc-pp-dialog" role="dialog" aria-modal="true" aria-labelledby="fc-pp-title">
         <style>{passCss('.fc-pp-preview-stage')}{page ? page.css.replaceAll('.fc-pp-page-preview', '.fc-pp-preview-stage') : ''}</style>
         <div className="fc-modal-header">
           <h2 id="fc-pp-title" className="fc-pp-title">{title}</h2>
@@ -208,6 +378,66 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
 
         <div className="fc-pp-body">
           <div className="fc-pp-controls">
+            {showRange && (
+              <div className="fc-pp-field">
+                <span className="fc-pp-label" id="fc-pp-range-label">Badges to print</span>
+                <div className="fc-pp-seq-row" role="group" aria-labelledby="fc-pp-range-label">
+                  <label className="fc-pp-seq">
+                    <span className="fc-pp-seq-cap">From</span>
+                    <span className="fc-pp-seq-box">
+                      <span aria-hidden="true">#</span>
+                      <input type="text" inputMode="numeric" maxLength={7} value={range.from === null ? pad(minSeq) : range.from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} onBlur={() => setRange((r) => (r.from !== null && parseSeq(r.from) === null ? { ...r, from: null } : r))} aria-label="Print from badge number" />
+                    </span>
+                  </label>
+                  <span className="fc-pp-seq-dash" aria-hidden="true">–</span>
+                  <label className="fc-pp-seq">
+                    <span className="fc-pp-seq-cap">To</span>
+                    <span className="fc-pp-seq-box">
+                      <span aria-hidden="true">#</span>
+                      <input type="text" inputMode="numeric" maxLength={7} value={range.to === null ? pad(maxSeq) : range.to} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} onBlur={() => setRange((r) => (r.to !== null && parseSeq(r.to) === null ? { ...r, to: null } : r))} aria-label="Print to badge number" />
+                    </span>
+                  </label>
+                  <span className="fc-pp-seq-count">{rangeError ? '' : `${inRange.length} of ${inMode.length}`}</span>
+                  {rangeActive && (
+                    <button type="button" className="fc-pp-btn is-small" onClick={() => setRange({ from: null, to: null })}>All badges</button>
+                  )}
+                </div>
+                {rangeError && <p className="fc-pp-fit-msg" role="alert"><WarningIcon size={14} /> From must be the same as or lower than To.</p>}
+                {!rangeError && <span className="fc-pp-hint">Any range within #{pad(minSeq)}–#{pad(maxSeq)}, the badges in this list.</span>}
+              </div>
+            )}
+
+            {printedBefore.length > 0 && (
+              <div className="fc-pp-reprint" role="status">
+                <WarningIcon size={16} />
+                <div className="fc-pp-reprint-text">
+                  {inRange.length === 1 ? (
+                    <strong>
+                      Badge {[formatSequence(seqOf(printedBefore[0])), printedBefore[0].data.badge_no].filter(Boolean).join(' · ')} was printed before
+                      {printed[printedBefore[0].data.qr_value].count > 1 ? ` (${printed[printedBefore[0].data.qr_value].count} times)` : ''}
+                    </strong>
+                  ) : (
+                    <strong>
+                      {printedBefore.length === inRange.length ? `All ${inRange.length}` : `${printedBefore.length} of ${inRange.length}`} badges were printed before
+                      {rangeOf(printedBefore) ? `: ${rangeOf(printedBefore)}` : ''}
+                    </strong>
+                  )}
+                  {lastPrint && (
+                    <span>
+                      Last sent to print {formatWhen(lastPrint.last_printed_at)}{lastPrint.last_printed_by ? ` by ${lastPrint.last_printed_by}` : ''}
+                      {' '}({lastPrint.last_mode === 'qr-only' ? 'QR only' : 'Pass + QR'}). Printing again makes a second badge with the same number.
+                    </span>
+                  )}
+                  {inRange.length > 1 && (
+                    <label className="fc-pp-reprint-skip">
+                      <input type="checkbox" checked={skipPrinted} onChange={(e) => setSkipPrinted(e.target.checked)} />
+                      Leave out the {printedBefore.length} already printed
+                    </label>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="fc-pp-field">
               <span className="fc-pp-label">What to print</span>
               <Segmented
@@ -261,6 +491,26 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
               </label>
             )}
 
+            {cardSize && (
+              <div className="fc-pp-field">
+                <span className="fc-pp-label">Paper</span>
+                <Segmented
+                  label="Paper"
+                  value={paper}
+                  options={[
+                    { key: 'a4', label: 'A4 sheet', hint: 'Several per A4 page, cut afterwards' },
+                    { key: 'card', label: `Card ${cardLabel}`, hint: 'One pre-cut card per page' }
+                  ]}
+                  onChange={setPaper}
+                />
+                {!isA4 && (
+                  <span className="fc-pp-hint">
+                    One card per page at {cardLabel}{mixedSizes ? ' (each page takes the size of its card)' : ''}. In the print window choose the card printer, paper size {cardLabel}, margins None and scale 100%; turn on borderless if the printer offers it.
+                  </span>
+                )}
+              </div>
+            )}
+
             {isA4 && (
               <div className="fc-pp-field">
                 <span className="fc-pp-label">Page layout (A4)</span>
@@ -272,27 +522,24 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
                 />
                 <div className="fc-pp-margins">
                   <label className="fc-pp-margins-label">
-                    <span>No margins</span>
+                    <span>Margins</span>
                     <span className="fc-toggle-switch fc-pp-switch-sm">
                       <input
                         type="checkbox"
                         role="switch"
-                        checked={layout.margins === 'none'}
-                        onChange={(e) => setLayout({ margins: e.target.checked ? 'none' : 'standard' })}
-                        aria-label="No margins"
+                        checked={layout.margins !== 'none'}
+                        onChange={(e) => setLayout({ margins: e.target.checked ? 'standard' : 'none' })}
+                        aria-label="Margins"
                       />
                       <span className="fc-toggle-slider" />
                     </span>
                   </label>
-                  <span className="fc-pp-info" tabIndex={0} role="button" aria-label="About margins" aria-describedby={MARGINS_INFO_ID}>
-                    <InfoIcon size={14} />
-                    <span className="fc-pp-info-pop" id={MARGINS_INFO_ID} role="tooltip">
-                      <strong>No margins on</strong>
-                      <span>Passes touch the page edges and each other. Most office printers can't print the outer 3–5 mm, so trim after printing or use a borderless printer.</span>
-                      <strong>Off</strong>
-                      <span>8 mm page margin and 4 mm cut gaps.</span>
-                    </span>
-                  </span>
+                  <InfoPopover id={MARGINS_INFO_ID} label="About margins">
+                    <strong>Margins on</strong>
+                    <span>8 mm page margin and 4 mm cut gaps.</span>
+                    <strong>Off</strong>
+                    <span>Passes touch the page edges and each other. Most office printers can't print the outer 3–5 mm, so trim after printing or use a borderless printer.</span>
+                  </InfoPopover>
                 </div>
                 {page && (
                   <>
@@ -332,7 +579,7 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
                         </label>
                         {page.layout.margins === 'standard' && page.layout.noMarginsFits && (
                           <button type="button" className="fc-pp-btn is-small" onClick={() => setLayout({ margins: 'none', shrink: false })}>
-                            Use no margins instead (100%)
+                            Turn margins off instead (100%)
                           </button>
                         )}
                       </div>
@@ -358,7 +605,7 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
             </div>
             <div className="fc-pp-preview-box">
               {loading && <span className="fc-pp-muted">Loading templates…</span>}
-              {!loading && printable.length === 0 && <span className="fc-pp-muted">Nothing to print in this mode.</span>}
+              {!loading && printable.length === 0 && <span className="fc-pp-muted">{skipPrinted && inRange.length > 0 ? 'Every badge here was printed before. Untick "Leave out" to print them again.' : (rangeError ? 'Fix the badge range to see the preview.' : rangeActive && inRange.length === 0 ? 'No badges in this range.' : 'Nothing to print in this mode.')}</span>}
               {!loading && printable.length > 0 && previewHtml && (
                 <div className={`fc-pp-preview-stage ${page ? 'is-page' : ''}`} style={{ width: stageW, height: stageH }}>
                   <div
@@ -370,14 +617,27 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
                 </div>
               )}
             </div>
-            {page && <span className="fc-pp-page-count">Page 1 of {totalPages}</span>}
+            {!isA4 && printable.length > 0 && (
+              <span className="fc-pp-page-count">
+                Card 1 of {printable.length}{rangeOf(printable.slice(0, 1)) ? ` · ${rangeOf(printable.slice(0, 1))}` : ''}
+              </span>
+            )}
+            {page && (
+              <span className="fc-pp-page-count">
+                Page 1 of {totalPages}
+                {rangeOf(printable.slice(0, page.layout.perPage)) ? ` · ${rangeOf(printable.slice(0, page.layout.perPage))}` : ''}
+              </span>
+            )}
           </div>
         </div>
 
         <div className="fc-modal-footer fc-pp-footer">
-          <span className="fc-pp-count">{printable.length} {printable.length === 1 ? unit[0] : unit[1]}</span>
-          <button type="button" className="fc-pp-btn" onClick={onClose}>Cancel</button>
-          <button type="button" className="fc-pp-btn is-primary" onClick={handlePrint} disabled={loading || printing || printable.length === 0 || (page && !page.layout.printable)}>
+          <span className="fc-pp-count">
+            {printable.length} {printable.length === 1 ? unit[0] : unit[1]}
+            {jobRange && <span className="fc-pp-range">Badges {jobRange}{unnumbered ? ` + ${unnumbered} without a number` : ''}</span>}
+          </span>
+          {lastSent && <span className="fc-pp-saved fc-pp-sent" role="status"><CheckCircleIcon size={14} /> {lastSent}</span>}
+          <button type="button" className="fc-pp-btn is-primary" onClick={handlePrint} disabled={loading || printing || rangeError || printable.length === 0 || (page && !page.layout.printable)}>
             <PrintIcon size={16} /> {printing ? 'Preparing…' : 'Print'}
           </button>
         </div>

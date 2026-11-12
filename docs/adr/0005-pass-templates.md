@@ -131,5 +131,31 @@ Festivals need their own designs, often several per edition (Delegate, Press, Ju
 
    Until one is chosen, Print stays disabled. For example, four 105 × 145.55 mm passes on A4 print at 91% with standard margins, or at 100% with no margins.
 6. **A4 only (2026-11-11).** The print dialog no longer offers the card printer: every print is an A4 sheet. Margins are a single "No margins" switch (off = 8 mm margin, 4 mm cut gaps). The card-printer code path in `renderSheet` is kept but unused.
-7. **Margins switch (2026-11-11).** A compact "No margins" switch sits under the orientation control, with the printer-edge warning in its ⓘ tooltip. It is off by default (standard margins); a viewer's saved choice wins.
+7. **Margins switch (2026-11-11).** A compact "No margins" switch sits under the orientation control, with the printer-edge warning in its ⓘ tooltip. It is off by default (standard margins); a viewer's saved choice wins. **Changed 2026-11-12:** the switch is labelled **Margins** (on = 8 mm margin and 4 mm cut gaps) and is on every time the dialog opens; turning it off applies to that dialog only and is never remembered.
 8. **Rotation in 45° steps (2026-11-11).** Elements can turn 0–315° in 45° steps. At 90° and 270° the content turns inside its box, so the box stays the area it fills; at the other 45° steps the whole box turns around its centre. The properties panel also has line height (text) and Centre on the pass (horizontally, vertically or both).
+9. **Editor grid (2026-11-12).** The editor preview has a Grid switch (1, 2, 5 or 10 mm, counted from the top-left corner like Left / Top, with stronger lines every 10 mm) and dashed centre lines. A centre line turns solid when the selected element is exactly centred, and dragging snaps an element's centre onto the pass centre (Alt places it freely). Screen only; never printed.
+
+## Amendment 3: Badge range and print history in the print dialog (2026-11-12)
+
+**Context.** Desk staff print badge stock in batches and couldn't see which badge numbers a print covers, or whether some were printed already. Printing a badge number twice creates two physical badges with the same QR.
+
+**Decision**
+1. **Range shown.** The dialog footer shows the badge sequence numbers the print covers (for example "Badges #001–#075"; gaps become several ranges, long lists end with "+ N more"), and the preview shows the range on page 1. Bulk QR sends badges in number order, so each A4 page holds a run of numbers.
+2. **Print history** in our own table `qr_print_log` (migration `024_qr_print_log.js`): one row per badge per Print press, with the print job, mode (`full` / `qr-only`), template and user. `saas_qr` is shared with other Freecomers systems, so it is not changed.
+   - Badges are identified by their QR value (`saas_qr.qr_data`), which every print source has (Bulk QR stock and delegates), so the Audience and Assign QR prints are recorded too.
+   - API: `POST /api/registration/qr/print-status` `{ qr_values }` and `POST /api/registration/qr/print-log` `{ mode, items: [{ qr_value, template_id }] }`, both `registration.view` (desk staff print too). Recording never blocks printing.
+   - **Limit:** "printed" means sent to the browser's print dialog. The browser doesn't report whether the person printed or cancelled.
+3. **Badge range picker.** "Badges to print" has From / To fields (sequence numbers), filled in with the whole list. The count, footer range, preview, page count and warning all follow the chosen range; "All badges" resets it; From above To shows an error and disables Print. The range can only narrow the badges the dialog was opened with (on Bulk QR, the current tab and filters).
+4. **Warning.** When some badges in the print were printed before, the dialog shows how many and their range, when and by whom they were last sent to print and in which mode, and offers **Leave out the N already printed** (off by default). A single reprint names the badge and how many times it was printed.
+5. **Dialog stays open (2026-11-12).** Only the close (×) button closes the print dialog: not a click outside it, Escape or Print. There is no Cancel button. After Print, the footer says what was sent ("Sent 20 passes (#001–#020) to print.") and the printed-before warning refreshes, so staff can print the next batch straight away.
+
+## Amendment 4: Artwork bleed and printing on pre-cut cards (2026-11-12)
+
+**Context.** KASHISH prints delegate passes on pre-cut 4 × 6 in cards from a 4.5 × 6.5 in artwork: the extra ¼ in on each side is bleed, so the colour runs to the card edge even if the print is slightly off. Templates had one size and stretched the artwork to it, so the bleed printed inside the card. Printing was A4 only (Amendment 2, item 6).
+
+**Decision**
+1. **Bleed per artwork template:** `config.bleedMm` (0–12.7 mm, validated in `sanitizeConfig`; no migration, it lives in `config_json`). The template size stays the card size, and the artwork covers the card plus the bleed on each side. `renderElements` centres the larger artwork and the card edge crops it (`bleedOf()` in `passRenderer.js`).
+2. **Editor:** Artwork has a Bleed field with None / 3 mm / ¼ in (6.35 mm), and shows the artwork size in mm and inches. The preview shows the whole artwork with the bleed dimmed and a dashed cut line. The artwork's shape check, "Match the artwork", the dpi warning and the upload resolution use the artwork size (card + bleed). Changing the card size or the bleed moves elements with the artwork, so they stay on the same spot of the design. Sizes that are whole eighths of an inch are labelled in inches (`inchLabel()`).
+3. **Paper choice is back in the print dialog:** **A4 sheet** or **Card** (labelled with the card size, e.g. "Card 4 × 6 in"). Card prints one pass per page at the pass size (`renderSheet(..., 'card')`, named `@page` rules for mixed sizes), hides the A4 layout controls, and tells staff to pick the card printer, paper size, margins None, scale 100% and borderless. The choice is remembered per viewer. This replaces Amendment 2, item 6 (A4 only).
+4. To convert an existing artwork template whose size was taken from a 4.5 × 6.5 in artwork: choose "Large lanyard (4 × 6 in)", then Bleed ¼ in.
+

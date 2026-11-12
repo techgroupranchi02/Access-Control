@@ -1453,6 +1453,7 @@ export default function AudienceSettingsPage() {
     voting_source: 'freecomers',
     kashish_voting_from: null,
     kashish_voting_to: null,
+    kashish_event_id: null,
     festival_name: ''
   });
   const [loading, setLoading] = useState(true);
@@ -3694,6 +3695,25 @@ export default function AudienceSettingsPage() {
 
                 {settings.voting_source === 'kashish' && (
                   <div className="fc-as-vote-period" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '14px' }}>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label htmlFor="kashishEventId" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
+                        Kashish event ID
+                      </label>
+                      <input
+                        id="kashishEventId"
+                        type="text"
+                        maxLength={64}
+                        placeholder="For example: EF3j920261"
+                        value={settings.kashish_event_id || ''}
+                        onChange={(e) => setSettings({ ...settings, kashish_event_id: e.target.value.trim() || null })}
+                        style={{ width: '100%', maxWidth: '320px', boxSizing: 'border-box', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontFamily: 'var(--fc-font-mono, monospace)' }}
+                      />
+                      <small style={{ display: 'block', marginTop: '4px', color: settings.kashish_event_id ? 'var(--fc-text-muted)' : 'var(--fc-warning-text)', fontSize: '0.75rem' }}>
+                        {settings.kashish_event_id
+                          ? 'Only votes the Kashish app tags with this event count. Given by the Kashish team.'
+                          : 'Not set: votes from every Kashish event are read. Ask the Kashish team for this festival\'s event ID.'}
+                      </small>
+                    </div>
                     <div>
                       <label htmlFor="kashishFrom" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '4px' }}>
                         Voting from

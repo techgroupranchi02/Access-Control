@@ -14,7 +14,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import usePassTemplates from '../../hooks/usePassTemplates';
 import {
-  PASS_MODES, SIZE_PRESETS, MM_PX, SAMPLE_PASS_DATA,
+  PASS_MODES, SIZE_PRESETS, MM_PX, SAMPLE_PASS_DATA, MAX_BLEED_MM, bleedOf, inchLabel,
   passCss, passDataFromAttendee, pieceSize, renderPass, fitWhenReady, ensurePassFonts
 } from '../../utils/passRenderer';
 import { readPassImage, effectiveDpi } from '../../utils/passImage';
@@ -48,13 +48,19 @@ function clampPos(p, W, H) {
 }
 
 /** Scales every element to a new pass size (positions by width/height, text by the smaller ratio). */
-function scaleElements(elements, W0, H0, W1, H1) {
-  const sx = W1 / W0;
-  const sy = H1 / H0;
+/**
+ * Rescale elements when the pass size or the artwork bleed changes, so each element stays on the
+ * same spot of the artwork. The artwork covers the pass plus the bleed (b) on each side, so a
+ * position maps through artwork coordinates: x' = (x + b0) · (W1 + 2·b1) / (W0 + 2·b0) − b1.
+ * With no bleed this is plain proportional scaling.
+ */
+function scaleElements(elements, W0, H0, W1, H1, b0 = 0, b1 = 0) {
+  const sx = (W1 + 2 * b1) / (W0 + 2 * b0);
+  const sy = (H1 + 2 * b1) / (H0 + 2 * b0);
   const sf = Math.min(sx, sy);
   return elements.map((el) => {
     const p = el.position;
-    const position = clampPos({ ...p, x: p.x * sx, y: p.y * sy, w: p.w * sx, h: p.h * sy }, W1, H1);
+    const position = clampPos({ ...p, x: (p.x + b0) * sx - b1, y: (p.y + b0) * sy - b1, w: p.w * sx, h: p.h * sy }, W1, H1);
     const m = { ...el.metadata };
     if (m.sizePt) m.sizePt = round2(Math.max(4, m.sizePt * sf));
     if (m.padding) m.padding = round2(m.padding * sf);
@@ -72,9 +78,52 @@ function artworkStarterElements(W, H) {
   ];
 }
 
+// ── Grid: mm guides over the preview (screen only, never printed) ────────────
+
+const GRID_KEY = 'fc_pte_grid_v1';
+const GRID_STEPS = [1, 2, 5, 10];
+const CENTRE_EPS = 0.05; // mm: closer than this counts as centred
+const SNAP_PX = 6;       // screen px: a dragged element's centre snaps to the pass centre within this
+
+function readGridPref() {
+  try {
+    const v = JSON.parse(localStorage.getItem(GRID_KEY) || 'null');
+    if (v && typeof v === 'object') return { on: Boolean(v.on), step: GRID_STEPS.includes(v.step) ? v.step : 5 };
+  } catch { /* storage unavailable */ }
+  return { on: false, step: 5 };
+}
+
+/**
+ * Lines every `step` mm from the pass's top-left corner (the origin of Left / Top), stronger every
+ * 10 mm, plus dashed centre lines. A centre line turns solid when the selected element sits on it.
+ */
+function GridOverlay({ W, H, px, step, show, centredX, centredY }) {
+  const lines = [];
+  if (show) {
+    const major = (v) => Math.abs(v / 10 - Math.round(v / 10)) < 1e-6;
+    for (let x = step; x < W - 1e-6; x += step) {
+      const v = round2(x);
+      lines.push(<line key={`x${v}`} className={major(v) ? 'is-major' : ''} x1={v * px} y1={0} x2={v * px} y2={H * px} />);
+    }
+    for (let y = step; y < H - 1e-6; y += step) {
+      const v = round2(y);
+      lines.push(<line key={`y${v}`} className={major(v) ? 'is-major' : ''} x1={0} y1={v * px} x2={W * px} y2={v * px} />);
+    }
+  }
+  const cx = (W / 2) * px;
+  const cy = (H / 2) * px;
+  return (
+    <svg className="fc-pte-guides" width={W * px} height={H * px} aria-hidden="true">
+      {lines}
+      {(show || centredX) && <line className={`is-centre ${centredX ? 'is-hit' : ''}`} x1={cx} y1={0} x2={cx} y2={H * px} />}
+      {(show || centredY) && <line className={`is-centre ${centredY ? 'is-hit' : ''}`} x1={0} y1={cy} x2={W * px} y2={cy} />}
+    </svg>
+  );
+}
+
 // ── Canvas: the live preview with draggable element boxes ───────────────────
 
-function ElementCanvas({ template, data, mode, ctx, scale, selected, onSelect, onElementsChange, onDelete }) {
+function ElementCanvas({ template, data, mode, ctx, scale, selected, onSelect, onElementsChange, onDelete, grid }) {
   const drag = useRef(null);
   const stageRef = useRef(null);
   const W = template.width_mm;
@@ -99,21 +148,41 @@ function ElementCanvas({ template, data, mode, ctx, scale, selected, onSelect, o
     const dx = (e.clientX - d.x0) / px;
     const dy = (e.clientY - d.y0) / px;
     const p = d.pos;
-    const position = d.kind === 'move'
-      ? { ...p, x: round2(Math.min(Math.max(0, p.x + dx), W - p.w)), y: round2(Math.min(Math.max(0, p.y + dy), H - p.h)) }
-      : { ...p, w: round2(Math.min(Math.max(2, p.w + dx), W - p.x)), h: round2(Math.min(Math.max(2, p.h + dy), H - p.y)) };
+    let position;
+    if (d.kind === 'move') {
+      let x = Math.min(Math.max(0, p.x + dx), W - p.w);
+      let y = Math.min(Math.max(0, p.y + dy), H - p.h);
+      // Snap the element's centre onto the pass centre (hold Alt to place freely)
+      if (!e.altKey) {
+        const snap = SNAP_PX / px;
+        if (Math.abs(x + p.w / 2 - W / 2) < snap) x = (W - p.w) / 2;
+        if (Math.abs(y + p.h / 2 - H / 2) < snap) y = (H - p.h) / 2;
+      }
+      position = { ...p, x: round2(x), y: round2(y) };
+    } else {
+      position = { ...p, w: round2(Math.min(Math.max(2, p.w + dx), W - p.x)), h: round2(Math.min(Math.max(2, p.h + dy), H - p.y)) };
+    }
     onElementsChange(elements.map((x) => (x.cid === d.cid ? { ...x, position } : x)));
   };
   const end = () => { drag.current = null; };
 
-  return (
-    <div className="fc-pte-canvas" style={{ width: W * px, height: H * px }} onPointerDown={() => onSelect(null)}>
+  const sel = elements.find((x) => x.cid === selected);
+  const centredX = Boolean(sel) && Math.abs(sel.position.x + sel.position.w / 2 - W / 2) < CENTRE_EPS;
+  const centredY = Boolean(sel) && Math.abs(sel.position.y + sel.position.h / 2 - H / 2) < CENTRE_EPS;
+
+  // Artwork with bleed: show the whole artwork, dimmed outside the pass, with the cut line
+  const bleed = bleedOf(template);
+  const bleedArt = bleed > 0 && template.background_image ? template.background_image : null;
+
+  const canvas = (
+    <div className={`fc-pte-canvas ${bleed > 0 ? 'has-bleed' : ''}`} style={{ width: W * px, height: H * px }} onPointerDown={() => onSelect(null)}>
       <div
         ref={stageRef}
         style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: 'max-content', pointerEvents: 'none' }}
         // Renderer output: every value is escaped in passRenderer
         dangerouslySetInnerHTML={{ __html: html }}
       />
+      <GridOverlay W={W} H={H} px={px} step={grid?.step || 5} show={Boolean(grid?.on)} centredX={centredX} centredY={centredY} />
       {elements.map((el) => {
         const p = el.position;
         return (
@@ -157,6 +226,14 @@ function ElementCanvas({ template, data, mode, ctx, scale, selected, onSelect, o
       })}
     </div>
   );
+  if (!bleed) return canvas;
+  return (
+    <div className="fc-pte-bleed" style={{ width: (W + 2 * bleed) * px, height: (H + 2 * bleed) * px, padding: bleed * px }}>
+      {bleedArt && <img className="fc-pte-bleed-art" src={bleedArt} alt="" />}
+      <span className="fc-pte-bleed-shade" aria-hidden="true" />
+      {canvas}
+    </div>
+  );
 }
 
 // ── Editor ────────────────────────────────────────────────────────────────────
@@ -179,6 +256,12 @@ export default function PassTemplateEditor({ templateId }) {
   const [confirmRearrange, setConfirmRearrange] = useState(false);
   const [sampleList, setSampleList] = useState([]);
   const [sampleId, setSampleId] = useState('sample');
+  const [grid, setGridState] = useState(readGridPref);
+  const setGrid = (patch) => setGridState((g) => {
+    const next = { ...g, ...patch };
+    try { localStorage.setItem(GRID_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+    return next;
+  });
   const [previewBox, setPreviewBox] = useState({ w: 360, h: 520 }); // inner size of the preview box
   const previewRef = useRef(null);
   const stageRef = useRef(null);
@@ -268,13 +351,30 @@ export default function PassTemplateEditor({ templateId }) {
   const selectedEl = elements.find((e) => e.cid === selected) || null;
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
   const setConfig = (patch) => setDraft((d) => ({ ...d, config: { ...d.config, ...patch } }));
+  // Bleed (artwork only): the artwork covers the pass plus this much on each side
+  const bleed = bleedOf(draft);
+  const artW = W + 2 * bleed;
+  const artH = H + 2 * bleed;
+  // Changing the bleed resizes the artwork around the card: move elements with it
+  const setBleed = (v) => setDraft((d) => {
+    const b1 = round2(Math.min(MAX_BLEED_MM, Math.max(0, Number(v) || 0)));
+    const b0 = bleedOf(d);
+    const w = Number(d.width_mm);
+    const h = Number(d.height_mm);
+    return { ...d, config: { ...d.config, bleedMm: b1 }, elements: b1 === b0 ? d.elements : scaleElements(d.elements || [], w, h, w, h, b0, b1) };
+  });
+  // Pass height that gives the artwork (pass + bleed) this image's shape, keeping the width
+  const heightForImage = (wPx, hPx) => round2(Math.min(300, Math.max(20, (W + 2 * bleed) * (hPx / wPx) - 2 * bleed)));
   const setElements = (els) => setDraft((d) => ({ ...d, elements: els }));
   const updateElement = (cid, patch) => setDraft((d) => ({ ...d, elements: d.elements.map((e) => (e.cid === cid ? { ...e, ...patch } : e)) }));
 
   const setSize = (w, h) => {
     const nw = round2(Math.min(300, Math.max(20, Number(w) || 20)));
     const nh = round2(Math.min(300, Math.max(20, Number(h) || 20)));
-    setDraft((d) => ({ ...d, width_mm: nw, height_mm: nh, elements: scaleElements(d.elements || [], Number(d.width_mm), Number(d.height_mm), nw, nh) }));
+    setDraft((d) => {
+      const b = bleedOf(d); // the artwork keeps its bleed, so elements follow the artwork
+      return { ...d, width_mm: nw, height_mm: nh, elements: scaleElements(d.elements || [], Number(d.width_mm), Number(d.height_mm), nw, nh, b, b) };
+    });
   };
 
   const fetchLayout = async (w, h) => {
@@ -406,13 +506,13 @@ export default function PassTemplateEditor({ templateId }) {
     if (!file) return;
     setImageError('');
     try {
-      const img = await readPassImage(file, Math.max(W, H));
+      const img = await readPassImage(file, Math.max(isArtwork ? artW : W, isArtwork ? artH : H));
       set({ background_image: img.dataUrl });
       setImageDirty(true);
-      // Artwork: match the pass shape to the image, keeping the current width
+      // Artwork: match the pass shape to the image (pass + bleed), keeping the current width
       if (isArtwork) {
         const ratio = img.heightPx / img.widthPx;
-        if (Math.abs(ratio - H / W) > 0.02) setSize(W, round2(Math.min(300, Math.max(20, W * ratio))));
+        if (Math.abs(ratio - artH / artW) > 0.02) setSize(W, heightForImage(img.widthPx, img.heightPx));
       }
     } catch (err) {
       setImageError(err.message);
@@ -420,8 +520,8 @@ export default function PassTemplateEditor({ templateId }) {
   };
   const removeBackground = () => { set({ background_image: null }); setImageDirty(true); };
 
-  const dpi = imageInfo ? Math.min(effectiveDpi(imageInfo.widthPx, W), effectiveDpi(imageInfo.heightPx, H)) : 0;
-  const imageRatioOff = isArtwork && imageInfo && Math.abs(imageInfo.heightPx / imageInfo.widthPx - H / W) > 0.02;
+  const dpi = imageInfo ? Math.min(effectiveDpi(imageInfo.widthPx, isArtwork ? artW : W), effectiveDpi(imageInfo.heightPx, isArtwork ? artH : H)) : 0;
+  const imageRatioOff = isArtwork && imageInfo && Math.abs(imageInfo.heightPx / imageInfo.widthPx - artH / artW) > 0.02;
 
   const save = async () => {
     setSaveError('');
@@ -450,11 +550,12 @@ export default function PassTemplateEditor({ templateId }) {
   };
 
   const { w: pw, h: ph } = pieceSize(draft, mode, ctx);
+  const previewBleed = mode === 'qr-only' ? 0 : bleed; // the preview also shows the bleed area
   // Desktop: the preview box fills the sticky panel, so its measured height is the limit.
   // Stacked (≤1024px): the box grows with its content, so cap by the window height instead.
   const stacked = typeof window !== 'undefined' && window.matchMedia('(max-width: 1024px)').matches;
   const maxPreviewH = stacked ? Math.max(260, window.innerHeight * 0.62) : previewBox.h;
-  const scale = Math.min(2.5, previewBox.w / (pw * MM_PX), maxPreviewH / (ph * MM_PX));
+  const scale = Math.min(2.5, previewBox.w / ((pw + 2 * previewBleed) * MM_PX), maxPreviewH / ((ph + 2 * previewBleed) * MM_PX));
   const layers = elements.slice().reverse(); // top-most first, as in design tools
 
   return (
@@ -529,7 +630,9 @@ export default function PassTemplateEditor({ templateId }) {
                 {W >= H ? 'Make portrait' : 'Make landscape'}
               </button>
             </div>
-            <p className="fc-pt-hint">Elements scale with the pass when you change its size.</p>
+            <p className="fc-pt-hint">
+              {inchLabel(W, H) ? `${inchLabel(W, H)}. ` : ''}{isArtwork ? 'This is the card size, after cutting. ' : ''}Elements scale with the pass when you change its size.
+            </p>
           </section>
 
           {isArtwork ? (
@@ -541,14 +644,31 @@ export default function PassTemplateEditor({ templateId }) {
                 </button>
                 {draft.background_image && <button type="button" className="fc-pt-btn is-quiet" onClick={removeBackground}><DeleteIcon size={14} /> Remove</button>}
               </div>
-              <p className="fc-pt-hint">PNG or JPG at 300 dpi for the pass size. A PDF design can be exported as PNG first.</p>
+              <p className="fc-pt-hint">PNG or JPG at 300 dpi for the artwork size. A PDF design can be exported as PNG first.</p>
+
+              <div className="fc-pte-bleed-field">
+                <label className="fc-pte-field is-num">
+                  <span className="fc-pt-label">Bleed (mm)</span>
+                  <NumInput min={0} max={MAX_BLEED_MM} step={0.05} value={bleed} onCommit={setBleed} />
+                </label>
+                <div className="fc-pte-bleed-quick" role="group" aria-label="Common bleeds">
+                  {[{ v: 0, l: 'None' }, { v: 3, l: '3 mm' }, { v: 6.35, l: '¼ in (6.35 mm)' }].map((o) => (
+                    <button key={o.v} type="button" className={`fc-pt-btn is-small ${Math.abs(bleed - o.v) < 0.01 ? 'is-active' : ''}`} aria-pressed={Math.abs(bleed - o.v) < 0.01} onClick={() => setBleed(o.v)}>{o.l}</button>
+                  ))}
+                </div>
+              </div>
+              <p className="fc-pt-hint">
+                <span>{bleed > 0
+                  ? <>Bleed is added on each side. Artwork size: <strong>{round2(artW)} × {round2(artH)} mm{inchLabel(artW, artH) ? ` (${inchLabel(artW, artH)})` : ''}</strong>. The card shows the middle {round2(W)} × {round2(H)} mm; the extra {round2(bleed)} mm on each side is cut off, or printed past the edge of a pre-cut card so no white edge shows.</>
+                  : 'Bleed is extra artwork beyond the card edge, so a slightly off cut or print shows no white edge. Set it when the artwork is bigger than the card, for example 6.35 mm for a 4.5 × 6.5 in artwork on a 4 × 6 in card.'}</span>
+              </p>
               {draft.background_image && dpi > 0 && dpi < 150 && (
                 <p className="fc-pt-warn"><WarningIcon size={14} /> This image is only about {dpi} dpi at this size and may print blurry.</p>
               )}
               {imageRatioOff && (
                 <p className="fc-pt-warn">
                   <WarningIcon size={14} /> The artwork shape doesn't match the pass size, so it will be stretched.
-                  <button type="button" className="fc-pt-link" onClick={() => setSize(W, W * (imageInfo.heightPx / imageInfo.widthPx))}>Match the artwork</button>
+                  <button type="button" className="fc-pt-link" onClick={() => setSize(W, heightForImage(imageInfo.widthPx, imageInfo.heightPx))}>Match the artwork</button>
                 </p>
               )}
             </section>
@@ -595,7 +715,7 @@ export default function PassTemplateEditor({ templateId }) {
 
           <section className="fc-pte-card">
             <h2 className="fc-pte-h2">Elements</h2>
-            <p className="fc-pt-hint">Drag an element on the preview to move it and its corner to resize. Arrow keys nudge the selected element; Delete removes it.</p>
+            <p className="fc-pt-hint">Drag an element on the preview to move it and its corner to resize. It snaps to the centre of the pass (hold Alt to place it freely). Arrow keys nudge the selected element; Delete removes it.</p>
             <div className="fc-pte-add">
               <button type="button" className="fc-pt-btn" onClick={addText}><TextFieldsIcon size={16} /> Text</button>
               <div className="fc-pte-add-menu">
@@ -679,7 +799,25 @@ export default function PassTemplateEditor({ templateId }) {
           <div className="fc-pte-card fc-pte-preview-card">
             <div className="fc-pte-preview-head">
               <h2 className="fc-pte-h2">Preview</h2>
-              <span className="fc-pp-size">{round2(pw)} × {round2(ph)} mm</span>
+              <div className="fc-pte-preview-tools">
+                <span className="fc-pp-size">{round2(pw)} × {round2(ph)} mm{inchLabel(pw, ph) ? ` (${inchLabel(pw, ph)})` : ''}{previewBleed > 0 ? ` + ${round2(previewBleed)} mm bleed` : ''}</span>
+                {mode !== 'qr-only' && (
+                  <>
+                    <label className="fc-pte-grid-toggle">
+                      <span>Grid</span>
+                      <span className="fc-toggle-switch fc-pp-switch-sm">
+                        <input type="checkbox" role="switch" checked={grid.on} onChange={(e) => setGrid({ on: e.target.checked })} aria-label="Show grid" />
+                        <span className="fc-toggle-slider" />
+                      </span>
+                    </label>
+                    {grid.on && (
+                      <select className="fc-pte-grid-step" value={grid.step} onChange={(e) => setGrid({ step: Number(e.target.value) })} aria-label="Grid spacing">
+                        {GRID_STEPS.map((n) => <option key={n} value={n}>{n} mm</option>)}
+                      </select>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
             <div className="fc-pte-preview-controls">
               <div className="fc-pp-segment" role="radiogroup" aria-label="Preview mode">
@@ -706,6 +844,7 @@ export default function PassTemplateEditor({ templateId }) {
                   onSelect={setSelected}
                   onElementsChange={setElements}
                   onDelete={deleteElement}
+                  grid={grid}
                 />
               ) : (
                 <div className="fc-pte-stage" style={{ width: pw * MM_PX * scale, height: ph * MM_PX * scale }}>
@@ -719,7 +858,7 @@ export default function PassTemplateEditor({ templateId }) {
               )}
             </div>
             <p className="fc-pt-hint fc-pte-preview-hint">
-              {mode === 'qr-only' ? 'QR only stickers use the festival\'s QR Settings, set in the print dialog.' : 'Exactly what prints. Sample details appear only here.'}
+              {mode === 'qr-only' ? 'QR only stickers use the festival\'s QR Settings, set in the print dialog.' : `${previewBleed > 0 ? 'The dimmed edge is the bleed, outside the cut line. ' : ''}${grid.on ? `Grid lines every ${grid.step} mm from the card's top-left corner, with the centre dashed. The grid and sample details appear only here.` : 'Exactly what prints. Sample details appear only here.'}`}
             </p>
           </div>
         </aside>
