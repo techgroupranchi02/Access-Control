@@ -70,12 +70,15 @@ export const FONTS = [
 const fontFamily = (key) => (FONTS.find((f) => f.key === key) || FONTS[0]).family;
 
 /** Adds the pass fonts stylesheet to the page once. */
+/** The Google Fonts stylesheet for every pass font (also used by the server-made card PDFs). */
+export const passFontsUrl = () => `https://fonts.googleapis.com/css2?${FONTS.map((f) => `family=${f.g}`).join('&')}&display=swap`;
+
 export function ensurePassFonts() {
   if (typeof document === 'undefined' || document.getElementById('fc-pass-fonts')) return;
   const link = document.createElement('link');
   link.id = 'fc-pass-fonts';
   link.rel = 'stylesheet';
-  link.href = `https://fonts.googleapis.com/css2?${FONTS.map((f) => `family=${f.g}`).join('&')}&display=swap`;
+  link.href = passFontsUrl();
   document.head.appendChild(link);
 }
 

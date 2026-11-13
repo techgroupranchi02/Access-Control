@@ -59,6 +59,8 @@ app.use(securityHeaders());
 app.use(corsPolicy());
 app.use(permissionsPolicy());
 app.use(generalLimiter);
+// Per-card PDF jobs carry the card markup: a larger body, for this path only
+app.use('/api/registration/qr/card-pdfs', express.json({ limit: '40mb' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());

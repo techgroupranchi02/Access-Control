@@ -79,6 +79,8 @@ registrationRouter.get('/qr/pool', requirePermission('registration.view_roster')
 // Badge print history: every print dialog (Bulk QR, Audience, Assign QR desk) checks and records it (ADR 0005, Amendment 3)
 registrationRouter.post('/qr/print-status', requirePermission('registration.view'), audienceController.getQrPrintStatus);
 registrationRouter.post('/qr/print-log', requirePermission('registration.view'), audienceController.logQrPrints);
+// One PDF per card, as a ZIP (same permission as printing)
+registrationRouter.post('/qr/card-pdfs', requirePermission('registration.view'), audienceController.downloadCardPdfs);
 registrationRouter.get('/qr/check/:code', requirePermission('registration.view'), staffCredentialLimiter, audienceController.checkQRCode);
 
 // ── 5. Public Mobile Voter Router (/api/public/vote) [No Staff Auth] ──────────

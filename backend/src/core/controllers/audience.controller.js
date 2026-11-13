@@ -15,6 +15,7 @@ const { query, getConnection } = require('../../config/database');
 const { PREBUILT_TEMPLATES, getAvailableTemplates, getTemplateByKey } = require('../services/registration-form-templates');
 const qrCredential = require('../services/qrCredential.service');
 const qrPrintLog = require('../services/qrPrintLog.service');
+const cardPdf = require('../services/cardPdf.service');
 const { sendDelegateConfirmation, isDayPass } = require('../services/delegateConfirmationEmail');
 const kashishExternal = require('../services/kashishExternalVotes.service');
 const { getFilmFestivalId } = require('../services/festivalIds.service');
@@ -1198,6 +1199,23 @@ async function listAttendance(req, res) {
       if (err.status === 400) return res.status(400).json({ success: false, message: err.message });
       console.error('Error recording badge prints:', err);
       res.status(500).json({ success: false, message: 'Could not record the print.' });
+    }
+  }
+
+  /**
+   * POST /api/registration/qr/card-pdfs
+   * One PDF per card of a print job, as a ZIP. The body is the job as the print dialog renders it:
+   * { zipName, css, fontsUrl, cards: [{ name, html }] }. Template images are loaded here (cardPdf.service).
+   */
+  async function downloadCardPdfs(req, res) {
+    try {
+      const zipName = typeof req.body?.zipName === 'string' && req.body.zipName.trim() ? req.body.zipName.trim().slice(0, 120) : 'cards';
+      await cardPdf.streamCardPdfZip(req.body, res, { eventId: getEventId(req), zipName });
+    } catch (err) {
+      if (res.headersSent) return;
+      if (err instanceof cardPdf.CardPdfError) return res.status(err.status).json({ success: false, message: err.message });
+      console.error('[CardPdf] Error making card PDFs:', err);
+      res.status(500).json({ success: false, message: 'Could not make the PDFs. Try again, or use Print.' });
     }
   }
 
@@ -3031,6 +3049,7 @@ async function listAttendance(req, res) {
     getQRPool,
     getQrPrintStatus,
     logQrPrints,
+    downloadCardPdfs,
     checkQRCode,
     assignAttendeeQR,
     listAttendees,

@@ -16439,6 +16439,7 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
   .fc-pp-footer { padding: 12px 16px; flex-wrap: wrap; }
   .fc-pp-count { flex-basis: 100%; }
   .fc-pp-footer .fc-pp-btn { flex: 1 1 0; height: 44px; }
+  .fc-pp-footer .fc-pp-btn.fc-pp-pdfs { padding: 0 10px; }
   .fc-pp-seg-btn { font-size: 0.8rem; padding: 6px 6px; }
 }
 
@@ -16834,3 +16835,6 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
 .fc-ae-send-confirmation strong { font-size: 0.88rem; color: var(--fc-text-main); overflow-wrap: anywhere; }
 .fc-ae-send-confirmation small { font-size: 0.78rem; color: var(--fc-text-secondary); line-height: 1.4; }
 .fc-ae-send-confirmation.is-disabled { cursor: default; opacity: 0.75; }
+
+/* Print dialog: Download PDFs (one PDF per card) */
+.fc-pp-pdfs { white-space: nowrap; }

@@ -126,6 +126,7 @@ npm run lint
     - Each template prints as Pass + QR or QR only, on A4 (orientation, margins and columns × rows; `sheetLayout()`) or one pre-cut card per page at the pass size.
     - Artwork templates can have a bleed (`config.bleedMm`): the template size is the card, the artwork covers card + bleed and is cropped at the card edge (`bleedOf()`). See ADR 0005 Amendment 4.
     - The print dialog lets staff pick a badge range (From / To), shows it (#001–#075) and records each Print press per badge in `qr_print_log` (`qrPrintLog.service.js`); badges printed before get a warning with "Leave out". See ADR 0005 Amendment 3.
+    - **Download PDFs** (Card paper) makes one PDF per card on the server and returns a ZIP: the browser sends the fitted card markup to `POST /api/registration/qr/card-pdfs`, and `cardPdf.service.js` renders it with Puppeteer, loading template images from the DB by id (the proxy refuses bodies over 1 MB). See ADR 0005 Amendment 5.
     - QR-only stickers don't use a template: they follow the festival's **QR Settings** (`pass_print_settings`, set in the print dialog; saving the default needs `settings.manage`).
   - API: `/api/pass-templates` (`pass-templates.controller.js`, validation and starters in `passTemplates.service.js`). Listing needs `registration.view`; changes need `settings.manage`.
   - Print badges and passes only through `frontend/src/core/utils/passRenderer.js` and `components/print/PrintPassesDialog.jsx`. Never hard-code festival text (name, venue, dates) on a pass; it comes from the festival's records or the template.

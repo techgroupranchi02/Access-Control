@@ -159,3 +159,14 @@ Festivals need their own designs, often several per edition (Delegate, Press, Ju
 3. **Paper choice is back in the print dialog:** **A4 sheet** or **Card** (labelled with the card size, e.g. "Card 4 × 6 in"). Card prints one pass per page at the pass size (`renderSheet(..., 'card')`, named `@page` rules for mixed sizes), hides the A4 layout controls, and tells staff to pick the card printer, paper size, margins None, scale 100% and borderless. The choice is remembered per viewer. This replaces Amendment 2, item 6 (A4 only).
 4. To convert an existing artwork template whose size was taken from a 4.5 × 6.5 in artwork: choose "Large lanyard (4 × 6 in)", then Bleed ¼ in.
 
+## Amendment 5: One PDF per card, made on the server (2026-11-13)
+
+**Context.** KASHISH's print partner wants every card as its own PDF file. The browser's print window always makes a single PDF, and per-card files drawn in the browser would be pictures (300 dpi raster, text not selectable).
+
+**Decision**
+1. **Download PDFs** button in the print dialog footer, shown when Paper is **Card** (A4 sheets hold several cards, so per-card files don't apply). It follows the badge range and "Leave out", and is recorded in `qr_print_log` like Print.
+2. **Same markup as Print.** The browser builds the job with `renderSheet(..., 'card')`, lays it out off-screen and fits the text (`fitWhenReady`), then sends each card's HTML, the CSS and the fonts URL to `POST /api/registration/qr/card-pdfs` (`registration.view`, like Print). The body is gzipped; 20 cards are about 10 KB.
+3. **Images aren't uploaded.** An artwork is ~2.7 MB and the proxy in front of the API refuses bodies over 1 MB, so saved template images are swapped for `https://pp-img.invalid/bg/<templateId>` and `/asset/<assetId>`. The server answers those from `pass_templates` / `pass_template_assets`, scoped to the request's event.
+4. **Server rendering** (`cardPdf.service.js`): Puppeteer (headless Chrome, one shared browser closed after 60 s idle, one job at a time) loads the job once and writes page *i* to its own PDF (`pageRanges`, `preferCSSPageSize`), so each file is one page at its card's size, vector, with selectable text. The PDFs stream into a ZIP named after the festival, type and range; files are named by running number and delegate serial and name, or badge number (`001-544237.pdf`). Up to 500 cards per job. 75 cards take about 14 s.
+5. **Safety.** JavaScript is off in the page, and every request is aborted except the template images above, Google Fonts and image requests to the Freecomers media host (festival logo). Staff-supplied markup can't reach internal addresses.
+6. **Dependencies:** `puppeteer` (downloads its Chrome on `npm install`) and `archiver` in `backend/package.json`. Production needs Chrome's system libraries.

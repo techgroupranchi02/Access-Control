@@ -29,12 +29,56 @@ import usePassTemplates from '../../hooks/usePassTemplates';
 import { printInPage } from '../../utils/printInPage';
 import {
   PASS_MODES, DEFAULT_QR_SETTINGS, MM_PX, MAX_GRID, passCss, pickTemplate, renderPass, renderSheet, renderPagePreview,
-  pieceSize, fitWhenReady, ensurePassFonts, formatSequence, inchLabel
+  pieceSize, fitWhenReady, ensurePassFonts, formatSequence, inchLabel, passFontsUrl
 } from '../../utils/passRenderer';
 import { NumInput } from './PassElementProperties';
-import { CloseIcon, PrintIcon, InfoIcon, SaveIcon, CheckCircleIcon, WarningIcon } from '../common/Icons';
+import { CloseIcon, PrintIcon, InfoIcon, SaveIcon, CheckCircleIcon, WarningIcon, FileDownloadIcon } from '../common/Icons';
 
 const AUTO = 'auto';
+// The server answers these addresses with the saved template images (cardPdf.service.js), so the
+// artwork isn't uploaded with every PDF job
+const PDF_IMAGE_BASE = 'https://pp-img.invalid/';
+const PDF_MAX_CARDS = 500;
+const fileSafe = (v) => String(v || '').trim().replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-');
+
+/** File name for one card's PDF: running number, then delegate serial and name, else the badge number. */
+function cardFileName(data = {}) {
+  const seq = data.sequence_no === null || data.sequence_no === undefined || data.sequence_no === '' ? '' : String(data.sequence_no).padStart(3, '0');
+  const who = [data.serial, data.name].filter(Boolean);
+  return [seq, ...(who.length ? who : [data.badge_no])].filter(Boolean).map(fileSafe).join('-');
+}
+
+/** The template with its saved images swapped for server addresses (unsaved images stay inline). */
+function templateForPdf(template) {
+  if (!template || !/^\d+$/.test(String(template.id ?? ''))) return template;
+  const isData = (src) => typeof src === 'string' && src.startsWith('data:');
+  const assets = {};
+  Object.entries(template.assets || {}).forEach(([id, src]) => {
+    assets[id] = isData(src) && /^\d+$/.test(id) ? `${PDF_IMAGE_BASE}asset/${id}` : src;
+  });
+  return {
+    ...template,
+    background_image: isData(template.background_image) ? `${PDF_IMAGE_BASE}bg/${template.id}` : template.background_image,
+    assets
+  };
+}
+
+/** Gzips a JSON body when the browser can (the proxy in front of the API limits request size). */
+async function gzipJson(value) {
+  const json = JSON.stringify(value);
+  if (typeof CompressionStream === 'undefined') return { body: json, headers: { 'Content-Type': 'application/json' } };
+  const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+  const body = await new Response(stream).blob();
+  return { body, headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' } };
+}
+
+async function blobErrorMessage(err) {
+  const data = err?.response?.data;
+  if (data instanceof Blob) {
+    try { return JSON.parse(await data.text())?.message || ''; } catch { return ''; }
+  }
+  return data?.message || '';
+}
 const MARGINS_INFO_ID = 'fc-pp-margins-info';
 // v2: layouts saved before "standard margins by default" are ignored once, so everyone starts with margins
 const PREFS_KEY = 'fc_print_passes_prefs_v2';
@@ -189,6 +233,7 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
   const [range, setRange] = useState({ from: null, to: null }); // typed text; null = not changed (whole set)
   const [statusTick, setStatusTick] = useState(0); // bumps after a print is recorded, to refresh the warning
   const [lastSent, setLastSent] = useState('');
+  const [makingPdfs, setMakingPdfs] = useState(false);
 
   // Which of these badges were printed before (a failed check just shows no warning)
   const qrValuesKey = items.map((i) => i.data?.qr_value || '').join('|');
@@ -324,6 +369,70 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
       setPrintError(err.response?.data?.message || err.message || 'Could not prepare the print.');
     } finally {
       setPrinting(false);
+    }
+  };
+
+  // One PDF per card, made on the server from the same markup as Print, delivered as a ZIP
+  const handleDownloadPdfs = async () => {
+    setPrintError('');
+    if (printable.length === 0) return;
+    if (printable.length > PDF_MAX_CARDS) {
+      setPrintError(`Make PDFs for up to ${PDF_MAX_CARDS} cards at a time. Narrow the badge range.`);
+      return;
+    }
+    setMakingPdfs(true);
+    const root = document.createElement('div');
+    try {
+      const metas = printable.map(templateFor);
+      if (metas.some((m) => !m)) throw new Error('No template to make the PDFs with.');
+      const unique = [...new Map(metas.map((m) => [m.id, m])).values()];
+      const loaded = new Map();
+      for (const m of unique) loaded.set(m.id, templateForPdf(await loadFull(m)));
+      const jobItems = printable.map((item, i) => ({ template: loaded.get(metas[i].id), data: item.data }));
+      const { html, css } = renderSheet(jobItems, mode, 'card', ctx);
+
+      // Lay the cards out off-screen with the print CSS and fit the text, as Print does
+      const style = document.createElement('style');
+      style.textContent = css.replace(/@page[^{]*\{[^}]*\}/g, '');
+      root.id = 'fc-print-root';
+      root.style.cssText = 'position:fixed;left:-100000px;top:0;';
+      root.innerHTML = html;
+      root.appendChild(style);
+      document.body.appendChild(root);
+      await fitWhenReady(root);
+      const cards = [...root.querySelectorAll(':scope > .pp-page')].map((el, i) => ({
+        name: cardFileName(printable[i].data),
+        html: el.outerHTML
+      }));
+
+      const label = isQrOnly ? 'QR-stickers' : (items.some((i) => i.data?.attendee_id) ? 'Passes' : 'Badges');
+      const zipName = [festival.name || 'Festival', label, jobRange ? jobRange.replace(/#/g, '').replace(/[–,\s]+/g, '-') : '']
+        .filter(Boolean).map(fileSafe).join('-');
+      const { body, headers } = await gzipJson({ zipName, css, fontsUrl: passFontsUrl(), cards });
+      const res = await api.post('/registration/qr/card-pdfs', body, { headers, responseType: 'blob', timeout: 10 * 60 * 1000 });
+
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${zipName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+      savePrefs({ ...prefs, layout: layoutPrefs, paper });
+      const logItems = printable.map((item, i) => ({ qr_value: item.data?.qr_value, template_id: isQrOnly ? null : metas[i].id })).filter((x) => x.qr_value);
+      if (logItems.length) {
+        api.post('/registration/qr/print-log', { mode, items: logItems })
+          .then(() => setStatusTick((t) => t + 1))
+          .catch(() => {});
+      }
+      setLastSent(`Saved ${printable.length} ${printable.length === 1 ? unit[0] : unit[1]}${jobRange ? ` (${jobRange})` : ''} as PDFs.`);
+    } catch (err) {
+      setPrintError((await blobErrorMessage(err)) || err.message || 'Could not make the PDFs.');
+    } finally {
+      root.remove();
+      setMakingPdfs(false);
     }
   };
 
@@ -506,6 +615,7 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
                 {!isA4 && (
                   <span className="fc-pp-hint">
                     One card per page at {cardLabel}{mixedSizes ? ' (each page takes the size of its card)' : ''}. In the print window choose the card printer, paper size {cardLabel}, margins None and scale 100%; turn on borderless if the printer offers it.
+                    {' '}Download PDFs saves one file per card, in a ZIP.
                   </span>
                 )}
               </div>
@@ -637,7 +747,12 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
             {jobRange && <span className="fc-pp-range">Badges {jobRange}{unnumbered ? ` + ${unnumbered} without a number` : ''}</span>}
           </span>
           {lastSent && <span className="fc-pp-saved fc-pp-sent" role="status"><CheckCircleIcon size={14} /> {lastSent}</span>}
-          <button type="button" className="fc-pp-btn is-primary" onClick={handlePrint} disabled={loading || printing || rangeError || printable.length === 0 || (page && !page.layout.printable)}>
+          {cardSize && !isA4 && (
+            <button type="button" className="fc-pp-btn fc-pp-pdfs" onClick={handleDownloadPdfs} disabled={loading || printing || makingPdfs || rangeError || printable.length === 0}>
+              <FileDownloadIcon size={16} /> {makingPdfs ? `Making ${printable.length} PDF${printable.length === 1 ? '' : 's'}…` : 'Download PDFs'}
+            </button>
+          )}
+          <button type="button" className="fc-pp-btn is-primary" onClick={handlePrint} disabled={loading || printing || makingPdfs || rangeError || printable.length === 0 || (page && !page.layout.printable)}>
             <PrintIcon size={16} /> {printing ? 'Preparing…' : 'Print'}
           </button>
         </div>
