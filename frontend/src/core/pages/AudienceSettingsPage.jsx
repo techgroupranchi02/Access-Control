@@ -2994,6 +2994,142 @@ export default function AudienceSettingsPage() {
                   </div>
                 </div>
 
+                {/* Shown in the delegate confirmation email FestiPlus sends after an edit (docs/adr/0006) */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+                  <div>
+                    <label htmlFor="venueShowTiming" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>
+                      Screening Hours
+                    </label>
+                    <input
+                      id="venueShowTiming"
+                      type="text"
+                      value={formSchema?.venue_info?.show_timing || ''}
+                      onChange={(e) => handleUpdateVenueInfo('show_timing', e.target.value)}
+                      placeholder="e.g. 11:00 AM to 7:30 PM"
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="venueDonationUrl" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>
+                      Donation Link (optional)
+                    </label>
+                    <input
+                      id="venueDonationUrl"
+                      type="url"
+                      inputMode="url"
+                      value={formSchema?.venue_info?.donation_url || ''}
+                      onChange={(e) => handleUpdateVenueInfo('donation_url', e.target.value.trim())}
+                      placeholder="https://"
+                      aria-describedby="venueDonationHint"
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                    <small id="venueDonationHint" style={{ display: 'block', marginTop: '4px', fontSize: '0.75rem', color: (formSchema?.venue_info?.donation_url && !/^https?:\/\/\S+$/i.test(formSchema.venue_info.donation_url)) ? 'var(--fc-warning-text)' : 'var(--fc-text-muted)' }}>
+                      {(formSchema?.venue_info?.donation_url && !/^https?:\/\/\S+$/i.test(formSchema.venue_info.donation_url))
+                        ? 'Use a full link starting with https://, otherwise it is left out of the email.'
+                        : 'Adds a "Make a voluntary donation" button to the confirmation email.'}
+                    </small>
+                  </div>
+                </div>
+
+                {/* Confirmation email details (docs/adr/0006): the email FestiPlus sends after an edit uses
+                    the same design as the first confirmation; these fill its venue, donation, app and footer */}
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--fc-text-secondary)', margin: '4px 0 4px' }}>
+                  Confirmation email
+                </div>
+                <p style={{ margin: '0 0 10px', fontSize: '0.78rem', color: 'var(--fc-text-muted)' }}>
+                  Used in the updated Delegate Registration Confirmation that staff can email after editing a delegate. Empty sections are left out of the email.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+                  <div>
+                    <label htmlFor="venueAddress" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>Venue Address</label>
+                    <textarea
+                      id="venueAddress"
+                      rows={2}
+                      value={formSchema?.venue_info?.address || ''}
+                      onChange={(e) => handleUpdateVenueInfo('address', e.target.value)}
+                      placeholder="Street, area, city, PIN"
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="venueOrganizer" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>Organiser Name</label>
+                    <input
+                      id="venueOrganizer"
+                      type="text"
+                      value={formSchema?.venue_info?.organizer_name || ''}
+                      onChange={(e) => handleUpdateVenueInfo('organizer_name', e.target.value)}
+                      placeholder="e.g. KASHISH Arts Foundation"
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="venueSupportEmail" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>Help Desk Email</label>
+                    <input
+                      id="venueSupportEmail"
+                      type="email"
+                      value={formSchema?.venue_info?.support_email || ''}
+                      onChange={(e) => handleUpdateVenueInfo('support_email', e.target.value.trim())}
+                      placeholder="Defaults to the address emails are sent from"
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="venueDonationText" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>Donation Message</label>
+                    <textarea
+                      id="venueDonationText"
+                      rows={2}
+                      value={formSchema?.venue_info?.donation_text || ''}
+                      onChange={(e) => handleUpdateVenueInfo('donation_text', e.target.value)}
+                      placeholder="e.g. Help us keep festival screenings accessible and sustainable."
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="venueAppName" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>App Name</label>
+                    <input
+                      id="venueAppName"
+                      type="text"
+                      value={formSchema?.venue_info?.app_name || ''}
+                      onChange={(e) => handleUpdateVenueInfo('app_name', e.target.value)}
+                      placeholder="e.g. KASHISH"
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="venueAppText" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>App Description</label>
+                    <textarea
+                      id="venueAppText"
+                      rows={2}
+                      value={formSchema?.venue_info?.app_text || ''}
+                      onChange={(e) => handleUpdateVenueInfo('app_text', e.target.value)}
+                      placeholder="What delegates can do in the app"
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="venueAppAndroid" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>Android App Link</label>
+                    <input
+                      id="venueAppAndroid"
+                      type="url" inputMode="url"
+                      value={formSchema?.venue_info?.app_android_url || ''}
+                      onChange={(e) => handleUpdateVenueInfo('app_android_url', e.target.value.trim())}
+                      placeholder="https://"
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="venueAppIos" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>iOS App Link</label>
+                    <input
+                      id="venueAppIos"
+                      type="url" inputMode="url"
+                      value={formSchema?.venue_info?.app_ios_url || ''}
+                      onChange={(e) => handleUpdateVenueInfo('app_ios_url', e.target.value.trim())}
+                      placeholder="https://"
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.85rem' }}
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '5px', color: 'var(--fc-text-secondary)' }}>
                     Badge Pickup &amp; Onsite Instructions (printed on pass receipt)

@@ -15,6 +15,7 @@ const { query, getConnection } = require('../../config/database');
 const { PREBUILT_TEMPLATES, getAvailableTemplates, getTemplateByKey } = require('../services/registration-form-templates');
 const qrCredential = require('../services/qrCredential.service');
 const qrPrintLog = require('../services/qrPrintLog.service');
+const { sendDelegateConfirmation, isDayPass } = require('../services/delegateConfirmationEmail');
 const kashishExternal = require('../services/kashishExternalVotes.service');
 const { getFilmFestivalId } = require('../services/festivalIds.service');
 
@@ -685,6 +686,8 @@ async function listAttendance(req, res) {
           customData[k] = v;
         }
       }
+      // Only a Day Pass has chosen days (the form may still send days ticked before switching)
+      if (customData.pass_type && !isDayPass(customData.pass_type)) customData.pass_days = [];
       const customDataJson = Object.keys(customData).length > 0 ? JSON.stringify(customData) : null;
 
       const insertSql = `
@@ -844,10 +847,12 @@ async function listAttendance(req, res) {
       };
 
       for (const [k, v] of Object.entries(req.body)) {
-        if (!['name', 'email', 'phone', 'delegate_category', 'status', 'custom_data', 'attendee_id', 'qr_token', 'registered_at', 'created_at', 'updated_at'].includes(k)) {
+        if (!['name', 'email', 'phone', 'delegate_category', 'status', 'custom_data', 'attendee_id', 'qr_token', 'registered_at', 'created_at', 'updated_at', 'send_confirmation'].includes(k)) {
           updatedCustomData[k] = v;
         }
       }
+      // Only a Day Pass keeps chosen days: switching to a full pass clears them (they showed on the pass)
+      if (updatedCustomData.pass_type && !isDayPass(updatedCustomData.pass_type)) updatedCustomData.pass_days = [];
 
       if (!updatedCustomData.serial_no) {
         updatedCustomData.serial_no = 'KB26-' + String(attendeeId).padStart(4, '0');
@@ -872,9 +877,20 @@ async function listAttendance(req, res) {
         eventId
       ]);
 
+      // Email the updated Delegate Registration Confirmation when staff ask for it (docs/adr/0006).
+      // A failed email never undoes the save; the result is reported back.
+      const savedEmail = email ? email.trim() : null;
+      let confirmationEmail = null;
+      if (req.body.send_confirmation === true) {
+        confirmationEmail = await sendDelegateConfirmation(eventId, {
+          name: name.trim(), email: savedEmail, delegate_category: updatedCategory, custom_data: updatedCustomData
+        });
+      }
+
       res.json({
         success: true,
         message: 'Attendee updated successfully.',
+        confirmation_email: confirmationEmail,
         attendee: {
           attendee_id: attendeeId,
           name: name.trim(),

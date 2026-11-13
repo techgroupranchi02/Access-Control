@@ -50,6 +50,14 @@ const FREECOMERS_API_URL = (
     : 'https://api.freecomers.com')
 ).replace(/\/$/, '');
 
+// Public Freecomers website (festival pages, delegate pass): next.autovertest.com on dev/staging
+const FREECOMERS_SITE_URL = (
+  process.env.FREECOMERS_SITE_URL ||
+  ((process.env.FRONTEND_URL || '').includes('autovertest.com')
+    ? 'https://next.autovertest.com'
+    : 'https://freecomers.com')
+).replace(/\/$/, '');
+
 const env = {
   // Application
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -90,6 +98,19 @@ const env = {
   freecomersAdminApiUrl: process.env.FREECOMERS_ADMIN_API_URL
     ? process.env.FREECOMERS_ADMIN_API_URL.replace(/\/$/, '')
     : FREECOMERS_API_URL,
+
+  freecomersSiteUrl: FREECOMERS_SITE_URL,
+
+  // Outgoing email (same keys as the Freecomers Laravel .env). Without MAIL_HOST no email is sent.
+  mail: {
+    host: process.env.MAIL_HOST || '',
+    port: parseInt(process.env.MAIL_PORT, 10) || 587,
+    username: process.env.MAIL_USERNAME || '',
+    password: process.env.MAIL_PASSWORD || '',
+    encryption: (process.env.MAIL_ENCRYPTION || '').toLowerCase(), // 'ssl' | 'tls' | ''
+    fromAddress: process.env.MAIL_FROM_ADDRESS || process.env.MAIL_USERNAME || '',
+    fromName: process.env.MAIL_FROM_NAME || 'FestiPlus'
+  },
 
   // Kashish External Votes API
   // No fallback: the key must come from .env (the old fallback was published in Kashish's docs)

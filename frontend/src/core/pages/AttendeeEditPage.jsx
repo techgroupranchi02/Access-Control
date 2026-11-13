@@ -13,6 +13,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import { useCanViewRoster } from '../hooks/useCanViewRoster';
+
+// A Day Pass is any pass type containing "Day Pass"; only it keeps chosen days (same rule as the backend)
+const isDayPass = (passType) => /\bday\s*pass/i.test(String(passType || ''));
+// Fields shown on the Delegate Registration Confirmation: a change offers to email it again
+const CONFIRMATION_FIELDS = ['name', 'email', 'phone', 'pass_type', 'pass_days', 'delegate_category'];
+const confirmationSnapshot = (f) => JSON.stringify(CONFIRMATION_FIELDS.map((k) => (k === 'pass_days' ? (isDayPass(f.pass_type) ? [...(f.pass_days || [])].sort() : []) : String(f[k] ?? '').trim())));
 import QrCode from '../components/common/QrCode';
 import {
   ConfirmationNumberIcon, 
@@ -51,6 +57,8 @@ export default function AttendeeEditPage() {
   const [showFaqModal, setShowFaqModal] = useState(false);
 
   // Form State
+  const [loadedSnapshot, setLoadedSnapshot] = useState(null);
+  const [sendConfirmationChoice, setSendConfirmationChoice] = useState(null); // null = follow the default
   const [intakeForm, setIntakeForm] = useState({
     name: '',
     email: '',
@@ -117,7 +125,7 @@ export default function AttendeeEditPage() {
           ? att.pass_days 
           : (Array.isArray(cd.pass_days) ? cd.pass_days : (cd.pass_days ? [cd.pass_days] : []));
 
-        setIntakeForm({
+        const loadedForm = {
           name: att.name || '',
           email: att.email || '',
           phone: att.phone || '',
@@ -136,7 +144,9 @@ export default function AttendeeEditPage() {
           appear_in_attendee_list: Boolean(cd.appear_in_attendee_list),
           certified_18_plus: cd.certified_18_plus !== undefined ? Boolean(cd.certified_18_plus) : true,
           custom_data: { ...cd }
-        });
+        };
+        setIntakeForm(loadedForm);
+        setLoadedSnapshot(confirmationSnapshot(loadedForm));
       })
       .catch((err) => {
         console.error('Failed to load attendee edit data:', err);
@@ -197,7 +207,11 @@ export default function AttendeeEditPage() {
     ? passTypeField.options
     : ['Full-Festival Pass', 'Day Pass (Choose Days)'];
 
-  const isDayPassActive = intakeForm.pass_type?.toLowerCase().includes('day');
+  const isDayPassActive = isDayPass(intakeForm.pass_type);
+  // Email the updated confirmation: ticked by default once something on it changes
+  const confirmationChanged = loadedSnapshot !== null && confirmationSnapshot(intakeForm) !== loadedSnapshot;
+  const hasEmail = Boolean(intakeForm.email && intakeForm.email.trim());
+  const sendConfirmation = hasEmail && (sendConfirmationChoice ?? confirmationChanged);
 
   const handleCustomFieldChange = (key, value) => {
     setIntakeForm(prev => ({
@@ -271,7 +285,9 @@ export default function AttendeeEditPage() {
         dob: intakeForm.dob,
         gender_identity: intakeForm.gender_identity,
         pass_type: intakeForm.pass_type,
-        pass_days: intakeForm.pass_days,
+        // Only a Day Pass keeps chosen days (they stay ticked, hidden, after switching to a full pass)
+        pass_days: isDayPassActive ? intakeForm.pass_days : [],
+        send_confirmation: sendConfirmation,
         community_identity: intakeForm.community_identity,
         attended_mumbai: intakeForm.attended_mumbai,
         signature_name: intakeForm.signature_name || intakeForm.name,
@@ -284,10 +300,14 @@ export default function AttendeeEditPage() {
       };
 
       const res = await api.put(`/registration/attendees/${id}`, payload);
+      const mail = res.data?.confirmation_email;
+      const mailNote = !mail ? ''
+        : mail.sent ? ` The updated confirmation was emailed to ${mail.to}.`
+          : ` The updated confirmation couldn't be emailed: ${mail.reason || 'unknown error'}`;
       navigate(canViewRoster ? '/audience' : '/registration/assign-qr', {
         state: {
           updatedAttendee: res.data?.attendee,
-          successMessage: `Success! Attendee details for ${intakeForm.name.trim()} updated successfully.`
+          successMessage: `Success! Attendee details for ${intakeForm.name.trim()} updated successfully.${mailNote}`
         }
       });
     } catch (err) {
@@ -1059,6 +1079,28 @@ export default function AttendeeEditPage() {
                   })}
                 </div>
               )}
+
+              {/* Email the updated Delegate Registration Confirmation (docs/adr/0006) */}
+              <label className={`fc-ae-send-confirmation ${hasEmail ? '' : 'is-disabled'}`}>
+                <input
+                  type="checkbox"
+                  checked={sendConfirmation}
+                  disabled={!hasEmail}
+                  onChange={(e) => setSendConfirmationChoice(e.target.checked)}
+                />
+                <span>
+                  <strong>{hasEmail ? `Email the updated confirmation to ${intakeForm.email.trim()}` : 'Email the updated confirmation'}</strong>
+                  <small>
+                    {!hasEmail
+                      ? 'Add an email address to send the delegate their updated Delegate Registration Confirmation.'
+                      : confirmationChanged
+                        ? (sendConfirmation
+                          ? 'Their pass details changed, so this is ticked. Untick it to save without emailing.'
+                          : 'Their pass details changed. Tick it to email them the updated confirmation.')
+                        : 'Nothing on their confirmation has changed. Tick it to resend it anyway.'}
+                  </small>
+                </span>
+              </label>
 
               {/* Form Action Buttons */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--fc-border)' }}>

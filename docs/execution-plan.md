@@ -36,7 +36,11 @@ _Nothing in progress._
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
 | 2026-11-12 | Ask Kashish to rotate the API key printed in their guide, then update `KASHISH_API_KEY` in dev and prod `.env` | Team | The guide's examples show our live key. |
-| 2026-11-12 | Set the Kashish event ID on production (Settings › Audience › Voting Rules → EF3j920261) after deploying | Festival team | Until set, production keeps reading every Kashish event. |
+| 2026-11-12 | On production, open Settings › Audience › Audience Voting Rules for KASHISH x BENGALURU 2026: set **Where audience votes come from** = Kashish Pride app and **Kashish event ID** = EF3j920261, then Save and run Voting › Sync status › Sync now | Festival team | Root cause of prod showing the screening-QR tabs on /voting: the vote source is per festival in each database and was set only on dev (dev festival 40; prod's KASHISH has another ID). |
+| 2026-11-12 | Production backend `.env`: set `KASHISH_API_KEY` | DevOps | The code has no fallback key; without it Kashish sync stops with "API key is missing". |
+| 2026-11-12 | Production: run `node migrations/run_all_migrations.js` (018–025) | DevOps | 023 `kashish_sync_state` (Kashish sync), 024 `qr_print_log` (print history) and 025 (clears stale pass days) are needed by the deployed code. |
+| 2026-11-13 | Production backend `.env`: add the `MAIL_*` keys (same account as production Laravel) | DevOps | Without them the "Email the updated confirmation" option reports "Email isn't set up on the server". |
+| 2026-11-13 | Production: fill Settings › Audience › Step 4 for KASHISH: Screening Hours, Donation Link, and the Confirmation email fields (address, organiser, donation message, app name, description, Android and iOS links) | Festival team | Used by the updated confirmation email; empty sections are left out. Dev festival 40 has the values to copy. |
 | 2026-11-10 | Send the Kashish API requests to the Kashish team | Team | [kashish-votes-api-requirements.md](kashish-votes-api-requirements.md). Most important: a festival/edition filter, plus keep sending email and mobile on every vote. |
 | 2026-11-10 | Set the KASHISH voting period | Festival team | Settings › Audience › Voting Rules → "Voting from / to". Until it is set, votes from any date count, including 77 votes from before July. |
 | — | Set `FREECOMERS_API_URL` in the production `.env` | DevOps | If it is unset, it falls back to a host worked out from `FRONTEND_URL`. |
@@ -44,6 +48,23 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-13: updated confirmation email uses the first email's design** (`deployed` 2026-11-13). [ADR 0006, Amendment 1](adr/0006-festiplus-delegate-confirmation-email.md).
+  - **What:** `delegateConfirmationEmail.js` copies the Laravel template's markup and styles (pill, serif heading, 3-column row, venue pin, schedule box, donation QR and button, app QR codes, footer). Text the template has written in now comes from new Settings › Audience › Step 4 › Confirmation email fields (address, organiser, help desk email, donation message, app name, description and links). QR codes come from the local `qrcode` package and are sent, with the venue pin (`backend/src/assets/email/pin-filled.png`), as inline images. Festival 40's dev settings were filled with the same text as the Laravel email.
+  - **Checked:** preview rendered at 700 px and 380 px alongside the Laravel email; resent to KB26-0300 (sk0807812@gmail.com) from the edit page with "Email the updated confirmation" ticked (SMTP `250 OK`); settings fields saved and reloaded, light and dark.
+- **2026-11-13: pass type edits kept the old days; FestiPlus emails the updated confirmation** (`deployed` 2026-11-13). [ADR 0006](adr/0006-festiplus-delegate-confirmation-email.md).
+  - **Root cause:** switching a delegate to Full-Festival Pass only hid the day checkboxes; the edit form still sent the old days and the backend merged them into `custom_data.pass_days`. The public confirmation (Freecomers site, via Laravel `my-delegate-pass`) prints `pass_days` when it isn't empty, so it showed "Full-Festival Pass · Nov 21st".
+  - **What:**
+    - only a Day Pass keeps days: edit and on-spot forms, plus the backend (`updateAttendee`, `registerAttendee`);
+    - migration `025_clear_stale_pass_days.js` fixed 11 delegates on dev (including KB26-0300);
+    - FestiPlus can send email (`mail.service.js`, nodemailer, `MAIL_*` keys);
+    - the edit form has "Email the updated confirmation to {email}", ticked when the pass details change; the email (`delegateConfirmationEmail.js`) takes everything from festival records;
+    - Settings › Audience › Step 4 gains Screening Hours and Donation Link (festival 40's dev donation link set to Laravel's).
+  - **Where:** `audience.controller.js`, `mail.service.js`, `delegateConfirmationEmail.js`, `environment.js`, `package.json`, migration 025, `AttendeeEditPage.jsx`, `RegistrationPage.jsx`, `AudienceSettingsPage.jsx`, `index.css`, `.env.example`, CLAUDE.md, ADR 0006.
+  - **Checked:** migration ran twice (11 then 0). Puppeteer on KB26-0300: Day Pass + Nov 21st with the email unticked saved without email; back to Full-Festival with it ticked saved `pass_days: []` and emailed sk0807812@gmail.com (SMTP `250 OK`). Laravel `my-delegate-pass` now returns `pass_days: []`. On-spot API test saved `[]` for a full pass (temporary delegate deleted). Light, dark and phone checked.
+- **2026-11-12: why production /voting showed the screening-QR tabs, plus a note on that layout** (`deployed` 2026-11-13).
+  - **Root cause:** prod serves the same frontend bundle as dev and a current backend. `/voting` picks its layout from `GET /api/voting/leaderboard` → `source`, which comes from the festival's `audience_settings.voting_source` in that environment's database. It was set to `kashish` only on dev (festival 40); prod's KASHISH (a different ID; prod has no festival 40) still had the default. Not a code bug; fix is in Needs action.
+  - **Change:** the screening-QR layout of `VotingPage.jsx` now shows admins (`settings.manage`) a note linking to "Where audience votes come from" in Settings › Audience › Voting Rules.
+  - **Checked:** Puppeteer: festival 14 (screening QR) shows the note in light and dark; festival 40 (Kashish) shows the Kashish board without it.
 - **2026-11-12: artwork bleed and printing on pre-cut cards** (`deployed` 2026-11-12). [ADR 0005, Amendment 4](adr/0005-pass-templates.md).
   - **What:**
     - artwork templates get a bleed (`config.bleedMm`, 0–12.7 mm): the template size is the card, and the larger artwork is centred and cropped at the card edge;

@@ -104,6 +104,8 @@ npm run lint
 - **Audience addon** (`audience`): registration and badges, attendance, voting and delegate reviews.
   - Code: `core/controllers/audience.controller.js` and `audience.routes.js`.
 - **Delegates**: registered attendees in `saas_attendees`, grouped by `audience_categories`.
+  - **Pass days:** only a Day Pass (pass type containing "Day Pass", `isDayPass()`) keeps `custom_data.pass_days`; every other pass saves `[]`. The public confirmation on the Freecomers site prints `pass_days` when it isn't empty.
+  - **Updated confirmation email:** the edit form's "Email the updated confirmation" checkbox sends it from FestiPlus (`delegateConfirmationEmail.js`, `mail.service.js`); Laravel still sends the first one at registration. See [ADR 0006](docs/adr/0006-festiplus-delegate-confirmation-email.md).
 - **QR badges**: `saas_qr` rows, which are issued, assigned, revoked or bulk-generated as pre-printed stock. See [ADR 0001](docs/adr/0001-qr-credential-uuid-and-festival-serial.md).
   - **Lost badges** (ADR 0001, Amendment 2): `saas_qr.is_lost` / `lost_at` / `lost_by_user_id`.
     - A lost badge is refused at check-in, voting and pairing, and never returns to stock.
@@ -153,6 +155,8 @@ npm run lint
     - If unset, it follows `FRONTEND_URL`: autovertest gives `api.autovertest.com`, anything else gives `api.freecomers.com`.
     - Never hard-code either host; use `env.freecomersApiUrl` and `utils/media.utils.js`.
   - `FREECOMERS_ADMIN_API_URL` optionally overrides it for admin JWT checks only.
+  - `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_ENCRYPTION`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`: outgoing email, the same keys and account as the Laravel `.env`. Without `MAIL_HOST` no email is sent.
+  - `FREECOMERS_SITE_URL`: the public Freecomers site for festival page links. If unset: `next.autovertest.com` on autovertest, `freecomers.com` otherwise.
 - **Frontend env keys**: `VITE_API_URL`, `VITE_GOOGLE_CLIENT_ID`.
 - **CORS and CSP domains** are hardcoded in `core/middleware/security.middleware.js`.
 

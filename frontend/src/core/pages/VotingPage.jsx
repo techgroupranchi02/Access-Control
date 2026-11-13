@@ -11,12 +11,15 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 import QrCode from '../components/common/QrCode';
 import KashishVotingBoard from '../components/voting/KashishVotingBoard';
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
+import { usePermissions } from '../hooks/usePermissions';
 import {
   MovieIcon,
+  InfoIcon,
   TrophyIcon,
   ShieldIcon,
   SyncIcon,
@@ -53,6 +56,8 @@ const formatScreeningSchedule = (dateStr, startStr, endStr) => {
 
 export default function VotingPage() {
   const { currentFestival } = useFestivalConfig();
+  const { canAny } = usePermissions();
+  const canEditSettings = canAny(['settings.manage', 'settings:manage']);
   // 'freecomers' (screening QR voting) or 'kashish' (votes come from the Kashish app, docs/adr/0004)
   const [voteSource, setVoteSource] = useState(null);
   const [kashishInitial, setKashishInitial] = useState(null);
@@ -342,6 +347,17 @@ export default function VotingPage() {
           <p className="fc-page-subtitle" style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem' }}>
             Auditorium voting window triggers, cinema screen QR projector, Bayesian statistical scoring, Kashish API sync & Delegate Reviews
           </p>
+          {/* The layout follows the festival's vote source (a per-database setting, docs/adr/0004):
+              say so, so a festival that should use the Kashish app is easy to spot and fix */}
+          {canEditSettings && (
+            <div className="fc-kv-hint fc-voting-source-note">
+              <InfoIcon size={15} />
+              <span>
+                Votes here come from screening QR codes. If this festival's votes come from the Kashish Pride app, change{' '}
+                <Link to="/settings/audience">Where audience votes come from</Link> in Settings › Audience › Voting Rules.
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Tab Switcher */}

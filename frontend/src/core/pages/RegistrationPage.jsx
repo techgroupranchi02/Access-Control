@@ -429,7 +429,8 @@ const handleIntakeSubmit = async (e) => {
       dob: intakeForm.dob,
       gender_identity: intakeForm.gender_identity,
       pass_type: intakeForm.pass_type,
-      pass_days: intakeForm.pass_days,
+      // Only a Day Pass keeps chosen days (days ticked before switching to a full pass stay in state)
+      pass_days: /\bday\s*pass/i.test(String(intakeForm.pass_type || '')) ? intakeForm.pass_days : [],
       community_identity: intakeForm.community_identity,
       attended_mumbai: intakeForm.attended_mumbai,
       signature_name: intakeForm.signature_name || intakeForm.name,
@@ -531,7 +532,7 @@ const passOptions = passTypeField?.options && passTypeField.options.length > 0
   ? passTypeField.options
   : ['Full-Festival Pass', 'Day Pass (Choose Days)'];
 
-const isDayPassActive = intakeForm.pass_type?.toLowerCase().includes('day');
+const isDayPassActive = /\bday\s*pass/i.test(String(intakeForm.pass_type || '')); // same rule as the backend
 const currentCategoryObj = categories.find(c => c.code === intakeForm.delegate_category || c.name === intakeForm.delegate_category);
 
 // Enhanced client-side filter for instantaneous 0ms feedback as user types

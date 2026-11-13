@@ -16823,3 +16823,14 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
 .fc-pte-bleed-field { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; margin-top: 12px; }
 .fc-pte-bleed-quick { display: flex; flex-wrap: wrap; gap: 6px; }
 .fc-pte-bleed-quick .fc-pt-btn.is-active { border-color: var(--fc-brand); color: var(--fc-brand); background: color-mix(in srgb, var(--fc-brand) 8%, transparent); }
+
+/* Voting (screening QR layout): note about the vote source */
+.fc-voting-source-note { margin-top: 10px; max-width: 760px; }
+
+/* Edit attendee: email the updated confirmation (ADR 0006) */
+.fc-ae-send-confirmation { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--fc-border); border-radius: 10px; background: var(--fc-surface-subtle, var(--fc-surface)); cursor: pointer; }
+.fc-ae-send-confirmation input { accent-color: var(--fc-brand); width: 16px; height: 16px; margin-top: 2px; flex: 0 0 auto; }
+.fc-ae-send-confirmation span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fc-ae-send-confirmation strong { font-size: 0.88rem; color: var(--fc-text-main); overflow-wrap: anywhere; }
+.fc-ae-send-confirmation small { font-size: 0.78rem; color: var(--fc-text-secondary); line-height: 1.4; }
+.fc-ae-send-confirmation.is-disabled { cursor: default; opacity: 0.75; }
