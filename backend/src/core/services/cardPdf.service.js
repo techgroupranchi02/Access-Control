@@ -22,6 +22,10 @@ const MAX_CARDS = 500;
 const MAX_HTML_CHARS = 30 * 1024 * 1024;
 const MAX_CSS_CHARS = 1024 * 1024;
 const IDLE_CLOSE_MS = 60 * 1000;
+// Cards per loaded page, and pages made at once (Chrome gets slower per PDF on long documents)
+const BATCH = 40;
+const WORKERS = Math.max(1, Math.min(3, require('os').cpus().length - 1));
+const MAX_BUFFERED_BYTES = 48 * 1024 * 1024;
 // The markup points at saved template images by this address (never a real host)
 const IMAGE_BASE = 'https://pp-img.invalid/';
 const IMAGE_PATH_RE = /^(bg|asset)\/(\d{1,10})$/;
@@ -140,54 +144,122 @@ function streamCardPdfZip(body, res, { eventId, zipName = 'cards' } = {}) {
   return run;
 }
 
+/** Requests the page may make: saved template images (answered from the DB), fonts, festival logo. */
+function guardRequests(page, eventId, images, media) {
+  page.on('request', (req) => {
+    const url = req.url();
+    if (url.startsWith('data:')) return req.continue();
+    if (url.startsWith(IMAGE_BASE)) {
+      return loadImage(eventId, url.slice(IMAGE_BASE.length), images)
+        .then((img) => (img ? req.respond({ status: 200, contentType: img.contentType, body: img.body }) : req.abort()))
+        .catch(() => req.abort());
+    }
+    let host = '';
+    try { host = new URL(url).hostname; } catch { /* not a URL */ }
+    const imageFromMedia = host && host === media && req.resourceType() === 'image';
+    if (url.startsWith('https://') && (FONT_HOSTS.has(host) || imageFromMedia)) return req.continue();
+    return req.abort();
+  });
+}
+
+/**
+ * Makes the PDFs in batches of BATCH cards, WORKERS batches at a time (Chrome slows down per page
+ * on very long documents), and adds them to the ZIP in card order as they finish. The response
+ * starts once the first PDF exists, with X-Card-Count and X-Card-Bytes (that PDF's size) so the
+ * dialog can show progress while the ZIP streams in.
+ */
 async function renderJob(job, res, zipName, eventId) {
   if (res.destroyed) return;
   const images = new Map();
   const media = mediaHost();
   const browser = await getBrowser();
-  const page = await browser.newPage();
-  try {
-    await page.setJavaScriptEnabled(false);
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const url = req.url();
-      if (url.startsWith('data:')) return req.continue();
-      if (url.startsWith(IMAGE_BASE)) {
-        return loadImage(eventId, url.slice(IMAGE_BASE.length), images)
-          .then((img) => (img ? req.respond({ status: 200, contentType: img.contentType, body: img.body }) : req.abort()))
-          .catch(() => req.abort());
-      }
-      let host = '';
-      try { host = new URL(url).hostname; } catch { /* not a URL */ }
-      const imageFromMedia = host && host === media && req.resourceType() === 'image';
-      if (url.startsWith('https://') && (FONT_HOSTS.has(host) || imageFromMedia)) return req.continue();
-      return req.abort();
-    });
-    await page.setContent(jobDocument(job), { waitUntil: 'networkidle0', timeout: 60000 });
+  const total = job.cards.length;
+  const batches = [];
+  for (let i = 0; i < total; i += BATCH) batches.push(i);
+  const results = new Array(total);
+  const used = new Set();
+  let nextBatch = 0;
+  let flushed = 0;
+  let failed = null;
+  let archive = null;
+  let firstReady;
+  const first = new Promise((resolve) => { firstReady = resolve; });
 
-    const used = new Set();
-    const archive = archiver('zip', { zlib: { level: 1 } });
+  const flush = () => {
+    if (!archive) return;
+    while (flushed < total && results[flushed]) {
+      archive.append(results[flushed], { name: safeFileName(job.cards[flushed].name, flushed, used) });
+      results[flushed] = null;
+      flushed += 1;
+    }
+  };
+  // Keep memory bounded when the download is slower than the PDFs are made
+  const waitForRoom = () => new Promise((resolve) => {
+    const check = () => {
+      if (failed || res.destroyed || !archive || (res.writableLength + archive.readableLength) < MAX_BUFFERED_BYTES) return resolve();
+      setTimeout(check, 100);
+    };
+    check();
+  });
+
+  const worker = async () => {
+    while (!failed && !res.destroyed && nextBatch < batches.length) {
+      const startAt = batches[nextBatch++];
+      const cards = job.cards.slice(startAt, startAt + BATCH);
+      const page = await browser.newPage();
+      try {
+        await page.setJavaScriptEnabled(false);
+        await page.setRequestInterception(true);
+        guardRequests(page, eventId, images, media);
+        await page.setContent(jobDocument({ ...job, cards }), { waitUntil: 'networkidle0', timeout: 60000 });
+        for (let k = 0; k < cards.length; k += 1) {
+          if (failed || res.destroyed) return;
+          await waitForRoom();
+          const pdf = await page.pdf({ pageRanges: String(k + 1), preferCSSPageSize: true, printBackground: true, timeout: 60000 });
+          results[startAt + k] = Buffer.from(pdf);
+          if (startAt + k === 0) firstReady();
+          flush();
+        }
+      } finally {
+        try { await page.close(); } catch { /* browser gone */ }
+      }
+    }
+  };
+
+  const workers = Array.from({ length: Math.min(WORKERS, batches.length) }, () => worker().catch((err) => {
+    failed = failed || err;
+    firstReady();
+  }));
+
+  try {
+    await first;
+    if (failed) throw failed;
+    if (res.destroyed) return;
+    archive = archiver('zip', { store: true }); // PDFs are already compressed
     archive.on('warning', (err) => console.warn('[CardPdf] zip warning:', err.message));
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${zipName.replace(/[^A-Za-z0-9._-]+/g, '-')}.zip"`);
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Accel-Buffering', 'no'); // let nginx pass the ZIP through as it is made
+    res.setHeader('X-Card-Count', String(total));
+    res.setHeader('X-Card-Bytes', String(results[0] ? results[0].length : 0));
     archive.pipe(res);
+    flush();
 
-    try {
-      for (let i = 0; i < job.cards.length; i += 1) {
-        if (res.destroyed) { archive.abort(); return; }
-        const pdf = await page.pdf({ pageRanges: String(i + 1), preferCSSPageSize: true, printBackground: true, timeout: 60000 });
-        archive.append(Buffer.from(pdf), { name: safeFileName(job.cards[i].name, i, used) });
-      }
-      await archive.finalize();
-    } catch (err) {
-      // Headers are already sent: cut the download so it can't be mistaken for a full ZIP
-      console.error('[CardPdf] failed during the ZIP:', err.message);
-      archive.abort();
-      res.destroy(err);
-    }
+    await Promise.all(workers);
+    if (failed) throw failed;
+    if (res.destroyed) { archive.abort(); return; }
+    flush();
+    await archive.finalize();
+  } catch (err) {
+    failed = failed || err;
+    await Promise.allSettled(workers);
+    if (!res.headersSent) throw err;
+    // Headers are already sent: cut the download so it can't be mistaken for a full ZIP
+    console.error('[CardPdf] failed during the ZIP:', err.message);
+    archive?.abort();
+    res.destroy(err);
   } finally {
-    try { await page.close(); } catch { /* browser gone */ }
     scheduleClose();
   }
 }

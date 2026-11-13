@@ -49,6 +49,10 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-13: Download PDFs: progress bar, Stop, and 3× faster** (`deployed` 2026-11-13). [ADR 0005, Amendment 5, item 7](adr/0005-pass-templates.md).
+  - **Why:** 400 cards on production looked stuck: about 77 s on the server plus a ~190 MB download, with no feedback.
+  - **What:** `cardPdf.service.js` makes PDFs in batches of 40, 3 at a time, in order, streaming an uncompressed ZIP with `X-Card-Count` / `X-Card-Bytes`. `PrintPassesDialog.jsx` shows "Preparing…", then "Making PDFs: N of 400 · X of Y MB" with a bar, and the button becomes **Stop**. `index.css`: progress styles (reduced-motion aware).
+  - **Checked on dev:** synthetic 400-card job 77 s → 24 s, files in order, ZIP intact; 75 badges in the dialog: progress counted up live, Stop left no download and no print record. Light, dark, 390 px.
 - **2026-11-13: one PDF per card (Download PDFs)** (`deployed` 2026-11-13). [ADR 0005, Amendment 5](adr/0005-pass-templates.md).
   - **What:** Card paper in the print dialog has a **Download PDFs** button: the server makes one PDF per card (vector, true size, selectable text) from the same markup as Print and returns a ZIP (`KASHISH-x-BENGALURU-2026-Badges-001-075.zip` with `001-544237.pdf` …). Template images are loaded on the server by id; the page can reach nothing else and runs no JavaScript.
   - **Files:** `backend/src/core/services/cardPdf.service.js` (new), `audience.controller.js` (`downloadCardPdfs`), `audience.routes.js`, `app.js` (40 MB body limit for that path), `backend/package.json` (`puppeteer`, `archiver`); `frontend/src/core/components/print/PrintPassesDialog.jsx`, `utils/passRenderer.js` (`passFontsUrl`), `index.css`; CLAUDE.md, ADR 0005.

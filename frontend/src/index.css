@@ -16838,3 +16838,11 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
 
 /* Print dialog: Download PDFs (one PDF per card) */
 .fc-pp-pdfs { white-space: nowrap; }
+.fc-pp-progress { display: flex; flex-direction: column; gap: 6px; min-width: 220px; margin-left: auto; font-size: 0.82rem; font-weight: 600; color: var(--fc-text-main); }
+.fc-pp-progress-text { font-variant-numeric: tabular-nums; }
+.fc-pp-progress-bar { position: relative; display: block; height: 6px; border-radius: 999px; background: var(--fc-border); overflow: hidden; }
+.fc-pp-progress-bar > span { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: inherit; background: var(--fc-brand); transition: width 0.3s ease; }
+.fc-pp-progress-bar.is-waiting > span { width: 35%; animation: fc-pp-progress-wait 1.2s ease-in-out infinite; }
+@keyframes fc-pp-progress-wait { from { left: -35%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .fc-pp-progress-bar.is-waiting > span { animation: none; width: 100%; opacity: 0.5; } }
+@media (max-width: 640px) { .fc-pp-progress { flex-basis: 100%; min-width: 0; margin-left: 0; } }

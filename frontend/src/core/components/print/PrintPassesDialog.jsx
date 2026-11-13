@@ -234,6 +234,8 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
   const [statusTick, setStatusTick] = useState(0); // bumps after a print is recorded, to refresh the warning
   const [lastSent, setLastSent] = useState('');
   const [makingPdfs, setMakingPdfs] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState(null); // { phase: 'prepare' | 'make', total, done, loaded, totalBytes }
+  const pdfAbort = useRef(null);
 
   // Which of these badges were printed before (a failed check just shows no warning)
   const qrValuesKey = items.map((i) => i.data?.qr_value || '').join('|');
@@ -381,6 +383,11 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
       return;
     }
     setMakingPdfs(true);
+    setLastSent('');
+    const total = printable.length;
+    setPdfProgress({ phase: 'prepare', total, done: 0, loaded: 0, totalBytes: 0 });
+    const controller = new AbortController();
+    pdfAbort.current = controller;
     const root = document.createElement('div');
     try {
       const metas = printable.map(templateFor);
@@ -409,7 +416,25 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
       const zipName = [festival.name || 'Festival', label, jobRange ? jobRange.replace(/#/g, '').replace(/[–,\s]+/g, '-') : '']
         .filter(Boolean).map(fileSafe).join('-');
       const { body, headers } = await gzipJson({ zipName, css, fontsUrl: passFontsUrl(), cards });
-      const res = await api.post('/registration/qr/card-pdfs', body, { headers, responseType: 'blob', timeout: 10 * 60 * 1000 });
+      root.remove();
+      setPdfProgress({ phase: 'make', total, done: 0, loaded: 0, totalBytes: 0 });
+      // The ZIP streams in while the server makes the PDFs; X-Card-Bytes (the first PDF's size) turns bytes into cards
+      const res = await api.post('/registration/qr/card-pdfs', body, {
+        headers,
+        responseType: 'blob',
+        timeout: 30 * 60 * 1000,
+        signal: controller.signal,
+        onDownloadProgress: (e) => {
+          const per = Number(e.event?.target?.getResponseHeader?.('X-Card-Bytes')) || 0;
+          setPdfProgress({
+            phase: 'make',
+            total,
+            loaded: e.loaded,
+            totalBytes: per * total,
+            done: per ? Math.min(total, Math.floor(e.loaded / per)) : 0
+          });
+        }
+      });
 
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
@@ -429,12 +454,24 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
       }
       setLastSent(`Saved ${printable.length} ${printable.length === 1 ? unit[0] : unit[1]}${jobRange ? ` (${jobRange})` : ''} as PDFs.`);
     } catch (err) {
-      setPrintError((await blobErrorMessage(err)) || err.message || 'Could not make the PDFs.');
+      if (controller.signal.aborted) setLastSent('Stopped. No PDFs were saved.');
+      else setPrintError((await blobErrorMessage(err)) || err.message || 'Could not make the PDFs.');
     } finally {
       root.remove();
+      pdfAbort.current = null;
+      setPdfProgress(null);
       setMakingPdfs(false);
     }
   };
+  const stopPdfs = () => pdfAbort.current?.abort();
+
+  const mb = (bytes) => (bytes >= 10 * 1048576 ? Math.round(bytes / 1048576) : Math.round(bytes / 104857.6) / 10);
+  const pdfShare = pdfProgress && pdfProgress.totalBytes ? Math.min(1, pdfProgress.loaded / pdfProgress.totalBytes) : null;
+  const pdfStatus = !pdfProgress ? '' : pdfProgress.phase === 'prepare'
+    ? `Preparing ${pdfProgress.total} card${pdfProgress.total === 1 ? '' : 's'}…`
+    : !pdfProgress.loaded
+      ? `Making ${pdfProgress.total} PDF${pdfProgress.total === 1 ? '' : 's'}…`
+      : `Making PDFs: ${pdfProgress.done} of ${pdfProgress.total}${pdfProgress.totalBytes ? ` · ${mb(pdfProgress.loaded)} of ${mb(pdfProgress.totalBytes)} MB` : ''}`;
 
   const saveQrDefault = async () => {
     setQrSaved('');
@@ -746,11 +783,26 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
             {printable.length} {printable.length === 1 ? unit[0] : unit[1]}
             {jobRange && <span className="fc-pp-range">Badges {jobRange}{unnumbered ? ` + ${unnumbered} without a number` : ''}</span>}
           </span>
-          {lastSent && <span className="fc-pp-saved fc-pp-sent" role="status"><CheckCircleIcon size={14} /> {lastSent}</span>}
+          {pdfProgress ? (
+            <span className="fc-pp-progress" role="status" aria-live="polite">
+              <span className="fc-pp-progress-text">{pdfStatus}</span>
+              <span className={`fc-pp-progress-bar ${pdfShare === null ? 'is-waiting' : ''}`}>
+                <span style={pdfShare === null ? undefined : { width: `${Math.max(2, pdfShare * 100)}%` }} />
+              </span>
+            </span>
+          ) : (
+            lastSent && <span className="fc-pp-saved fc-pp-sent" role="status"><CheckCircleIcon size={14} /> {lastSent}</span>
+          )}
           {cardSize && !isA4 && (
-            <button type="button" className="fc-pp-btn fc-pp-pdfs" onClick={handleDownloadPdfs} disabled={loading || printing || makingPdfs || rangeError || printable.length === 0}>
-              <FileDownloadIcon size={16} /> {makingPdfs ? `Making ${printable.length} PDF${printable.length === 1 ? '' : 's'}…` : 'Download PDFs'}
-            </button>
+            makingPdfs ? (
+              <button type="button" className="fc-pp-btn fc-pp-pdfs" onClick={stopPdfs}>
+                <CloseIcon size={16} /> Stop
+              </button>
+            ) : (
+              <button type="button" className="fc-pp-btn fc-pp-pdfs" onClick={handleDownloadPdfs} disabled={loading || printing || rangeError || printable.length === 0}>
+                <FileDownloadIcon size={16} /> Download PDFs
+              </button>
+            )
           )}
           <button type="button" className="fc-pp-btn is-primary" onClick={handlePrint} disabled={loading || printing || makingPdfs || rangeError || printable.length === 0 || (page && !page.layout.printable)}>
             <PrintIcon size={16} /> {printing ? 'Preparing…' : 'Print'}
