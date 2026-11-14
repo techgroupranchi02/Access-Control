@@ -16729,6 +16729,8 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
   .fc-bq-download-menu { left: 0; right: 0; min-width: 0; }
 }
 .fc-bq-download-menu { min-width: 310px; }
+.fc-bq-download-menu.is-left { left: 0; right: auto; }
+@media (max-width: 640px) { .fc-bq-download-menu.is-left { right: 0; } }
 .fc-bq-download-menu small { white-space: nowrap; }
 @media (max-width: 640px) { .fc-bq-download-menu small { white-space: normal; } }
 .fc-pp-switch-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--fc-border); border-radius: 10px; background: var(--fc-surface-card); }

@@ -52,6 +52,10 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-14: Print & export menu hid under the sidebar on 14" laptops** (`deployed` 2026-11-14).
+  - **Cause:** the menu was right-aligned to its button. With the sidebar open at about 1280–1366 px, the toolbar wraps, the button moves to the left of the card, and the menu extended left under the sidebar.
+  - **Fix:** `BulkQrManagementPage.jsx` measures the space when the menu opens and lines it up with the button's left edge when a right-aligned menu wouldn't fit. `index.css` adds `.fc-bq-download-menu.is-left`.
+  - **Checked:** at 1280, 1366, 1440, 1536, 1920 and 390 px the menu stays inside the content area and is the top element (Puppeteer).
 - **2026-11-14: clearer badge printing: one "Print & export" menu, no bulk delegate print** (`deployed` 2026-11-14). [ADR 0005, Amendment 6](adr/0005-pass-templates.md).
   - **What:**
     - `BulkQrManagementPage.jsx`: "Export QR" and "Download" become one **Print & export** menu with a scope line ("425 in-stock badges in view"): Passes with QR…, QR stickers…, then Lists: CSV file, Badge list (PDF). Each option opens the dialog in its mode, titled "Passes with QR · …" or "QR stickers · …". The row's "Print this badge" becomes "Print pass".

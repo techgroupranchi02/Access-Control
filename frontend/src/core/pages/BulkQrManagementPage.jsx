@@ -29,6 +29,7 @@ import {
   QrCodeScannerIcon, CloseIcon, VisibilityIcon
 } from '../components/common/Icons';
 
+const MENU_WIDTH = 340; // Print & export menu, for choosing which way it opens
 const STATUS_LABEL = { unassigned: 'In stock', assigned: 'Assigned', lost: 'Lost' };
 const PAGE_SIZES = [25, 50, 100];
 
@@ -80,6 +81,7 @@ export default function BulkQrManagementPage() {
   const [qrModal, setQrModal] = useState(null);
   const [printJob, setPrintJob] = useState(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
+  const [menuAlignLeft, setMenuAlignLeft] = useState(false);
   const downloadRef = useRef(null);
 
   // Close the Download menu on an outside click or Esc
@@ -481,7 +483,14 @@ export default function BulkQrManagementPage() {
               <button
                 type="button"
                 className="fc-bq-download-btn"
-                onClick={() => setDownloadOpen((v) => !v)}
+                onClick={(e) => {
+                  // Open towards the side with room: when the toolbar wraps (e.g. a 14" screen with the
+                  // sidebar open) the button sits at the left, and a right-aligned menu would go under the sidebar
+                  const btn = e.currentTarget.getBoundingClientRect();
+                  const area = (e.currentTarget.closest('.fc-main-viewport') || document.body).getBoundingClientRect();
+                  setMenuAlignLeft(btn.right - MENU_WIDTH < area.left + 8);
+                  setDownloadOpen((v) => !v);
+                }}
                 aria-haspopup="menu"
                 aria-expanded={downloadOpen}
                 title="Print the badges in view, or export them as a list"
@@ -491,7 +500,7 @@ export default function BulkQrManagementPage() {
                 <ArrowDropDownIcon size={18} />
               </button>
               {downloadOpen && (
-                <div className="fc-bq-download-menu" role="menu" aria-label="Print and export">
+                <div className={`fc-bq-download-menu ${menuAlignLeft ? 'is-left' : ''}`} role="menu" aria-label="Print and export">
                   <div className="fc-bq-menu-scope">{viewLabel} in view</div>
                   <button type="button" role="menuitem" disabled={!printableInView}
                     onClick={() => runMenu(() => openPrint(qrs, `Passes with QR · ${viewLabel}`, 'full'))}>
