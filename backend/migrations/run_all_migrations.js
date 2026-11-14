@@ -32,6 +32,7 @@ const MIGRATION_SCRIPTS = [
   path.resolve(__dirname, '023_kashish_sync_state.js'),
   path.resolve(__dirname, '024_qr_print_log.js'),
   path.resolve(__dirname, '025_clear_stale_pass_days.js'),
+  path.resolve(__dirname, '026_show_attendance_windows.js'),
   path.resolve(__dirname, '../src/scripts/sync_specs_to_database.js'),
 ];
 

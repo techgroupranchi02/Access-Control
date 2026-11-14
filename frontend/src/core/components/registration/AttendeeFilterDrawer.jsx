@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { FilterListIcon, CloseIcon, CheckCircleIcon, QrCodeScannerIcon, PeopleIcon } from '../common/Icons';
+import { isDetailsPending } from '../../utils/attendeeDisplay';
 
 export default function AttendeeFilterDrawer({
   isOpen,
@@ -64,6 +65,7 @@ export default function AttendeeFilterDrawer({
   // Counts for statuses
   const pendingCount = attendees.filter(a => !a.qr_token && a.status !== 'badge_issued').length;
   const issuedCount = attendees.filter(a => Boolean(a.qr_token || a.status === 'badge_issued')).length;
+  const detailsPendingCount = attendees.filter(isDetailsPending).length;
   const checkedInCount = attendees.filter(a => (Number(a.screenings_attended) || 0) > 0).length;
   const notCheckedInCount = attendees.length - checkedInCount;
 
@@ -156,7 +158,8 @@ export default function AttendeeFilterDrawer({
               {[
                 { id: 'all', label: 'All Delegates', count: attendees.length },
                 { id: 'pending', label: 'Pending Venue Arrival (Need Badge)', count: pendingCount },
-                { id: 'issued', label: 'QR Badge Issued (Verified)', count: issuedCount }
+                { id: 'issued', label: 'QR Badge Issued (Verified)', count: issuedCount },
+                { id: 'details_pending', label: 'Details Pending (mobile only, paper form to enter)', count: detailsPendingCount }
               ].map(opt => {
                 const isSelected = (filters.status || 'all') === opt.id;
                 return (

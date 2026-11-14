@@ -171,3 +171,18 @@ Festivals need their own designs, often several per edition (Delegate, Press, Ju
 5. **Safety.** JavaScript is off in the page, and every request is aborted except the template images above, Google Fonts and image requests to the Freecomers media host (festival logo). Staff-supplied markup can't reach internal addresses.
 6. **Dependencies:** `puppeteer` (downloads its Chrome on `npm install`) and `archiver` in `backend/package.json`. Production needs Chrome's system libraries.
 7. **Speed and progress (2026-11-13).** The server loads the job in batches of 40 cards and makes up to 3 batches at once (CPU cores − 1), adding PDFs to the ZIP in card order with bounded buffering; 400 cards went from 77 s to 24 s. The ZIP is stored uncompressed (PDFs already are) and streams as it is made. The response sends `X-Card-Count` and `X-Card-Bytes` (the first PDF's size), so the dialog shows "Making PDFs: 120 of 400 · 54 of 196 MB" with a progress bar while it downloads, and **Stop** cancels the job (nothing is saved or recorded).
+
+## Amendment 6: One place to print stock, no bulk delegate print (2026-11-14)
+
+**Context.** New staff found the entry points confusing:
+- On Bulk QR, "Export QR" opened a dialog that *printed passes*, next to a "Download" menu that gave a CSV or a PDF *list*.
+- On the Audience page, "Print passes" printed every delegate in view, including those without a badge, whose passes come out with an empty QR box.
+
+**Decision**
+1. **Bulk QR Stock has one "Print & export" menu**, scoped to the badges in view (it says so, for example "425 in-stock badges in view"):
+   - **Passes with QR…** opens the print dialog in Pass with QR;
+   - **QR stickers…** opens it in QR sticker only;
+   - **Lists:** **CSV file** and **Badge list (PDF)**.
+   Dialog titles read `<what> · <which>` ("Passes with QR · 425 in-stock badges").
+2. **The Audience toolbar no longer has "Print passes".** One delegate's pass is still printed from their row (pass preview › Print pass) and from the Assign QR success screen, titled "Pass for <name>".
+3. **Wording in the dialog:** modes are **Pass with QR** and **QR sticker only**; the per-card PDF button is **Save as PDFs**.

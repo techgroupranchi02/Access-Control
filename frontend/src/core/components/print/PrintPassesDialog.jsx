@@ -1,7 +1,7 @@
 /**
  * PrintPassesDialog: the one print dialog for badges and passes (docs/adr/0005-pass-templates.md).
  *
- * Staff pick what to print (Pass + QR, the default, or QR only), the template (not for QR only),
+ * Staff pick what to print (Pass with QR, the default, or QR sticker only), the template (not for QR only),
  * the paper (A4 sheet, or one pre-cut card per page at the pass size, ADR 0005 Amendment 4), the
  * A4 page layout (orientation, margins on/off, columns × rows), then print. The preview shows
  * the whole first A4 page. QR only shows the festival's QR Settings (sticker
@@ -11,7 +11,7 @@
  *
  * Props:
  *   items        [{ data, categoryCode }]  data from passDataFromAttendee / passDataFromBadge
- *   defaultMode  'full' (Pass + QR, the default) | 'qr-only'
+ *   defaultMode  'full' (Pass with QR, the default) | 'qr-only' (QR sticker only)
  *   title        dialog heading
  *   jobTitle     suggested PDF file name
  *   onClose()    only the close (×) button closes the dialog: not an outside click, Escape or
@@ -571,7 +571,7 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
                   {lastPrint && (
                     <span>
                       Last sent to print {formatWhen(lastPrint.last_printed_at)}{lastPrint.last_printed_by ? ` by ${lastPrint.last_printed_by}` : ''}
-                      {' '}({lastPrint.last_mode === 'qr-only' ? 'QR only' : 'Pass + QR'}). Printing again makes a second badge with the same number.
+                      {' '}({lastPrint.last_mode === 'qr-only' ? 'QR sticker only' : 'Pass with QR'}). Printing again makes a second badge with the same number.
                     </span>
                   )}
                   {inRange.length > 1 && (
@@ -652,7 +652,7 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
                 {!isA4 && (
                   <span className="fc-pp-hint">
                     One card per page at {cardLabel}{mixedSizes ? ' (each page takes the size of its card)' : ''}. In the print window choose the card printer, paper size {cardLabel}, margins None and scale 100%; turn on borderless if the printer offers it.
-                    {' '}Download PDFs saves one file per card, in a ZIP.
+                    {' '}Save as PDFs makes one file per card, in a ZIP.
                   </span>
                 )}
               </div>
@@ -800,7 +800,7 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
               </button>
             ) : (
               <button type="button" className="fc-pp-btn fc-pp-pdfs" onClick={handleDownloadPdfs} disabled={loading || printing || rangeError || printable.length === 0}>
-                <FileDownloadIcon size={16} /> Download PDFs
+                <FileDownloadIcon size={16} /> Save as PDFs
               </button>
             )
           )}

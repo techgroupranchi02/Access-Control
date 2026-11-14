@@ -16,6 +16,7 @@ const { PREBUILT_TEMPLATES, getAvailableTemplates, getTemplateByKey } = require(
 const qrCredential = require('../services/qrCredential.service');
 const qrPrintLog = require('../services/qrPrintLog.service');
 const cardPdf = require('../services/cardPdf.service');
+const showWindows = require('../services/showWindows.service');
 const { sendDelegateConfirmation, isDayPass } = require('../services/delegateConfirmationEmail');
 const kashishExternal = require('../services/kashishExternalVotes.service');
 const { getFilmFestivalId } = require('../services/festivalIds.service');
@@ -34,6 +35,40 @@ async function getApproverName(userId) {
     if (rows.length > 0) return rows[0].name || rows[0].email;
   } catch (e) { /* fall through */ }
   return 'Festival Administration';
+}
+
+/**
+ * Delegates registered at the desk with only a mobile number have name '' until the paper form is
+ * entered: show the mobile instead of a blank in messages.
+ */
+function labelOf(attendee) {
+  if (!attendee) return 'this delegate';
+  const name = typeof attendee.name === 'string' ? attendee.name.trim() : '';
+  return name || attendee.phone || `delegate #${attendee.attendee_id || '?'}`;
+}
+
+/** A record still waiting for the paper form: no name or no email. */
+function isDetailsPending(attendee) {
+  const name = typeof attendee?.name === 'string' ? attendee.name.trim() : '';
+  const email = typeof attendee?.email === 'string' ? attendee.email.trim() : '';
+  return !name || !email;
+}
+
+// Phone digits only, compared on the last 10 (same rule as the delegate search)
+const PHONE_DIGITS_SQL = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '')";
+
+/** The delegate in this festival with this mobile number (last 10 digits), or null. */
+async function findAttendeeByPhone(eventId, phoneDigits) {
+  const last10 = String(phoneDigits || '').replace(/\D/g, '').slice(-10);
+  if (last10.length < 10) return null;
+  const rows = await query(
+    `SELECT attendee_id, name, email, phone, status FROM saas_attendees
+      WHERE event_id = ? AND phone IS NOT NULL AND RIGHT(${PHONE_DIGITS_SQL}, 10) = ?
+        AND (status IS NULL OR status <> 'cancelled')
+      ORDER BY attendee_id ASC LIMIT 1`,
+    [eventId, last10]
+  );
+  return rows[0] || null;
 }
 
 /**
@@ -293,6 +328,15 @@ async function updateAudienceSettings(req, res) {
     if (settings.kashish_voting_from && settings.kashish_voting_to && settings.kashish_voting_from > settings.kashish_voting_to) {
       return res.status(400).json({ error: '"Voting from" must be before "Voting to".' });
     }
+    // Attendance window offsets in minutes (ADR 0004 Amendment 2): before the start / before the end
+    for (const key of ['attendance_window_before_min', 'attendance_window_end_before_min']) {
+      if (settings[key] === undefined || settings[key] === null || settings[key] === '') { delete settings[key]; continue; }
+      const n = Number(settings[key]);
+      if (!Number.isInteger(n) || n < 0 || n > showWindows.MAX_OFFSET_MIN) {
+        return res.status(400).json({ error: `Attendance window minutes must be a whole number from 0 to ${showWindows.MAX_OFFSET_MIN}.` });
+      }
+      settings[key] = n;
+    }
 
     await query(`
       INSERT INTO audience_settings (event_id, settings_json)
@@ -300,6 +344,8 @@ async function updateAudienceSettings(req, res) {
       ON DUPLICATE KEY UPDATE settings_json = VALUES(settings_json), updated_at = CURRENT_TIMESTAMP
     `, [eventId, JSON.stringify(settings)]);
 
+    // Window offsets, voting period or source may have changed: re-check stored Kashish votes now
+    recheckVotesSoon(eventId);
     res.json({ success: true, message: 'Audience settings saved successfully.', settings });
   } catch (error) {
     console.error('[AudienceController] updateAudienceSettings error:', error.message);
@@ -323,9 +369,10 @@ async function listScreeningBlocks(req, res) {
         sb.id,
         sb.event_id,
         sb.venue_id,
-        COALESCE(v.venue_name, 'Main Auditorium') AS venue_name,
+        v.venue_name AS venue_name,
         sb.title,
         sb.block_type,
+        sb.voting_enabled,
         DATE_FORMAT(sb.screening_date, '%Y-%m-%d') AS screening_date,
         TIME_FORMAT(sb.start_time, '%H:%i') AS start_time,
         TIME_FORMAT(sb.end_time, '%H:%i') AS end_time,
@@ -333,14 +380,26 @@ async function listScreeningBlocks(req, res) {
         sb.voting_status,
         sb.voting_opened_at,
         sb.voting_closed_at,
-        (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.screening_block_id = sb.id) AS checked_in_count,
+        (SELECT COUNT(DISTINCT sc.attendee_id) FROM screening_checkins sc WHERE sc.screening_block_id = sb.id) AS checked_in_count,
+        (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.screening_block_id = sb.id) AS scan_count,
         (SELECT COUNT(*) FROM audience_votes av WHERE av.screening_block_id = sb.id) AS total_votes_cast
       FROM screening_blocks sb
       LEFT JOIN venues v ON v.venue_id = sb.venue_id
       WHERE sb.event_id = ?
-      ORDER BY sb.screening_date ASC, sb.start_time ASC
+      ORDER BY sb.screening_date ASC, sb.start_time ASC, sb.id ASC
     `;
     const screenings = await query(sql, [eventId]);
+
+    // Attendance windows and Kashish films (ADR 0004 Amendment 2)
+    const { settings, shows } = await showWindows.listShows(eventId);
+    const showById = new Map(shows.map((sh) => [sh.id, sh]));
+    for (const screening of screenings) {
+      const sh = showById.get(screening.id);
+      screening.voting_enabled = Number(screening.voting_enabled) === 1;
+      screening.attendance_window = sh ? showWindows.windowJson(sh.window) : null;
+      screening.kashish_films = sh ? sh.kashish_films : [];
+    }
+    const current = showWindows.currentShow(shows);
 
     // Attach films for each screening block
     for (const screening of screenings) {
@@ -363,54 +422,224 @@ async function listScreeningBlocks(req, res) {
       screening.films = await query(filmsSql, [screening.id]);
     }
 
-    res.json({ success: true, count: screenings.length, screenings });
+    res.json({
+      success: true,
+      count: screenings.length,
+      screenings,
+      current_screening_id: current ? current.id : null,
+      attendance_window: { before_min: settings.before, end_before_min: settings.endBefore },
+      server_time: new Date().toISOString()
+    });
   } catch (error) {
     console.error('[AudienceController] listScreeningBlocks error:', error.message);
     res.status(500).json({ error: 'Failed to retrieve screening sessions.' });
   }
 }
 
+const SHOW_TYPES = ['feature', 'short_block', 'panel', 'gala'];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const KASHISH_MOVIE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const MAX_SHOW_FILMS = 60;
+
+/** Adds minutes to 'HH:MM' (wraps past midnight). */
+function addMinutes(hhmm, minutes) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const total = (h * 60 + m + minutes) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Validates a show from the schedule editor. End comes from end_time, or start + duration_min.
+ * @returns {{ error?: string, show?: object }}
+ */
+async function readShowBody(eventId, b = {}) {
+  const title = typeof b.title === 'string' ? b.title.trim() : '';
+  if (!title || title.length > 255) return { error: 'Enter a show title (up to 255 characters).' };
+  const date = typeof b.screening_date === 'string' ? b.screening_date.trim() : '';
+  if (!DATE_RE.test(date) || Number.isNaN(new Date(`${date}T00:00:00`).getTime())) return { error: 'Enter the show date.' };
+  const start = typeof b.start_time === 'string' ? b.start_time.trim().slice(0, 5) : '';
+  if (!TIME_RE.test(start)) return { error: 'Enter the start time.' };
+  let end = typeof b.end_time === 'string' ? b.end_time.trim().slice(0, 5) : '';
+  const duration = Number(b.duration_min);
+  if (!end && Number.isInteger(duration) && duration > 0 && duration <= 12 * 60) end = addMinutes(start, duration);
+  if (!TIME_RE.test(end)) return { error: 'Enter the end time or the running time in minutes.' };
+  if (end === start) return { error: 'The end time must be after the start time.' };
+  const type = SHOW_TYPES.includes(b.block_type) ? b.block_type : 'feature';
+  const votingEnabled = b.voting_enabled === undefined ? true : b.voting_enabled === true || b.voting_enabled === 1 || b.voting_enabled === '1';
+
+  let venueId = null;
+  if (b.venue_id !== undefined && b.venue_id !== null && b.venue_id !== '') {
+    venueId = parseInt(b.venue_id, 10);
+    const v = Number.isInteger(venueId) ? await query('SELECT venue_id FROM venues WHERE venue_id = ? AND event_id = ? LIMIT 1', [venueId, eventId]) : [];
+    if (!v.length) return { error: 'Choose a venue of this festival.' };
+  }
+
+  let kashishFilms = null; // null = leave unchanged on update
+  if (b.kashish_films !== undefined) {
+    if (!Array.isArray(b.kashish_films) || b.kashish_films.length > MAX_SHOW_FILMS) return { error: `A show can list up to ${MAX_SHOW_FILMS} films.` };
+    const seen = new Set();
+    kashishFilms = [];
+    for (const f of b.kashish_films) {
+      const id = f && typeof f.id === 'string' ? f.id.trim() : (f && typeof f.id === 'number' ? String(f.id) : '');
+      if (!KASHISH_MOVIE_ID_RE.test(id)) return { error: 'A Kashish movie ID can only have letters, digits, - and _.' };
+      if (seen.has(id)) continue;
+      seen.add(id);
+      kashishFilms.push({ id, title: typeof f.title === 'string' ? f.title.trim().slice(0, 255) : '' });
+    }
+  }
+  return { show: { title, date, start, end, type, votingEnabled, venueId, kashishFilms } };
+}
+
+/** Other shows at the same venue on the same day whose attendance windows overlap this one. */
+async function overlappingShows(eventId, show, ignoreId = null) {
+  const { settings, shows } = await showWindows.listShows(eventId);
+  const mine = showWindows.windowOf({ screening_date: show.date, start_time: show.start, end_time: show.end }, settings);
+  if (!mine) return [];
+  return shows.filter((sh) => sh.id !== ignoreId && sh.window && (sh.venue_id || null) === (show.venueId || null)
+    && sh.window.opens < mine.closes && mine.opens < sh.window.closes)
+    .map((sh) => `${sh.title} (${showWindows.windowJson(sh.window).opens}–${showWindows.windowJson(sh.window).closes})`);
+}
+
+async function saveKashishFilms(eventId, blockId, films) {
+  await query('DELETE FROM screening_block_kashish_films WHERE screening_block_id = ? AND event_id = ?', [blockId, eventId]);
+  for (const f of films) {
+    await query(
+      'INSERT INTO screening_block_kashish_films (event_id, screening_block_id, kashish_movie_id, kashish_movie_title) VALUES (?, ?, ?, ?)',
+      [eventId, blockId, f.id, f.title]
+    );
+  }
+}
+
+/** After a schedule change, re-check stored Kashish votes now (never blocks or fails the save). */
+function recheckVotesSoon(eventId) {
+  // Required here: kashish-sync.controller requires this controller
+  const { recheckStoredExternalVotes } = require('./kashish-sync.controller');
+  recheckStoredExternalVotes(eventId).catch((err) => console.error('[Schedule] vote re-check failed:', err.message));
+}
+
 /**
  * POST /api/audience/screenings
- * Create a screening session (Feature or Short Film block)
+ * Create a show: { title, screening_date, start_time, end_time | duration_min, block_type,
+ * voting_enabled, venue_id, kashish_films: [{ id, title }], film_ids: [submission id] }.
  */
 async function createScreeningBlock(req, res) {
   try {
     const eventId = getEventId(req);
-    const { venue_id, title, block_type, screening_date, start_time, end_time, film_ids } = req.body;
+    const { error, show } = await readShowBody(eventId, req.body);
+    if (error) return res.status(400).json({ error });
 
-    if (!title || !screening_date || !start_time || !end_time) {
-      return res.status(400).json({ error: 'Title, screening date, start time, and end time are required.' });
-    }
-
-    const type = block_type === 'short_block' ? 'short_block' : 'feature';
-    const qrToken = 'kashish_' + crypto.randomBytes(8).toString('hex');
-
+    const qrToken = 'sb_' + crypto.randomBytes(8).toString('hex');
     const result = await query(`
-      INSERT INTO screening_blocks (event_id, venue_id, title, block_type, screening_date, start_time, end_time, qr_token, voting_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `, [eventId, venue_id || null, title.trim(), type, screening_date, start_time, end_time, qrToken]);
-
+      INSERT INTO screening_blocks (event_id, venue_id, title, block_type, voting_enabled, screening_date, start_time, end_time, qr_token, voting_status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    `, [eventId, show.venueId, show.title, show.type, show.votingEnabled ? 1 : 0, show.date, show.start, show.end, qrToken]);
     const blockId = result.insertId;
 
-    // Attach films
-    if (Array.isArray(film_ids) && film_ids.length > 0) {
-      for (let i = 0; i < film_ids.length; i++) {
-        await query(`
-          INSERT INTO screening_block_films (screening_block_id, film_id, sequence_order, is_eligible_for_voting)
-          VALUES (?, ?, ?, TRUE)
-        `, [blockId, parseInt(film_ids[i], 10), i + 1]);
-      }
+    // Submissions-based festivals link submissions; Kashish-source festivals link Kashish movies
+    const filmIds = Array.isArray(req.body.film_ids) ? req.body.film_ids : [];
+    for (let i = 0; i < filmIds.length; i++) {
+      const filmId = parseInt(filmIds[i], 10);
+      if (!Number.isInteger(filmId)) continue;
+      await query(`
+        INSERT INTO screening_block_films (screening_block_id, film_id, sequence_order, is_eligible_for_voting)
+        VALUES (?, ?, ?, TRUE)
+      `, [blockId, filmId, i + 1]);
     }
+    if (show.kashishFilms) await saveKashishFilms(eventId, blockId, show.kashishFilms);
 
+    const warnings = await overlappingShows(eventId, show, blockId);
+    recheckVotesSoon(eventId);
     res.json({
       success: true,
-      message: 'Screening session created successfully.',
-      screening: { id: blockId, title, qr_token: qrToken, block_type: type }
+      message: 'Show added.',
+      warnings: warnings.length ? [`Its attendance window overlaps ${warnings.join(', ')}. A scan in the overlap counts for both shows.`] : [],
+      screening: { id: blockId, title: show.title, qr_token: qrToken, block_type: show.type }
     });
   } catch (error) {
     console.error('[AudienceController] createScreeningBlock error:', error.message);
     res.status(500).json({ error: 'Failed to create screening session.' });
+  }
+}
+
+/**
+ * PUT /api/audience/screenings/:id
+ * Edit a show (same body as create; kashish_films replaces the list when sent). A delayed show
+ * is edited here, and its attendance window moves with it.
+ */
+async function updateScreeningBlock(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const blockId = parseInt(req.params.id, 10);
+    const found = Number.isInteger(blockId) ? await query('SELECT id FROM screening_blocks WHERE id = ? AND event_id = ?', [blockId, eventId]) : [];
+    if (!found.length) return res.status(404).json({ error: 'Show not found.' });
+    const { error, show } = await readShowBody(eventId, req.body);
+    if (error) return res.status(400).json({ error });
+
+    await query(`
+      UPDATE screening_blocks SET venue_id = ?, title = ?, block_type = ?, voting_enabled = ?, screening_date = ?, start_time = ?, end_time = ?
+      WHERE id = ? AND event_id = ?
+    `, [show.venueId, show.title, show.type, show.votingEnabled ? 1 : 0, show.date, show.start, show.end, blockId, eventId]);
+    if (show.kashishFilms) await saveKashishFilms(eventId, blockId, show.kashishFilms);
+
+    const warnings = await overlappingShows(eventId, show, blockId);
+    recheckVotesSoon(eventId);
+    res.json({
+      success: true,
+      message: 'Show saved. Votes are re-checked against the new times.',
+      warnings: warnings.length ? [`Its attendance window overlaps ${warnings.join(', ')}. A scan in the overlap counts for both shows.`] : []
+    });
+  } catch (error) {
+    console.error('[AudienceController] updateScreeningBlock error:', error.message);
+    res.status(500).json({ error: 'Could not save the show.' });
+  }
+}
+
+/**
+ * DELETE /api/audience/screenings/:id
+ * Remove a show that has no scans and no in-house votes yet (otherwise change its times instead).
+ */
+async function deleteScreeningBlock(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const blockId = parseInt(req.params.id, 10);
+    const found = Number.isInteger(blockId) ? await query('SELECT id, title FROM screening_blocks WHERE id = ? AND event_id = ?', [blockId, eventId]) : [];
+    if (!found.length) return res.status(404).json({ error: 'Show not found.' });
+    const [scans] = await query('SELECT COUNT(*) AS n FROM screening_checkins WHERE screening_block_id = ? AND event_id = ?', [blockId, eventId]);
+    const [votes] = await query('SELECT COUNT(*) AS n FROM audience_votes WHERE screening_block_id = ?', [blockId]);
+    if (Number(scans.n) || Number(votes.n)) {
+      return res.status(409).json({ error: `"${found[0].title}" already has ${Number(scans.n)} scans${Number(votes.n) ? ` and ${Number(votes.n)} votes` : ''}, so it can't be removed. Change its time or turn its voting off instead.` });
+    }
+    await query('DELETE FROM screening_block_kashish_films WHERE screening_block_id = ? AND event_id = ?', [blockId, eventId]);
+    await query('DELETE FROM screening_block_films WHERE screening_block_id = ?', [blockId]);
+    await query('DELETE FROM screening_blocks WHERE id = ? AND event_id = ?', [blockId, eventId]);
+    recheckVotesSoon(eventId);
+    res.json({ success: true, message: 'Show removed.' });
+  } catch (error) {
+    console.error('[AudienceController] deleteScreeningBlock error:', error.message);
+    res.status(500).json({ error: 'Could not remove the show.' });
+  }
+}
+
+/**
+ * GET /api/audience/screenings/kashish-movies
+ * Kashish movies seen in this festival's votes, each with the shows it is linked to.
+ */
+async function listKashishMoviesForSchedule(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const { listKnownMovies } = require('../services/kashishExternalVotes.service');
+    const movies = await listKnownMovies(eventId);
+    const links = await query('SELECT kashish_movie_id, screening_block_id FROM screening_block_kashish_films WHERE event_id = ?', [eventId]);
+    const byMovie = new Map();
+    links.forEach((l) => {
+      if (!byMovie.has(l.kashish_movie_id)) byMovie.set(l.kashish_movie_id, []);
+      byMovie.get(l.kashish_movie_id).push(l.screening_block_id);
+    });
+    res.json({ success: true, movies: movies.map((m) => ({ ...m, screening_ids: byMovie.get(m.id) || [] })) });
+  } catch (error) {
+    console.error('[AudienceController] listKashishMoviesForSchedule error:', error.message);
+    res.status(500).json({ error: 'Could not load the Kashish films.' });
   }
 }
 
@@ -476,9 +705,14 @@ async function closeVotingWindow(req, res) {
 // 3. GATE & SCREENING ATTENDANCE (/attendance)
 // ═════════════════════════════════════════════════════════════════════════════
 
+const SCAN_BOUNCE_SECONDS = 30;
+const clockLabel = (d) => d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+
 /**
  * POST /api/attendance/scan
- * Record gate/screening check-in from scanner
+ * Record a scan at a show. Every scan is stored; scan_status says whether it was inside the show's
+ * attendance window ('valid') or not ('outside_window'). Vote counting uses the scan time against
+ * every show's window, whichever show was picked (kashishExternalVotes.service.js).
  */
 async function performScreeningCheckin(req, res) {
   try {
@@ -492,6 +726,16 @@ async function performScreeningCheckin(req, res) {
     if (!screening_block_id) {
       return res.status(400).json({ error: 'Screening session ID is required.' });
     }
+    const blockRows = await query(`
+      SELECT id, title, voting_enabled,
+             DATE_FORMAT(screening_date, '%Y-%m-%d') AS screening_date,
+             TIME_FORMAT(start_time, '%H:%i') AS start_time, TIME_FORMAT(end_time, '%H:%i') AS end_time
+      FROM screening_blocks WHERE id = ? AND event_id = ?
+    `, [parseInt(screening_block_id, 10) || 0, eventId]);
+    if (!blockRows.length) {
+      return res.status(404).json({ error: 'This show is not on the festival schedule. Pick the show again.' });
+    }
+    const block = blockRows[0];
 
     // 1. Identify Attendee
     let targetAttendeeId = attendee_id;
@@ -525,41 +769,63 @@ async function performScreeningCheckin(req, res) {
       }
 
       // Enforce 2-step verification: Attendee must have been issued a QR badge at the registration desk
-      if (!attendeeRecord.qr_token && attendeeRecord.status !== 'badge_issued') {
+      // A delegate already checked in had a badge then (every scan is kept, so re-scans must pass)
+      if (!attendeeRecord.qr_token && !['badge_issued', 'checked_in'].includes(attendeeRecord.status)) {
         return res.status(400).json({
-          error: `Badge Not Issued: Attendee "${attendeeRecord.name}" (${rawToken || '#' + targetAttendeeId}) has pre-registered, but their verified QR pass has not been issued at the registration desk yet. Please direct them to the NGMA registration desk to collect their printed badge.`
+          error: `Badge Not Issued: Attendee "${labelOf(attendeeRecord)}" (${rawToken || '#' + targetAttendeeId}) has pre-registered, but their verified QR pass has not been issued at the registration desk yet. Please direct them to the registration desk to collect their printed badge.`
         });
       }
 
-      // 2. Check for duplicate scan
-      const existingCheckin = await query(`
-      SELECT id, scanned_at, scanned_by_user_id
-      FROM screening_checkins
-      WHERE screening_block_id = ? AND attendee_id = ?
-    `, [screening_block_id, targetAttendeeId]);
-
-      if (existingCheckin.length > 0) {
+      // 2. Every scan is kept (re-entry, delays, people asked to come back): ADR 0004 Amendment 2.
+      //    Only a repeat of the same badge at the same show within a few seconds is scanner bounce.
+      const now = new Date();
+      const recent = await query(`
+        SELECT id, scanned_at FROM screening_checkins
+        WHERE screening_block_id = ? AND attendee_id = ? AND event_id = ? AND scanned_at >= (NOW() - INTERVAL ? SECOND)
+        ORDER BY scanned_at DESC LIMIT 1
+      `, [block.id, targetAttendeeId, eventId, SCAN_BOUNCE_SECONDS]);
+      if (recent.length) {
         return res.json({
           success: true,
           is_duplicate: true,
-          message: `Already checked in at ${new Date(existingCheckin[0].scanned_at).toLocaleTimeString()}`,
+          message: `Just scanned at ${clockLabel(new Date(recent[0].scanned_at))}. Already recorded.`,
           attendee: attendeeRecord
         });
       }
 
-      // 3. Insert verified screening check-in
+      // 3. Is this scan inside the show's attendance window?
+      const settings = await showWindows.getWindowSettings(eventId);
+      const win = showWindows.windowOf(block, settings);
+      const inWindow = !win || showWindows.inWindow(win, now);
+      let message;
+      if (inWindow) {
+        message = `Entry recorded. Counts for ${block.title}.`;
+      } else if (now < win.opens) {
+        message = `Recorded, but it's before the attendance window for ${block.title} (opens ${clockLabel(win.opens)}). For their vote to count, scan them again between ${clockLabel(win.opens)} and ${clockLabel(win.closes)}.`;
+      } else {
+        message = `Recorded, but the attendance window for ${block.title} closed at ${clockLabel(win.closes)}. This scan doesn't count for voting on this show.`;
+      }
+      // A scan counts by its time: say so when it falls in another show's window (wrong show picked)
+      if (!inWindow) {
+        const { shows } = await showWindows.listShows(eventId);
+        const other = shows.find((sh) => sh.id !== block.id && showWindows.inWindow(sh.window, now));
+        if (other) message += ` It does count for ${other.title}, whose window is open now.`;
+      }
+
       await query(`
-      INSERT INTO screening_checkins (event_id, screening_block_id, attendee_id, venue_id, scanned_by_user_id, scan_status)
-      VALUES (?, ?, ?, ?, ?, 'valid')
-    `, [eventId, screening_block_id, targetAttendeeId, venue_id || null, userId]);
+        INSERT INTO screening_checkins (event_id, screening_block_id, attendee_id, venue_id, scanned_by_user_id, scan_status)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [eventId, block.id, targetAttendeeId, venue_id || null, userId, inWindow ? 'valid' : 'outside_window']);
 
       // Also update saas_attendees status if registered
-      await query("UPDATE saas_attendees SET status = 'checked_in' WHERE attendee_id = ?", [targetAttendeeId]);
+      await query("UPDATE saas_attendees SET status = 'checked_in' WHERE attendee_id = ? AND event_id = ?", [targetAttendeeId, eventId]);
 
       res.json({
         success: true,
         is_duplicate: false,
-        message: 'Check-in verified successfully! Entry granted.',
+        in_window: inWindow,
+        message,
+        show: { id: block.id, title: block.title, attendance_window: showWindows.windowJson(win) },
         attendee: attendeeRecord
       });
     } catch (error) {
@@ -585,7 +851,7 @@ async function listAttendance(req, res) {
         sb.title AS screening_title,
         sb.screening_date,
         sc.attendee_id,
-        sa.name AS attendee_name,
+        COALESCE(NULLIF(TRIM(sa.name), ''), sa.phone) AS attendee_name,
         sa.email AS attendee_email,
         sa.phone AS attendee_phone,
         sa.delegate_category,
@@ -667,10 +933,28 @@ async function listAttendance(req, res) {
     try {
       const eventId = getEventId(req);
       const userId = req.user ? req.user.id : 1;
-      const { name, email, phone, delegate_category, registration_type, remarks } = req.body;
+      const { delegate_category, registration_type, remarks } = req.body;
+      // Desk registration needs only the mobile number (paper form entered later); name may be ''
+      // because saas_attendees.name is NOT NULL in the shared table.
+      const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+      const email = typeof req.body.email === 'string' && req.body.email.trim() ? req.body.email.trim() : null;
+      const phone = typeof req.body.phone === 'string' && req.body.phone.trim() ? req.body.phone.trim() : null;
+      const phoneDigits = phone ? phone.replace(/\D/g, '') : '';
 
-      if (!name) {
-        return res.status(400).json({ error: 'Attendee full name is required.' });
+      if (!phone) {
+        return res.status(400).json({ error: 'Mobile number is required.' });
+      }
+      if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+        return res.status(400).json({ error: 'Enter a valid mobile number (10 to 15 digits).' });
+      }
+
+      // One delegate per mobile number in a festival (last 10 digits, formatting ignored)
+      const existing = await findAttendeeByPhone(eventId, phoneDigits);
+      if (existing) {
+        return res.status(409).json({
+          error: `This mobile number is already registered to ${labelOf(existing)}. Open that delegate instead.`,
+          existing
+        });
       }
 
       // QR badge (UUID payload + 6-digit serial) only if explicitly requested (e.g. spot issue)
@@ -684,6 +968,8 @@ async function listAttendance(req, res) {
       const customData = req.body.custom_data || {};
       for (const [k, v] of Object.entries(req.body)) {
         if (!['name', 'email', 'phone', 'delegate_category', 'registration_type', 'remarks', 'custom_data', 'issue_qr_now'].includes(k)) {
+          // Unanswered fields aren't stored (a mobile-only desk entry records only what was given)
+          if (v === null || v === undefined || v === '') continue;
           customData[k] = v;
         }
       }
@@ -700,7 +986,7 @@ async function listAttendance(req, res) {
       // festival_id holds film_festivals.film_festival_id, not the event id (festivalIds.service.js)
       const filmFestivalId = (await getFilmFestivalId(eventId)) ?? 0;
       const result = await query(insertSql, [
-        eventId, filmFestivalId, name.trim(), email ? email.trim() : null, phone ? phone.trim() : null,
+        eventId, filmFestivalId, name, email, phone,
         category, regType, userId, initialStatus, qrToken, customDataJson
       ]);
 
@@ -734,7 +1020,8 @@ async function listAttendance(req, res) {
           custom_data: customData,
           qr_token: qrToken,
           badge_serial: badgeSerial,
-          status: initialStatus
+          status: initialStatus,
+          details_pending: isDetailsPending({ name, email })
         }
       });
     } catch (error) {
@@ -768,7 +1055,7 @@ async function listAttendance(req, res) {
           sa.qr_token,
           sa.registered_at,
           sa.custom_data,
-          (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended
+          (SELECT COUNT(DISTINCT sc.screening_block_id) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended
         FROM saas_attendees sa
         LEFT JOIN audience_categories ac ON (ac.code = sa.delegate_category OR ac.name = sa.delegate_category) AND ac.event_id = sa.event_id
         WHERE sa.attendee_id = ? AND sa.event_id = ?
@@ -984,7 +1271,7 @@ async function listAttendance(req, res) {
         [attendeeId, eventId]
       );
       if (!Number(activeBadges[0]?.n) && !attendee.qr_token) {
-        return res.status(400).json({ error: `${attendee.name} has no active badge to mark as lost. Assign a new badge instead.` });
+        return res.status(400).json({ error: `${labelOf(attendee)} has no active badge to mark as lost. Assign a new badge instead.` });
       }
 
       const { lostSerials } = await qrCredential.markBadgesLost(eventId, attendeeId, req.user ? req.user.id : null);
@@ -992,7 +1279,7 @@ async function listAttendance(req, res) {
         success: true,
         attendee_id: attendeeId,
         lost_badges: lostSerials,
-        message: `Badge ${lostSerials.length ? lostSerials.map(s => '#' + s).join(', ') : ''} marked lost for ${attendee.name}. It can't be used again. Assign a new badge now.`.replace('Badge  marked', 'Badge marked')
+        message: `Badge ${lostSerials.length ? lostSerials.map(s => '#' + s).join(', ') : ''} marked lost for ${labelOf(attendee)}. It can't be used again. Assign a new badge now.`.replace('Badge  marked', 'Badge marked')
       });
     } catch (error) {
       console.error('[AudienceController] reportLostBadge error:', error.message);
@@ -1047,7 +1334,7 @@ async function listAttendance(req, res) {
 
       res.json({
         success: true,
-        message: `QR Badge successfully issued for ${attendee.name}${badgeSerial ? ` (badge ${badgeSerial})` : ''}.`,
+        message: `QR Badge successfully issued for ${labelOf(attendee)}${badgeSerial ? ` (badge ${badgeSerial})` : ''}.`,
         qr_token: qrToken,
         serial_no: serialNo,
         badge_serial: badgeSerial,
@@ -1262,7 +1549,7 @@ async function listAttendance(req, res) {
           sq.lost_at,
           sq.created_at,
           sq.updated_at,
-          sa.name as attendee_name,
+          COALESCE(NULLIF(TRIM(sa.name), ''), sa.phone) AS attendee_name,
           sa.email as attendee_email,
           sa.phone as attendee_phone,
           sa.delegate_category,
@@ -1397,7 +1684,7 @@ async function listAttendance(req, res) {
       let row = { ...qrRow, attendee_name: null, delegate_category: null, custom_data: null };
       if (qrRow.attendee_id) {
         const aRows = await query(
-          'SELECT name AS attendee_name, delegate_category, custom_data FROM saas_attendees WHERE attendee_id = ? LIMIT 1',
+          "SELECT COALESCE(NULLIF(TRIM(name), ''), phone) AS attendee_name, delegate_category, custom_data FROM saas_attendees WHERE attendee_id = ? LIMIT 1",
           [qrRow.attendee_id]
         );
         if (aRows.length > 0) row = { ...row, ...aRows[0] };
@@ -1499,7 +1786,7 @@ async function listAttendance(req, res) {
 
       if (!linkResult.affectedRows) {
         const otherRows = await query(
-          'SELECT attendee_id, name, custom_data FROM saas_attendees WHERE attendee_id = (SELECT attendee_id FROM saas_qr WHERE qr_id = ?) LIMIT 1',
+          'SELECT attendee_id, name, phone, custom_data FROM saas_attendees WHERE attendee_id = (SELECT attendee_id FROM saas_qr WHERE qr_id = ?) LIMIT 1',
           [qrRow.qr_id]
         );
         const other = otherRows[0] || {};
@@ -1509,7 +1796,7 @@ async function listAttendance(req, res) {
         }
         const otherSerial = ocd?.serial_no || (other.attendee_id ? 'KB26-' + String(other.attendee_id).padStart(4, '0') : '');
         return res.status(400).json({
-          error: `Badge ${displayCode} is already assigned to another delegate: "${other.name || 'unknown'}" (${otherSerial}). Please scan or enter an unassigned badge.`
+          error: `Badge ${displayCode} is already assigned to another delegate: "${other.attendee_id ? labelOf(other) : 'unknown'}" (${otherSerial}). Please scan or enter an unassigned badge.`
         });
       }
 
@@ -1540,7 +1827,7 @@ async function listAttendance(req, res) {
 
       res.json({
         success: true,
-        message: `Physical QR Badge (${displayCode}) successfully assigned to ${attendee.name} (${serialNo}).`,
+        message: `Physical QR Badge (${displayCode}) successfully assigned to ${labelOf(attendee)} (${serialNo}).`,
         qr_token: qrRow.qr_data,
         code: qrRow.qr_data,
         serial_no: serialNo,
@@ -1586,7 +1873,7 @@ async function listAttendance(req, res) {
         sa.qr_token,
         sa.registered_at,
         sa.custom_data,
-        (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended,
+        (SELECT COUNT(DISTINCT sc.screening_block_id) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended,
         (SELECT sq.serial_no FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.serial_no IS NOT NULL AND sq.is_lost = 0 ORDER BY sq.qr_id DESC LIMIT 1) AS badge_serial,
         (SELECT sq.sequence_no FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.is_lost = 0 ORDER BY sq.qr_id DESC LIMIT 1) AS badge_sequence,
         (SELECT COUNT(*) FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.is_lost = 1) AS lost_badge_count
@@ -1651,7 +1938,9 @@ async function listAttendance(req, res) {
           custom_data: cd,
           serial_no: cd?.serial_no || ('KB26-' + String(row.attendee_id).padStart(4, '0')),
           pass_type: cd?.pass_type || 'Full-Festival Pass',
-          pass_days: cd?.pass_days || ['All Days']
+          pass_days: cd?.pass_days || ['All Days'],
+          // Desk entry with only a mobile, waiting for the paper form (clears once name + email are saved)
+          details_pending: isDetailsPending(row)
         };
       });
       res.json({ success: true, count: attendees.length, attendees });
@@ -2136,7 +2425,7 @@ async function listAttendance(req, res) {
         av.film_id,
         s.title AS film_title,
         av.attendee_id,
-        sa.name AS attendee_name,
+        COALESCE(NULLIF(TRIM(sa.name), ''), sa.phone) AS attendee_name,
         sa.phone AS attendee_phone,
         av.rating,
         av.is_attendance_verified,
@@ -2885,7 +3174,7 @@ async function listAttendance(req, res) {
         s.title AS film_title,
         s.director AS film_director,
         dr.attendee_id,
-        sa.name AS attendee_name,
+        COALESCE(NULLIF(TRIM(sa.name), ''), sa.phone) AS attendee_name,
         sa.email AS attendee_email,
         sa.phone AS attendee_phone,
         sa.delegate_category,
@@ -3034,6 +3323,9 @@ async function listAttendance(req, res) {
     updateAudienceSettings,
     listScreeningBlocks,
     createScreeningBlock,
+    updateScreeningBlock,
+    deleteScreeningBlock,
+    listKashishMoviesForSchedule,
     openVotingWindow,
     closeVotingWindow,
     performScreeningCheckin,

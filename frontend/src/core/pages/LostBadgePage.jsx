@@ -20,6 +20,7 @@ import {
   QrCodeScannerIcon,
   CloseIcon
 } from '../components/common/Icons';
+import { attendeeLabel } from '../utils/attendeeDisplay';
 
 function maskPhone(phone) {
   const digits = String(phone || '').replace(/\D/g, '');
@@ -120,7 +121,7 @@ export default function LostBadgePage() {
       return;
     }
     const label = selected.badge_serial ? `badge #${selected.badge_serial}` : 'the badge';
-    if (!window.confirm(`Mark ${label} of ${selected.name} as lost? It will stop working everywhere and can't be used again.`)) return;
+    if (!window.confirm(`Mark ${label} of ${attendeeLabel(selected)} as lost? It will stop working everywhere and can't be used again.`)) return;
     setMarking(true);
     setError('');
     try {
@@ -196,7 +197,7 @@ export default function LostBadgePage() {
                   <li key={a.attendee_id}>
                     <button type="button" className={`fc-lost-result ${isSel ? 'is-selected' : ''}`} onClick={() => pickDelegate(a)}>
                       <span className="fc-lost-result-main">
-                        <strong>{a.name}</strong>
+                        <strong>{attendeeLabel(a)}</strong>
                         <span>{[a.badge_ribbon, maskPhone(a.phone)].filter(Boolean).join(' · ')}</span>
                       </span>
                       <span className={`fc-lost-pill is-${st.key}`}>{st.label}</span>
@@ -221,7 +222,7 @@ export default function LostBadgePage() {
             <>
               <div className="fc-lost-person">
                 <div>
-                  <h2>{selected.name}</h2>
+                  <h2>{attendeeLabel(selected)}</h2>
                   <p>{[selected.delegate_category, selected.serial_no].filter(Boolean).join(' · ')}</p>
                 </div>
                 <button type="button" className="fc-lost-icon-btn" onClick={clearSelection} aria-label="Close">

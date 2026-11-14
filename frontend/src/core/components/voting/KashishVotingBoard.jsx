@@ -21,9 +21,11 @@ import {
 } from '../common/Icons';
 
 const OUTCOME_TILES = [
-  { key: 'counted', label: 'Counted', hint: 'Registered, checked-in delegates, inside the voting period', tone: 'success' },
-  { key: 'unregistered', label: 'Not a registered delegate', hint: 'No KASHISH registration with the same email or mobile number', tone: 'warning' },
-  { key: 'not_checked_in', label: 'Not checked in', hint: 'Registered, but no check-in at the festival yet', tone: 'warning' },
+  { key: 'counted', label: 'Counted', hint: "Registered delegates scanned in during the film's show, before voting, inside the voting period", tone: 'success' },
+  { key: 'unregistered', label: 'Not a registered delegate', hint: 'No registration for this festival with the same email or mobile number', tone: 'warning' },
+  { key: 'not_checked_in', label: 'Not scanned in for the show', hint: "Registered, but not scanned in during the attendance window of a show of that film", tone: 'warning' },
+  { key: 'voted_before_checkin', label: 'Voted before the scan', hint: 'Scanned in for the show only after voting, so the vote does not count', tone: 'warning' },
+  { key: 'unscheduled', label: 'Film not on the schedule', hint: 'Add the film to its show in Settings › Audience › Screenings; its votes are then re-checked', tone: 'warning' },
   { key: 'outside_period', label: 'Outside voting period', hint: 'Cast before or after the voting dates in Settings', tone: 'neutral' },
   { key: 'other', label: 'Other', hint: 'Not verified, invalid, a repeat vote, another Kashish event or not a scan vote', tone: 'neutral' },
   { key: 'removed', label: 'Not in this event', hint: "Earlier votes that aren't in this festival's Kashish event feed", tone: 'neutral' }
@@ -306,7 +308,8 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
                         <th>Film</th>
                         <th className="num">Counted</th>
                         <th className="num">Not registered</th>
-                        <th className="num">Not checked in</th>
+                        <th className="num">Not scanned in</th>
+                        <th className="num">Not on schedule</th>
                         <th className="num">Outside period</th>
                         <th className="num">Other</th>
                         <th className="num">Total</th>
@@ -318,7 +321,8 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
                           <td className="fc-kv-film" data-label="Film">{f.film_title}</td>
                           <td className="num" data-label="Counted"><strong>{f.counted}</strong></td>
                           <td className="num" data-label="Not registered">{f.unregistered}</td>
-                          <td className="num" data-label="Not checked in">{f.not_checked_in}</td>
+                          <td className="num" data-label="Not scanned in">{(f.not_checked_in || 0) + (f.voted_before_checkin || 0)}</td>
+                          <td className="num" data-label="Not on schedule">{f.unscheduled || 0}</td>
                           <td className="num" data-label="Outside period">{f.outside_period}</td>
                           <td className="num" data-label="Other">{f.other_skipped}</td>
                           <td className="num" data-label="Total">{f.total}</td>

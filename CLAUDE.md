@@ -105,6 +105,7 @@ npm run lint
   - Code: `core/controllers/audience.controller.js` and `audience.routes.js`.
 - **Delegates**: registered attendees in `saas_attendees`, grouped by `audience_categories`.
   - **Pass days:** only a Day Pass (pass type containing "Day Pass", `isDayPass()`) keeps `custom_data.pass_days`; every other pass saves `[]`. The public confirmation on the Freecomers site prints `pass_days` when it isn't empty.
+  - **Desk (On Spot) registration needs only the mobile number** (10–15 digits, one delegate per mobile per festival: `findAttendeeByPhone()` compares the last 10 digits, `registerAttendee` returns `409`). Name may be `''` until the paper form is entered; show delegates with `attendeeLabel()` (`utils/attendeeDisplay.js`) or `labelOf()` / `COALESCE(NULLIF(TRIM(name),''), phone)` on the backend, never a bare `name`. `listAttendees` returns `details_pending` (no name or no email). The form schema's `required` flags still apply to the edit page and the public Laravel form.
   - **Updated confirmation email:** the edit form's "Email the updated confirmation" checkbox sends it from FestiPlus (`delegateConfirmationEmail.js`, `mail.service.js`); Laravel still sends the first one at registration. See [ADR 0006](docs/adr/0006-festiplus-delegate-confirmation-email.md).
 - **QR badges**: `saas_qr` rows, which are issued, assigned, revoked or bulk-generated as pre-printed stock. See [ADR 0001](docs/adr/0001-qr-credential-uuid-and-festival-serial.md).
   - **Lost badges** (ADR 0001, Amendment 2): `saas_qr.is_lost` / `lost_at` / `lost_by_user_id`.
@@ -129,9 +130,10 @@ npm run lint
     - **Download PDFs** (Card paper) makes one PDF per card on the server and returns a ZIP: the browser sends the fitted card markup to `POST /api/registration/qr/card-pdfs`, and `cardPdf.service.js` renders it with Puppeteer, loading template images from the DB by id (the proxy refuses bodies over 1 MB). See ADR 0005 Amendment 5.
     - QR-only stickers don't use a template: they follow the festival's **QR Settings** (`pass_print_settings`, set in the print dialog; saving the default needs `settings.manage`).
   - API: `/api/pass-templates` (`pass-templates.controller.js`, validation and starters in `passTemplates.service.js`). Listing needs `registration.view`; changes need `settings.manage`.
+  - **Where staff print:** Bulk QR › **Print & export** (badge stock: Passes with QR, QR stickers, CSV, badge list) and one delegate's pass from their row or the Assign QR success screen. There is no bulk delegate print (ADR 0005 Amendment 6).
   - Print badges and passes only through `frontend/src/core/utils/passRenderer.js` and `components/print/PrintPassesDialog.jsx`. Never hard-code festival text (name, venue, dates) on a pass; it comes from the festival's records or the template.
-- **Screening blocks**: venue time slots with a film playlist (`screening_blocks`, `screening_block_films`).
-- **Attendance**: gate check-ins recorded in `screening_checkins`.
+- **Screening blocks** (shows): venue time slots with a film playlist (`screening_blocks`, `screening_block_films`; Kashish films in `screening_block_kashish_films`), edited in Settings › Audience › Screenings (`ScreeningsEditor.jsx`). `voting_enabled` is off for ceremonies and panels.
+- **Attendance**: gate check-ins recorded in `screening_checkins`. Every scan is kept (no unique key since migration 026); `scan_status` is `valid` (inside the selected show's window) or `outside_window`. Count delegates with `COUNT(DISTINCT attendee_id)`.
 - **Audience voting**: done through `/vote/:token`, stored in `audience_votes`, with scores in `audience_voting_scores`.
 - **Jury ballots**: kept separately in `jury_ballots`.
 - **Review stages**: submissions move through a 6-stage pipeline: Screening, Consideration, Official Selection, Jury & Voting, Finalist, Winner.
@@ -139,7 +141,7 @@ npm run lint
   - **Kashish-source festivals** (`audience_settings.settings_json.voting_source = 'kashish'`, set in Settings › Audience › Voting Rules) rank films by Kashish's own movie ID and title, with no link to `submissions`. See [ADR 0004](docs/adr/0004-kashish-external-leaderboard.md).
     - Code: `core/services/kashishExternalVotes.service.js`.
     - Tables: `kashish_external_votes` and `kashish_results_publications`.
-    - A vote counts only from a registered delegate (matched by email, then phone) who has checked in, inside the voting period.
+    - A vote counts only from a registered delegate (matched by email, then phone) who was **scanned in during the attendance window of a show of that film, before voting**, inside the voting period (ADR 0004 Amendment 2). Window: `attendance_window_before_min` before the start to `attendance_window_end_before_min` before the end (default 15/15), in `showWindows.service.js`. Films are linked to shows in `screening_block_kashish_films`; votes for films on no show are `unscheduled`.
     - Votes are fetched for the festival's **Kashish event ID** (`settings_json.kashish_event_id`, KASHISH = `EF3j920261`), scan votes only. Scheduled runs use `updatedSince` (state in `kashish_sync_state`); "Sync now" is a full sync that marks votes outside the event `removed`. See ADR 0004 Amendment 1.
     - Published results are frozen snapshots.
     - FestiPlus `/vote` is off for these festivals.

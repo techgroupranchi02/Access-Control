@@ -70,3 +70,28 @@ The Kashish API sends, per vote: `id`, `user {id, email, name, countryCode, mobi
 7. **No key in code.** `KASHISH_API_KEY` must come from `.env`. The old fallback was removed because the guide published that key.
 
 Migration: `023_kashish_sync_state.js`.
+
+## Amendment 2: Per-show attendance windows (2026-11-14)
+
+**Context.** Any check-in at the festival, at any time, made every vote count. So a delegate scanned in for Show X, who left and later voted for Show Y using a photo of Y's voting QR sent by a friend, had that vote counted. The client's rules for KASHISH x BENGALURU 2026 tie each vote to attendance at the film's own show, scanned at the door within a time window.
+
+**Decision**
+1. **Attendance window per show.** It runs from `attendance_window_before_min` minutes before the start to `attendance_window_end_before_min` minutes before the end. Both are festival settings in Voting Rules and default to 15, so a 1:00–2:00 PM show takes attendance from 12:45 to 1:45 PM. Times are the festival's local wall-clock times (`screening_date`, `start_time`, `end_time`), read in the server's time zone (IST). The code is `showWindows.service.js`.
+2. **A vote counts** only when the voter (matched as before) has a scan inside the window of a show that includes that film, **and** that scan came before the vote. Voting later the same day or on a later day is fine until the voting period ends. The scan's time decides, not the show the volunteer had selected.
+   - New outcomes: `unscheduled` (the film is on no voting show) and `voted_before_checkin`.
+   - `not_checked_in` now means not scanned in during a window of that film's shows; the reason names the show and its window.
+   - `checkin_block_id` records the show that matched.
+3. **Schedule editor:** Settings › Audience › Screenings (`ScreeningsEditor.jsx`), needing `audience.manage_settings`. It sets date, start and end (or running time), type, Audience Choice voting on/off (off for ceremonies, panels and talks) and venue. For Kashish-source festivals it also sets the Kashish films in each show.
+   - Films are stored in `screening_block_kashish_films` (Kashish movie ID and title; a film may play in more than one show).
+   - Films are picked from those seen in votes, or added by Kashish movie ID, because Kashish has no films list API yet.
+   - The API: `PUT` and `DELETE /api/audience/screenings/:id`, an extended `POST`, and `GET /api/audience/screenings/kashish-movies`.
+   - A show with scans or votes can't be deleted; change its time or turn its voting off instead.
+4. **Rescheduling.** A delayed show is edited in place and its window moves with it. Saving a show or the Voting Rules re-checks the stored votes at once (`recheckStoredExternalVotes`: no Kashish call, same per-event lock). Scheduled syncs keep re-checking everything every run.
+5. **Every scan is kept.** `screening_checkins` loses its one-row-per-show unique key, so re-entry, delays and people asked to come back are all recorded.
+   - Each scan stores `scan_status` `valid` (inside the selected show's window) or `outside_window`.
+   - The scanner says which: "Counts for TINY TAILS", or "Recorded, but it's before the attendance window … scan them again between …", and names another show whose window is open.
+   - A repeat of the same badge at the same show within 30 s is treated as scanner bounce.
+   - The Attendance page opens on the show whose window is open now and shows the window and its status.
+6. Delegates already checked in are no longer refused as "Badge not issued" on a later scan.
+
+Migration: `026_show_attendance_windows.js` (`voting_enabled`, `screening_block_kashish_films`, the scans index change, `outside_window`, and the two vote outcomes).

@@ -11,6 +11,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
+import { attendeeLabel, isDetailsPending } from '../utils/attendeeDisplay';
 import {
   MovieIcon,
   ConfirmationNumberIcon,
@@ -272,7 +273,7 @@ export default function RegistrationPage() {
         setBadgeModal(prev => ({ ...prev, ...updated, qr_token: res.data.qr_token, badge_serial: res.data.badge_serial, status: 'badge_issued' }));
       }
 
-      alert(`Success! Gate QR Badge issued for ${attendee.name} (${res.data.serial_no || '#' + attendee.attendee_id}).`);
+      alert(`Success! Gate QR Badge issued for ${attendeeLabel(attendee)} (${res.data.serial_no || '#' + attendee.attendee_id}).`);
     } catch (err) {
       alert('Failed to issue QR badge: ' + (err.response?.data?.error || err.message));
     } finally {
@@ -281,7 +282,7 @@ export default function RegistrationPage() {
   };
 
   const handleRevokeQrBadge = async (attendee) => {
-    if (!window.confirm(`Revoke the badge of ${attendee.name}? It will be marked lost: it stops working at the gate and for voting, and can never be used again. You can then assign a new badge.`)) return;
+    if (!window.confirm(`Revoke the badge of ${attendeeLabel(attendee)}? It will be marked lost: it stops working at the gate and for voting, and can never be used again. You can then assign a new badge.`)) return;
     try {
       setIssuingId(attendee.attendee_id);
       const res = await api.post(`/registration/attendees/${attendee.attendee_id}/revoke-qr`);
@@ -545,6 +546,9 @@ const qrIssuedCount = React.useMemo(() => {
   return attendees.filter(a => Boolean(a.qr_token || a.status === 'badge_issued')).length;
 }, [attendees]);
 
+// Desk entries with only a mobile, waiting for the paper form (no name or no email yet)
+const detailsPendingCount = React.useMemo(() => attendees.filter(isDetailsPending).length, [attendees]);
+
 // Enhanced client-side filter for instantaneous 0ms feedback as user filters/searches
   const filteredAttendees = React.useMemo(() => {
     const q = (searchInput || search).trim().toLowerCase();
@@ -555,6 +559,8 @@ const qrIssuedCount = React.useMemo(() => {
         if (att.qr_token || att.status === 'badge_issued') return false;
       } else if (filters.status === 'issued') {
         if (!att.qr_token && att.status !== 'badge_issued') return false;
+      } else if (filters.status === 'details_pending') {
+        if (!isDetailsPending(att)) return false;
       }
 
       // 2. Category filter
@@ -632,6 +638,7 @@ const exportColumns = React.useMemo(() => {
   const core = [
     { key: 'serial_no', label: 'Delegate ID', get: a => a.serial_no || a.attendee_id },
     { key: 'name', label: 'Name', get: a => a.name },
+    { key: 'details_pending', label: 'Details Pending', get: a => (isDetailsPending(a) ? 'Yes' : 'No') },
     { key: 'email', label: 'Email', get: a => a.email },
     { key: 'phone', label: 'Phone', get: a => a.phone },
     { key: 'category', label: 'Category', get: a => a.badge_ribbon || a.delegate_category },
@@ -836,6 +843,19 @@ return (
           >
             QR Issued <span className="tab-badge">{qrIssuedCount}</span>
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={filters.status === 'details_pending'}
+            className={`scope-tab-btn ${filters.status === 'details_pending' ? 'active' : ''}`}
+            title="Registered at the desk with only a mobile number: add the rest from the paper form"
+            onClick={() => {
+              setFilters(prev => ({ ...prev, status: 'details_pending' }));
+              setCurrentPage(1);
+            }}
+          >
+            Details Pending <span className="tab-badge">{detailsPendingCount}</span>
+          </button>
         </div>
       </div>
 
@@ -1003,17 +1023,6 @@ return (
               <span>Export CSV</span>
             </button>
 
-            {/* Print passes for the delegates currently listed (ADR 0005) */}
-            <button
-              type="button"
-              className="fc-aud-print-btn"
-              onClick={() => openPrintPasses(filteredAttendees, `Print passes for ${filteredAttendees.length} delegate${filteredAttendees.length === 1 ? '' : 's'}`)}
-              disabled={filteredAttendees.length === 0}
-              title={`Print passes for the ${filteredAttendees.length} delegate${filteredAttendees.length === 1 ? '' : 's'} in this view`}
-            >
-              <PrintIcon size={16} />
-              <span>Print passes</span>
-            </button>
           </div>
 
           <div style={{ fontSize: '0.85rem', color: 'var(--fc-text-muted)', fontWeight: 600 }}>
@@ -1077,7 +1086,7 @@ return (
                   gap: '6px'
                 }}
               >
-                Status: {filters.status === 'pending' ? 'Pending Arrival' : 'QR Issued'}
+                Status: {filters.status === 'pending' ? 'Pending Arrival' : filters.status === 'details_pending' ? 'Details Pending' : 'QR Issued'}
                 <button
                   type="button"
                   onClick={() => {
@@ -1359,7 +1368,15 @@ return (
                       return (
                         <tr key={a.attendee_id} style={{ borderBottom: '1px solid var(--fc-border-subtle, var(--fc-border))' }}>
                           <td className="fc-dt-name" style={{ padding: '14px 16px' }}>
-                            <div style={{ fontWeight: 700, color: 'var(--fc-text-main)', fontSize: '0.92rem' }}>{a.name}</div>
+                            <div style={{ fontWeight: 700, color: (a.name || '').trim() ? 'var(--fc-text-main)' : 'var(--fc-text-secondary)', fontSize: '0.92rem' }}>{attendeeLabel(a)}</div>
+                            {isDetailsPending(a) && (
+                              <span
+                                title="Registered with only a mobile number. Add the name and email from the paper form."
+                                style={{ display: 'inline-block', marginTop: '4px', fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '999px', background: 'var(--fc-warning-bg)', border: '1px solid var(--fc-warning-border)', color: 'var(--fc-warning-text)' }}
+                              >
+                                Details pending
+                              </span>
+                            )}
                           </td>
                           <td className="fc-dt-cat" style={{ padding: '14px 16px' }}>
                             <span
@@ -1497,7 +1514,7 @@ return (
           const handlePrintPass = () => {
             const attendee = badgeModal;
             setBadgeModal(null);
-            openPrintPasses([attendee], `Print pass for ${attendee.name || 'delegate'}`);
+            openPrintPasses([attendee], `Pass for ${attendeeLabel(attendee)}`);
           };
 
           return (
@@ -1566,7 +1583,7 @@ return (
                       Pass Holder
                     </div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--fc-text-main)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
-                      {badgeModal.name}
+                      {attendeeLabel(badgeModal)}
                     </div>
                   </div>
 

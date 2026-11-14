@@ -16,6 +16,7 @@ import api from '../services/api';
 import useAttendeeSearch from '../hooks/useAttendeeSearch';
 import RegistrationHeader from '../components/registration/RegistrationHeader';
 import { useCanViewRoster } from '../hooks/useCanViewRoster';
+import { attendeeLabel, isValidMobile, phoneDigitsOf } from '../utils/attendeeDisplay';
 import {
   CalendarTodayIcon,
   CloseIcon
@@ -38,6 +39,8 @@ export default function AttendeeCreatePage() {
   // Users without the full delegate list (desk volunteers) stay on this page after saving
   const canViewRoster = useCanViewRoster();
   const [successInfo, setSuccessInfo] = useState(null); // { message, attendeeId, paired }
+  // Set when the server refuses the mobile number as already registered (409)
+  const [serverDuplicate, setServerDuplicate] = useState(null);
   const formDefaultsRef = useRef({}); // schema/category-driven defaults applied after load
 
   // Form State
@@ -46,18 +49,18 @@ export default function AttendeeCreatePage() {
     email: '',
     phone: '',
     dob: '',
-    gender_identity: 'Male',
+    gender_identity: '',
     pass_type: 'Full-Festival Pass',
     pass_days: [],
     delegate_category: 'bangalore_general',
-    community_identity: 'A Proud LGBTQ+ person',
-    attended_mumbai: 'No',
+    community_identity: '',
+    attended_mumbai: '',
     signature_name: '',
     place: 'Bengaluru',
     registration_date: new Date().toLocaleDateString('en-GB'),
     receive_updates: false,
     appear_in_attendee_list: false,
-    certified_18_plus: true,
+    certified_18_plus: false,
     custom_data: {}
   });
   const [intakeForm, setIntakeForm] = useState(makeBlankForm);
@@ -67,6 +70,7 @@ export default function AttendeeCreatePage() {
     setBadgeCode('');
     setBadgeStatus(null);
     setErrorMessage(null);
+    setServerDuplicate(null);
   };
 
   const convertToIsoDate = (val) => {
@@ -125,7 +129,8 @@ export default function AttendeeCreatePage() {
 
   const nameField = getField('name');
   const emailField = getField('email');
-  const phoneField = getField('phone');
+  // Mobile is the one required field at the desk, so it is always shown
+  const phoneField = getField('phone') || { key: 'phone', label: 'Mobile / WhatsApp Number' };
   const dobField = getField('dob');
   const genderField = getField('gender_identity');
   const passTypeField = getField('pass_type');
@@ -225,40 +230,44 @@ export default function AttendeeCreatePage() {
     return () => { alive = false; clearTimeout(timer); };
   }, [badgeCode]);
 
-  // Duplicate warning: same phone (formatting ignored) or email already registered in this event
-  const phoneDigits = (intakeForm.phone || '').replace(/\D/g, '');
+  // Duplicates: the same mobile (formatting ignored, last 10 digits) blocks the save; the same email only warns
+  const phoneDigits = phoneDigitsOf(intakeForm.phone);
   const emailQuery = (intakeForm.email || '').trim();
   const { matches: phoneMatches } = useAttendeeSearch(phoneDigits.length >= 8 ? phoneDigits : '', { minLength: 8, limit: 5, delay: 400 });
   const { matches: emailMatches } = useAttendeeSearch(emailQuery.includes('@') && emailQuery.length >= 6 ? emailQuery : '', { minLength: 6, limit: 5, delay: 400 });
-  const possibleDuplicates = (() => {
+  const phoneDuplicates = (() => {
     const seen = new Map();
-    for (const a of (phoneMatches || [])) {
-      if ((a.phone || '').replace(/\D/g, '').slice(-10) === phoneDigits.slice(-10)) seen.set(a.attendee_id, a);
+    if (phoneDigits.length >= 10) {
+      for (const a of (phoneMatches || [])) {
+        if (a.status === 'cancelled') continue;
+        if (phoneDigitsOf(a.phone).slice(-10) === phoneDigits.slice(-10)) seen.set(a.attendee_id, a);
+      }
     }
-    for (const a of (emailMatches || [])) {
-      if ((a.email || '').toLowerCase() === emailQuery.toLowerCase()) seen.set(a.attendee_id, a);
+    if (serverDuplicate?.attendee_id && phoneDigitsOf(serverDuplicate.phone).slice(-10) === phoneDigits.slice(-10)) {
+      seen.set(serverDuplicate.attendee_id, serverDuplicate);
     }
     return [...seen.values()];
   })();
+  const emailDuplicates = (emailMatches || []).filter(a =>
+    (a.email || '').toLowerCase() === emailQuery.toLowerCase() && !phoneDuplicates.some(p => p.attendee_id === a.attendee_id)
+  );
 
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setErrorMessage(null);
 
-    if (nameField && nameField.required !== false && !intakeForm.name.trim()) {
-      setErrorMessage('Attendee full name is required.');
+    // Desk registration needs only the mobile number; the rest of the paper form can be added later
+    if (!phoneDigits) {
+      setErrorMessage('Mobile number is required.');
       return;
     }
-
-    // Dynamic verification of required checkboxes
-    for (const cb of checkboxFields) {
-      if (cb.required) {
-        const val = getCheckboxValue(cb);
-        if (!val) {
-          setErrorMessage(`Please check the required consent: "${cb.label || cb.key}".`);
-          return;
-        }
-      }
+    if (!isValidMobile(intakeForm.phone)) {
+      setErrorMessage('Enter a valid mobile number (10 to 15 digits).');
+      return;
+    }
+    if (phoneDuplicates.length > 0) {
+      setErrorMessage('This mobile number is already registered. Open that delegate instead.');
+      return;
     }
 
     const cleanBadge = badgeCode.trim();
@@ -281,7 +290,7 @@ export default function AttendeeCreatePage() {
         pass_days: intakeForm.pass_days,
         community_identity: intakeForm.community_identity,
         attended_mumbai: intakeForm.attended_mumbai,
-        signature_name: intakeForm.signature_name || intakeForm.name,
+        signature_name: intakeForm.signature_name.trim(),
         place: intakeForm.place || 'Bengaluru',
         registration_date: intakeForm.registration_date,
         receive_updates: intakeForm.receive_updates,
@@ -292,7 +301,8 @@ export default function AttendeeCreatePage() {
 
       const res = await api.post('/registration/attendees', payload);
       let newAttendee = res.data?.attendee;
-      let successMessage = `Success! Attendee registered and Delegate Pass generated for ${intakeForm.name.trim()}.`;
+      const who = attendeeLabel({ name: intakeForm.name, phone: intakeForm.phone.trim() });
+      let successMessage = `Success! Attendee registered and Delegate Pass generated for ${who}.`;
 
       // Pair the pre-printed pass right away (spot registration in one step)
       let paired = false;
@@ -301,9 +311,9 @@ export default function AttendeeCreatePage() {
           const assignRes = await api.post(`/registration/attendees/${newAttendee.attendee_id}/assign-qr`, { qr_code: cleanBadge });
           newAttendee = { ...newAttendee, ...assignRes.data?.attendee };
           paired = true;
-          successMessage = `Success! ${intakeForm.name.trim()} registered and pass ${assignRes.data?.badge_serial || cleanBadge} assigned.`;
+          successMessage = `Success! ${who} registered and pass ${assignRes.data?.badge_serial || cleanBadge} assigned.`;
         } catch (assignErr) {
-          successMessage = `${intakeForm.name.trim()} was registered, but the pass could not be assigned: ${assignErr.response?.data?.error || 'unknown error'}. Assign it from the delegate's badge.`;
+          successMessage = `${who} was registered, but the pass could not be assigned: ${assignErr.response?.data?.error || 'unknown error'}. Assign it from the delegate's badge.`;
         }
       }
 
@@ -321,6 +331,7 @@ export default function AttendeeCreatePage() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     } catch (err) {
+      if (err.response?.status === 409 && err.response.data?.existing) setServerDuplicate(err.response.data.existing);
       setErrorMessage(err.response?.data?.error || 'Failed to register attendee. Please verify inputs.');
     } finally {
       setSubmitting(false);
@@ -402,17 +413,19 @@ export default function AttendeeCreatePage() {
               <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--fc-text-muted)' }}>
                 {formSchema?.form_subtitle || 'Every person wishing to attend the festival HAS to register as a delegate by filling out the Festival Registration Form to obtain a Festival Pass.'}
               </p>
+              <p style={{ margin: '8px 0 0', fontSize: '0.8rem', fontWeight: 600, color: 'var(--fc-text-secondary)' }}>
+                Only the mobile number is needed at the desk. The rest can be added later from the paper form (the delegate shows as "Details pending" until then).
+              </p>
             </div>
             <form onSubmit={handleSubmit}>
               {/* Full Name */}
               {nameField && (
                 <div style={{ marginBottom: '14px' }}>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
-                    {nameField.label || 'Full Name'} {nameField.required !== false && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                    {nameField.label || 'Full Name'}
                   </label>
                   <input 
                     type="text" 
-                    required={nameField.required !== false}
                     placeholder={nameField.placeholder || 'Enter your full name as per Photo ID'}
                     value={intakeForm.name}
                     onChange={(e) => setIntakeForm({ ...intakeForm, name: e.target.value })}
@@ -437,11 +450,10 @@ export default function AttendeeCreatePage() {
                   {emailField && (
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
-                        {emailField.label || 'Email Address'} {emailField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                        {emailField.label || 'Email Address'}
                       </label>
                       <input 
                         type="email" 
-                        required={emailField.required}
                         placeholder={emailField.placeholder || 'name@example.com'}
                         value={intakeForm.email}
                         onChange={(e) => setIntakeForm({ ...intakeForm, email: e.target.value })}
@@ -462,11 +474,11 @@ export default function AttendeeCreatePage() {
                   {phoneField && (
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
-                        {phoneField.label || 'Mobile / WhatsApp Number'} {phoneField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                        {phoneField.label || 'Mobile / WhatsApp Number'} <span style={{ color: 'var(--fc-brand-text)' }}>*</span>
                       </label>
                       <input 
                         type="tel" 
-                        required={phoneField.required}
+                        required
                         placeholder={phoneField.placeholder || '+91 98765 43210'}
                         value={intakeForm.phone}
                         onChange={(e) => setIntakeForm({ ...intakeForm, phone: e.target.value })}
@@ -487,14 +499,35 @@ export default function AttendeeCreatePage() {
                 </div>
               )}
 
-              {/* Possible duplicate (warning only) */}
-              {possibleDuplicates.length > 0 && (
-                <div style={{ marginBottom: '14px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.35)', fontSize: '0.82rem', color: 'var(--fc-text-main)' }}>
-                  <strong style={{ color: 'var(--fc-warning-text)' }}>Already registered?</strong> This phone or email matches:
+              {/* Mobile already registered: blocks the save */}
+              {phoneDuplicates.length > 0 && (
+                <div role="alert" style={{ marginBottom: '14px', padding: '10px 12px', borderRadius: '8px', background: 'var(--fc-danger-bg)', border: '1px solid var(--fc-danger-border)', fontSize: '0.82rem', color: 'var(--fc-text-main)' }}>
+                  <strong style={{ color: 'var(--fc-danger-text)' }}>This mobile number is already registered.</strong> One delegate per mobile number; open the existing record instead:
                   <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
-                    {possibleDuplicates.map(a => (
+                    {phoneDuplicates.map(a => (
                       <li key={a.attendee_id} style={{ marginBottom: '2px' }}>
-                        {a.name} · {a.phone || a.email} · {a.status}{' '}
+                        {attendeeLabel(a)} · {a.phone} · {a.status}{' '}
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/registration/assign-qr/${a.attendee_id}`)}
+                          style={{ border: 'none', background: 'none', color: 'var(--fc-brand-text)', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: '0.82rem' }}
+                        >
+                          Assign pass to this delegate instead →
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Same email (warning only) */}
+              {emailDuplicates.length > 0 && (
+                <div style={{ marginBottom: '14px', padding: '10px 12px', borderRadius: '8px', background: 'var(--fc-warning-bg)', border: '1px solid var(--fc-warning-border)', fontSize: '0.82rem', color: 'var(--fc-text-main)' }}>
+                  <strong style={{ color: 'var(--fc-warning-text)' }}>Already registered?</strong> This email matches:
+                  <ul style={{ margin: '6px 0 0 18px', padding: 0 }}>
+                    {emailDuplicates.map(a => (
+                      <li key={a.attendee_id} style={{ marginBottom: '2px' }}>
+                        {attendeeLabel(a)} · {a.phone || a.email} · {a.status}{' '}
                         <button
                           type="button"
                           onClick={() => navigate(`/registration/assign-qr/${a.attendee_id}`)}
@@ -548,12 +581,11 @@ export default function AttendeeCreatePage() {
                   {dobField && (
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
-                        {dobField.label || 'Date of Birth'} {dobField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                        {dobField.label || 'Date of Birth'}
                       </label>
                       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                         <input 
                           type="text" 
-                          required={dobField.required}
                           placeholder={dobField.placeholder || 'DD/MM/YYYY'}
                           value={intakeForm.dob}
                           onChange={(e) => setIntakeForm({ ...intakeForm, dob: e.target.value })}
@@ -630,7 +662,7 @@ export default function AttendeeCreatePage() {
                   {genderField && (
                     <div>
                       <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
-                        {genderField.label || 'Gender Identity'} {genderField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                        {genderField.label || 'Gender Identity'}
                       </label>
                       <div style={{ 
                         height: '40px', 
@@ -667,7 +699,7 @@ export default function AttendeeCreatePage() {
               {passTypeField && (
                 <div style={{ border: '1px solid var(--fc-border)', borderRadius: '10px', padding: '14px', background: 'var(--fc-surface-subtle)', marginBottom: '14px' }}>
                   <div style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--fc-text-main)', marginBottom: '8px' }}>
-                    {passTypeField.label || 'PASS TYPE'} {passTypeField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                    {passTypeField.label || 'PASS TYPE'}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
                     {passOptions.map((opt) => {
@@ -730,7 +762,7 @@ export default function AttendeeCreatePage() {
               {delegateCategoryField && (
                 <div style={{ marginBottom: '14px' }}>
                   <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
-                    {delegateCategoryField.label || 'Delegate Category'} {delegateCategoryField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                    {delegateCategoryField.label || 'Delegate Category'}
                   </label>
                   <select 
                     value={intakeForm.delegate_category}
@@ -763,7 +795,7 @@ export default function AttendeeCreatePage() {
                   {commField && (
                     <div>
                       <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '6px' }}>
-                        {commField.label || 'Community Affiliation'} {commField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                        {commField.label || 'Community Affiliation'}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {(commField.options && commField.options.length > 0
@@ -788,7 +820,7 @@ export default function AttendeeCreatePage() {
                   {mumbaiField && (
                     <div>
                       <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '6px' }}>
-                        {mumbaiField.label || 'Attended KASHISH in Mumbai?'} {mumbaiField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                        {mumbaiField.label || 'Attended KASHISH in Mumbai?'}
                       </div>
                       <div style={{ display: 'flex', gap: '16px' }}>
                         {(mumbaiField.options && mumbaiField.options.length > 0 ? mumbaiField.options : ['Yes', 'No']).map((ans) => (
@@ -819,7 +851,7 @@ export default function AttendeeCreatePage() {
                     {customOrOtherFields.map(field => (
                       <div key={field.key || field.id}>
                         <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
-                          {field.label} {field.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                          {field.label}
                         </label>
                         {field.type === 'select' ? (
                           <select
@@ -897,11 +929,10 @@ export default function AttendeeCreatePage() {
                   {signField && (
                     <div>
                       <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
-                        {signField.label || 'Digital Signature'} {signField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                        {signField.label || 'Digital Signature'}
                       </label>
                       <input 
                         type="text" 
-                        required={signField.required}
                         placeholder={signField.placeholder || 'Full Name'}
                         value={intakeForm.signature_name}
                         onChange={(e) => setIntakeForm({ ...intakeForm, signature_name: e.target.value })}
@@ -912,11 +943,10 @@ export default function AttendeeCreatePage() {
                   {placeField && (
                     <div>
                       <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: 'var(--fc-text-secondary)', marginBottom: '4px' }}>
-                        {placeField.label || 'Place'} {placeField.required && <span style={{ color: 'var(--fc-brand-text)' }}>*</span>}
+                        {placeField.label || 'Place'}
                       </label>
                       <input 
                         type="text" 
-                        required={placeField.required}
                         value={intakeForm.place}
                         onChange={(e) => setIntakeForm({ ...intakeForm, place: e.target.value })}
                         style={{ width: '100%', height: '36px', padding: '0 10px', borderRadius: '6px', border: '1px solid var(--fc-border)', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontSize: '0.84rem', boxSizing: 'border-box' }}
@@ -960,14 +990,13 @@ export default function AttendeeCreatePage() {
                       >
                         <input 
                           type="checkbox"
-                          required={field.required}
                           checked={isChecked}
                           onChange={(e) => handleCheckboxToggle(field, e.target.checked)}
                           style={{ accentColor: 'var(--fc-brand)', marginTop: '3px' }}
                         />
                         <span>
                           {field.label}
-                          {field.required && <span style={{ color: 'var(--fc-brand-text)', marginLeft: '3px' }}>*</span>}
+                         
                         </span>
                       </label>
                     );
@@ -995,7 +1024,7 @@ export default function AttendeeCreatePage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || phoneDuplicates.length > 0}
                   style={{
                     padding: '10px 32px',
                     borderRadius: '8px',
@@ -1004,7 +1033,8 @@ export default function AttendeeCreatePage() {
                     color: '#ffffff',
                     fontWeight: 700,
                     fontSize: '0.92rem',
-                    cursor: submitting ? 'not-allowed' : 'pointer',
+                    cursor: (submitting || phoneDuplicates.length > 0) ? 'not-allowed' : 'pointer',
+                    opacity: phoneDuplicates.length > 0 ? 0.55 : 1,
                     boxShadow: '0 4px 14px rgba(168, 47, 47, 0.35)',
                     transition: 'all 0.15s ease'
                   }}

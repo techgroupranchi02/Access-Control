@@ -30,6 +30,7 @@ import {
   EditIcon,
   MovieIcon
 } from '../components/common/Icons';
+import { attendeeLabel } from '../utils/attendeeDisplay';
 
 const DEFAULT_FAQS = [
   {
@@ -354,7 +355,7 @@ export default function AttendeeEditPage() {
       }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0, color: 'var(--fc-text-main)', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span>Edit Attendee: {attendee?.name || 'Loading...'}</span>
+            <span>Edit Attendee: {attendee ? attendeeLabel(attendee) : 'Loading...'}</span>
           </h1>
           <p style={{ color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.9rem', margin: '4px 0 0 0' }}>
             Update attendee registration credentials, badge category, pass type, or dynamic responses.

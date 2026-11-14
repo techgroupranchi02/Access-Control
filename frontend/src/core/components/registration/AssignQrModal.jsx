@@ -21,6 +21,7 @@ import {
   CloseIcon, 
   PrintIcon 
 } from '../common/Icons';
+import { attendeeLabel } from '../../utils/attendeeDisplay';
 
 export default function AssignQrModal({ 
   open, 
@@ -381,7 +382,7 @@ export default function AssignQrModal({
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontWeight: 800, fontSize: '0.96rem', color: 'var(--fc-text-main)' }}>
-                          {selectedAttendee.name}
+                          {attendeeLabel(selectedAttendee)}
                         </span>
                         <span style={{
                           background: selectedAttendee.badge_color || 'var(--fc-brand)',
@@ -459,7 +460,7 @@ export default function AssignQrModal({
                           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                         >
                           <div>
-                            <span style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--fc-text-main)' }}>{a.name}</span>
+                            <span style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--fc-text-main)' }}>{attendeeLabel(a)}</span>
                             <span style={{ fontSize: '0.74rem', color: 'var(--fc-text-muted)', marginLeft: '6px' }}>
                               ({a.serial_no || ('KB26-' + a.attendee_id)})
                             </span>

@@ -5,7 +5,7 @@
  * preview and the printed page, so what staff see is what prints. Sizes are in mm.
  *
  * Modes:
- *   full    Pass + QR
+ *   full    Pass with QR
  *   no-qr   Pass without the QR (an outlined box instead); not offered in the print dialog
  *   qr-only QR sticker (the festival's QR Settings, ctx.qrSettings)
  *
@@ -19,8 +19,8 @@
 import { qrSvgMarkup } from '../components/common/QrCode';
 
 export const PASS_MODES = [
-  { key: 'full', label: 'Pass + QR', hint: 'The full pass with the QR printed on it' },
-  { key: 'qr-only', label: 'QR only', hint: 'QR stickers with the badge number' }
+  { key: 'full', label: 'Pass with QR', hint: 'The festival pass with the badge QR printed on it' },
+  { key: 'qr-only', label: 'QR sticker only', hint: 'Small QR stickers with the badge number' }
 ];
 
 export const PAPER_OPTIONS = [

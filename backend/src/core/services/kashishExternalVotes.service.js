@@ -17,16 +17,23 @@
  *   1. stars is a whole number 1-5                         else 'invalid'
  *   2. Kashish marks it "Verified Vote"                    else 'not_verified'
  *   3. it was cast inside the festival's voting period     else 'outside_period'
- *   4. the voter is a registered delegate of this festival,
+ *   4. the film is on a voting show of the schedule
+ *      (screening_block_kashish_films)                     else 'unscheduled'
+ *   5. the voter is a registered delegate of this festival,
  *      matched by email, then by mobile number             else 'unregistered'
- *   5. that delegate has a check-in at this festival       else 'not_checked_in'
- *   6. it is the voter's first vote for that film          else 'duplicate'
+ *   6. that delegate was scanned inside the attendance window of a show of
+ *      that film (showWindows.service.js)                  else 'not_checked_in'
+ *      ... and that scan came before the vote              else 'voted_before_checkin'
+ *   7. it is the voter's first vote for that film          else 'duplicate'
  * Every stored vote is re-evaluated on every sync (voter details are stored with it), so a later
- * registration, a late check-in or a changed voting period takes effect on the next sync.
+ * registration, a re-scan, a changed show time or a changed voting period takes effect on the next
+ * sync. Saving the schedule re-checks stored votes at once (syncExternalVotes with fetch: false).
+ * See ADR 0004 Amendment 2.
  */
 
 const { query } = require('../../config/database');
 const { fetchAllKashishVotes } = require('./kashish-api.service');
+const showWindows = require('./showWindows.service');
 
 const VERIFIED_STATUS = 'verified vote';
 const KASHISH_EVENT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -155,6 +162,13 @@ async function matchKashishUserToAttendee(eventId, user, cache) {
 
 // ── Sync ────────────────────────────────────────────────────────────────────
 
+const timeLabel = (d) => d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+/** "TINY TAILS (20 Nov, 10:45 am–11:41 am)": a show and its attendance window, for reasons. */
+function showLabel(sh) {
+  const w = sh.window;
+  return `${sh.title} (${w.opens.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${timeLabel(w.opens)}–${timeLabel(w.closes)})`;
+}
+
 // MySQL DATETIME rounds fractional seconds; drop them so stored and incoming values compare equal
 function wholeSecond(d) {
   return d ? new Date(Math.floor(d.getTime() / 1000) * 1000) : null;
@@ -170,7 +184,9 @@ const OUTCOME_REASON = {
   not_verified: 'Not marked as a verified vote by the Kashish app',
   outside_period: 'Cast outside the festival voting period',
   unregistered: 'Voter is not a registered delegate of this festival (no email or phone match)',
-  not_checked_in: 'Delegate has not checked in at this festival',
+  not_checked_in: "Delegate wasn't scanned in during this film's show",
+  unscheduled: 'Film is not on the schedule (Settings › Audience › Screenings)',
+  voted_before_checkin: 'Voted before being scanned in for the show',
   duplicate: 'Delegate already has a counted vote for this film',
   removed: "Not in this festival's Kashish event feed",
   other_event: 'Belongs to a different Kashish event',
@@ -230,16 +246,19 @@ function sameValue(a, b) {
  * @param {{ apiKey?: string, logId?: number, full?: boolean }} opts  full: re-read the whole feed
  * @returns {Promise<object>} summary with counts per outcome
  */
-async function syncExternalVotes(eventId, { apiKey, logId = null, full = false } = {}) {
+async function syncExternalVotes(eventId, { apiKey, logId = null, full = false, fetch = true } = {}) {
   const config = await getVotingConfig(eventId);
   const state = await getSyncState(eventId);
-  // A full sync is needed the first time and whenever the Kashish event ID changes
-  const isFull = full || !state || !state.last_synced_at || (state.kashish_event_id || null) !== config.kashishEventId;
-  const fetched = await fetchAllKashishVotes(apiKey, {
-    source: 'scan',
-    eventId: config.kashishEventId || undefined,
-    updatedSince: isFull ? undefined : state.last_synced_at
-  });
+  // A full sync is needed the first time and whenever the Kashish event ID changes. Without fetch
+  // (after a schedule change) only the stored votes are re-checked.
+  const isFull = fetch && (full || !state || !state.last_synced_at || (state.kashish_event_id || null) !== config.kashishEventId);
+  const fetched = fetch
+    ? await fetchAllKashishVotes(apiKey, {
+      source: 'scan',
+      eventId: config.kashishEventId || undefined,
+      updatedSince: isFull ? undefined : state.last_synced_at
+    })
+    : { votes: [], syncedAt: null };
   const votes = fetched.votes;
 
   const existingRows = await query(`
@@ -255,7 +274,17 @@ async function syncExternalVotes(eventId, { apiKey, logId = null, full = false }
   votes.map(fromApi).forEach(v => { if (v.id) toEvaluate.set(v.id.slice(0, 160), v); });
 
   const userCache = { map: await loadUserMappings(eventId), misses: new Set() };
-  const checkinCache = new Map();
+  const checkinCache = new Map(); // attendee id → scan times (Dates), oldest first
+  // Per-show attendance (ADR 0004 Amendment 2): the voting shows each Kashish film plays in
+  const { shows } = await showWindows.listShows(eventId);
+  const showsByMovie = new Map();
+  shows.filter((sh) => sh.voting_enabled && sh.window).forEach((sh) => {
+    sh.kashish_films.forEach((f) => {
+      const key = String(f.id);
+      if (!showsByMovie.has(key)) showsByMovie.set(key, []);
+      showsByMovie.get(key).push(sh);
+    });
+  });
   const badgeCache = new Map();
   let usersMatched = 0;
 
@@ -293,6 +322,7 @@ async function syncExternalVotes(eventId, { apiKey, logId = null, full = false }
     } else if (row.stars === null) row.outcome = 'invalid';
     else if (String(row.kashish_status || '').toLowerCase() !== VERIFIED_STATUS) row.outcome = 'not_verified';
     else if (!row.voted_at || (config.from && row.voted_at < config.from) || (config.to && row.voted_at > config.to)) row.outcome = 'outside_period';
+    else if (!showsByMovie.has(row.kashish_movie_id)) row.outcome = 'unscheduled';
 
     if (row.outcome === 'counted') {
       const match = await matchKashishUserToAttendee(eventId, v.user, userCache);
@@ -309,17 +339,36 @@ async function syncExternalVotes(eventId, { apiKey, logId = null, full = false }
           badgeCache.set(match.attendeeId, b.length ? b[0].qr_id : null);
         }
         row.qr_id = badgeCache.get(match.attendeeId);
-        // KASHISH films are not in our screening blocks, so any check-in at this festival counts
+        // The vote counts only with a scan inside the window of a show of this film, before the vote.
+        // Any scan counts by its time, whichever show the volunteer had selected.
         if (!checkinCache.has(match.attendeeId)) {
           const c = await query(
-            'SELECT screening_block_id FROM screening_checkins WHERE attendee_id = ? AND event_id = ? ORDER BY scanned_at LIMIT 1',
+            'SELECT scanned_at FROM screening_checkins WHERE attendee_id = ? AND event_id = ? ORDER BY scanned_at',
             [match.attendeeId, eventId]
           );
-          checkinCache.set(match.attendeeId, c.length ? (c[0].screening_block_id || 0) : null);
+          checkinCache.set(match.attendeeId, c.map((x) => new Date(x.scanned_at)));
         }
-        const block = checkinCache.get(match.attendeeId);
-        if (block === null) row.outcome = 'not_checked_in';
-        else row.checkin_block_id = block || null;
+        const scans = checkinCache.get(match.attendeeId);
+        const filmShows = showsByMovie.get(row.kashish_movie_id);
+        let before = null;
+        let after = null;
+        for (const sh of filmShows) {
+          for (const at of scans) {
+            if (!showWindows.inWindow(sh.window, at)) continue;
+            if (at <= row.voted_at) { before = sh; break; }
+            after = after || sh;
+          }
+          if (before) break;
+        }
+        if (before) row.checkin_block_id = before.id;
+        else if (after) {
+          row.outcome = 'voted_before_checkin';
+          row.checkin_block_id = after.id;
+          row.reason = `Voted before being scanned in for ${showLabel(after)}`;
+        } else {
+          row.outcome = 'not_checked_in';
+          row.reason = `Not scanned in during the attendance window of ${filmShows.map(showLabel).join(' or ')}`;
+        }
       }
     }
     evaluated.push(row);
@@ -387,14 +436,14 @@ async function syncExternalVotes(eventId, { apiKey, logId = null, full = false }
   }
 
   // Remember where to resume: the API's syncedAt is passed back as updatedSince next time
-  await query(`
+  if (fetch) await query(`
     INSERT INTO kashish_sync_state (event_id, kashish_event_id, last_synced_at, last_full_sync_at)
     VALUES (?, ?, ?, ${isFull ? 'CURRENT_TIMESTAMP' : 'NULL'})
     ON DUPLICATE KEY UPDATE kashish_event_id = VALUES(kashish_event_id), last_synced_at = VALUES(last_synced_at)
       ${isFull ? ', last_full_sync_at = CURRENT_TIMESTAMP' : ''}
   `, [eventId, config.kashishEventId, fetched.syncedAt || new Date().toISOString()]);
 
-  const outcomes = { counted: 0, unregistered: 0, not_checked_in: 0, outside_period: 0, not_verified: 0, invalid: 0, duplicate: 0, removed: removedIds.length };
+  const outcomes = { counted: 0, unregistered: 0, not_checked_in: 0, unscheduled: 0, voted_before_checkin: 0, outside_period: 0, not_verified: 0, invalid: 0, duplicate: 0, removed: removedIds.length };
   evaluated.forEach(r => { outcomes[r.outcome]++; });
 
   if (logId) {
@@ -506,7 +555,7 @@ async function getExternalSummary(eventId) {
     'SELECT outcome, COUNT(*) AS n FROM kashish_external_votes WHERE event_id = ? GROUP BY outcome',
     [eventId]
   );
-  const outcomes = { counted: 0, unregistered: 0, not_checked_in: 0, outside_period: 0, not_verified: 0, invalid: 0, duplicate: 0, removed: 0 };
+  const outcomes = { counted: 0, unregistered: 0, not_checked_in: 0, unscheduled: 0, voted_before_checkin: 0, outside_period: 0, not_verified: 0, invalid: 0, duplicate: 0, removed: 0 };
   outcomeRows.forEach(r => { outcomes[r.outcome] = Number(r.n); });
   const state = await getSyncState(eventId);
 
@@ -515,6 +564,8 @@ async function getExternalSummary(eventId) {
            SUM(outcome = 'counted') AS counted,
            SUM(outcome = 'unregistered') AS unregistered,
            SUM(outcome = 'not_checked_in') AS not_checked_in,
+           SUM(outcome = 'voted_before_checkin') AS voted_before_checkin,
+           SUM(outcome = 'unscheduled') AS unscheduled,
            SUM(outcome = 'outside_period') AS outside_period,
            SUM(outcome IN ('not_verified', 'invalid', 'duplicate')) AS other_skipped,
            COUNT(*) AS total
@@ -546,6 +597,8 @@ async function getExternalSummary(eventId) {
       counted: Number(f.counted),
       unregistered: Number(f.unregistered),
       not_checked_in: Number(f.not_checked_in),
+      voted_before_checkin: Number(f.voted_before_checkin),
+      unscheduled: Number(f.unscheduled),
       outside_period: Number(f.outside_period),
       other_skipped: Number(f.other_skipped),
       total: Number(f.total)
@@ -555,7 +608,21 @@ async function getExternalSummary(eventId) {
   };
 }
 
+/**
+ * Kashish movies seen in this festival's votes, for linking films to shows in the schedule editor
+ * (Kashish has no films list API yet).
+ */
+async function listKnownMovies(eventId) {
+  const rows = await query(`
+    SELECT kashish_movie_id AS id, MAX(kashish_movie_title) AS title, COUNT(*) AS votes
+    FROM kashish_external_votes WHERE event_id = ? AND outcome <> 'removed'
+    GROUP BY kashish_movie_id ORDER BY title ASC
+  `, [eventId]);
+  return rows.map((r) => ({ id: r.id, title: r.title, votes: Number(r.votes) }));
+}
+
 module.exports = {
+  listKnownMovies,
   getVotingConfig,
   isKashishSource,
   listKashishSyncEvents,

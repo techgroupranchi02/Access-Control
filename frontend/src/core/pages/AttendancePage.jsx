@@ -23,6 +23,29 @@ import {
   CheckIcon,
   ExpandMoreIcon
 } from '../components/common/Icons';
+import { attendeeLabel } from '../utils/attendeeDisplay';
+
+/** '13:45' → '1:45 PM' */
+function clock(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm || '');
+  if (!m) return hhmm || '';
+  const h = Number(m[1]) % 24;
+  return `${((h + 11) % 12) + 1}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+}
+const showDay = (iso) => {
+  const d = iso ? new Date(`${iso}T00:00:00`) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+};
+/** Where a show's attendance window stands right now: { state: 'open'|'soon'|'closed', text }. */
+function windowState(show, now) {
+  const w = show?.attendance_window;
+  if (!w) return null;
+  const opens = new Date(w.opens_at);
+  const closes = new Date(w.closes_at);
+  if (now < opens) return { state: 'soon', text: `Attendance opens ${clock(w.opens)}${opens.toDateString() !== now.toDateString() ? `, ${showDay(show.screening_date)}` : ''}` };
+  if (now > closes) return { state: 'closed', text: `Attendance closed at ${clock(w.closes)}` };
+  return { state: 'open', text: `Attendance open until ${clock(w.closes)}` };
+}
 
 export default function AttendancePage() {
   const [screenings, setScreenings] = useState([]);
@@ -39,6 +62,12 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [venueMenuOpen, setVenueMenuOpen] = useState(false);
   const venueMenuRef = useRef(null);
+  // Re-render every 30 s so the attendance window status stays current
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!venueMenuOpen) return undefined;
@@ -85,8 +114,9 @@ export default function AttendancePage() {
       const res = await api.get('/audience/screenings');
       const list = res.data.screenings || [];
       setScreenings(list);
+      // Start on the show whose attendance window is open now (else the next one)
       if (list.length > 0 && !selectedScreening) {
-        setSelectedScreening(list[0].id);
+        setSelectedScreening(res.data.current_screening_id || list[0].id);
       }
     } catch (err) {
       console.error('Failed to load screenings:', err);
@@ -182,9 +212,11 @@ export default function AttendancePage() {
         screening_block_id: selectedScreening
       });
 
+      // Outside the show's attendance window: recorded, but shown as a warning
+      const outside = res.data.in_window === false;
       setLastScanResult({
         success: true,
-        isDuplicate: res.data.is_duplicate,
+        isDuplicate: res.data.is_duplicate || outside,
         message: res.data.message,
         attendee: res.data.attendee,
         timestamp: new Date().toLocaleTimeString()
@@ -192,11 +224,11 @@ export default function AttendancePage() {
 
       setScanInput('');
       fetchLogs(selectedScreening);
-      playBeep(!res.data.is_duplicate);
+      playBeep(!res.data.is_duplicate && !outside);
 
       // Mobile haptic feedback
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(res.data.is_duplicate ? [100, 50, 100] : 150);
+        navigator.vibrate(res.data.is_duplicate || outside ? [100, 50, 100] : 150);
       }
     } catch (err) {
       setLastScanResult({
@@ -310,9 +342,9 @@ export default function AttendancePage() {
         {/* Main Grid: Scanner Console + Live Log Feed */}
         <div className="fc-console-grid" style={{ display: 'grid', gap: '24px' }}>
 
-          {/* Scanner Deck */}
+          {/* Scanner Deck (overflow visible: the show list opens past the card's edge) */}
           <div>
-            <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
+            <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)', overflow: 'visible' }}>
               <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <QrCodeScannerIcon size={18} /> Badge Scanner Deck
               </h2>
@@ -320,12 +352,12 @@ export default function AttendancePage() {
               {/* Venue picker: which hall this gate device is checking delegates into */}
               <div ref={venueMenuRef} style={{ marginBottom: '18px', position: 'relative' }}>
                 <div id="gate-venue-label" style={{ fontSize: '0.75rem', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--fc-text-muted)', marginBottom: '6px' }}>
-                  Venue
+                  Show
                 </div>
 
                 {screenings.length === 0 ? (
                   <div style={{ padding: '12px 14px', borderRadius: '10px', border: '1px dashed var(--fc-border)', color: 'var(--fc-text-muted)', fontSize: '0.85rem' }}>
-                    {loading ? 'Loading venues…' : 'No venues scheduled. Add screenings in Settings → Audience.'}
+                    {loading ? 'Loading shows…' : 'No shows scheduled. Add them in Settings → Audience → Screenings.'}
                   </div>
                 ) : (
                   <button
@@ -351,16 +383,20 @@ export default function AttendancePage() {
                   >
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ display: 'block', fontWeight: 700, fontSize: '0.95rem', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
-                        {currentScreeningObj?.venue_name || 'Venue not set'}
-                      </span>
-                      <span style={{ display: 'block', color: 'var(--fc-text-secondary)', fontSize: '0.84rem', fontWeight: 500, marginTop: '2px', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
                         {currentScreeningObj?.title}
                       </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--fc-text-muted)', fontSize: '0.78rem', marginTop: '4px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px', color: 'var(--fc-text-secondary)', fontSize: '0.8rem', marginTop: '3px' }}>
                         <ScheduleIcon size={13} />
-                        {currentScreeningObj?.start_time}{currentScreeningObj?.end_time ? ` – ${currentScreeningObj.end_time}` : ''}
-                        {' · '}{currentScreeningObj?.block_type === 'short_block' ? 'Short Film Block' : 'Feature Film'}
+                        {showDay(currentScreeningObj?.screening_date)}{' · '}
+                        {clock(currentScreeningObj?.start_time)}{currentScreeningObj?.end_time ? ` – ${clock(currentScreeningObj.end_time)}` : ''}
+                        {currentScreeningObj?.venue_name ? ` · ${currentScreeningObj.venue_name}` : ''}
                       </span>
+                      {windowState(currentScreeningObj, now) && (
+                        <span className={`fc-att-window is-${windowState(currentScreeningObj, now).state}`}>
+                          Attendance {clock(currentScreeningObj.attendance_window.opens)}–{clock(currentScreeningObj.attendance_window.closes)}
+                          {' · '}{{ open: 'open now', soon: 'not open yet', closed: 'closed' }[windowState(currentScreeningObj, now).state]}
+                        </span>
+                      )}
                     </span>
                     {screenings.length > 1 && (
                       <ExpandMoreIcon size={20} style={{ color: 'var(--fc-text-muted)', flexShrink: 0, marginTop: '1px', transform: venueMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
@@ -414,14 +450,14 @@ export default function AttendancePage() {
                         >
                           <span style={{ flex: 1, minWidth: 0 }}>
                             <span style={{ display: 'block', fontWeight: 700, fontSize: '0.88rem', lineHeight: 1.35, overflowWrap: 'anywhere', color: isSelected ? 'var(--fc-brand-text)' : 'var(--fc-text-main)' }}>
-                              {s.venue_name || 'Venue not set'}
-                            </span>
-                            <span style={{ display: 'block', fontSize: '0.8rem', color: 'var(--fc-text-secondary)', marginTop: '2px', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
                               {s.title}
                             </span>
-                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>
-                              {s.start_time}{s.end_time ? ` – ${s.end_time}` : ''}
+                            <span style={{ display: 'block', fontSize: '0.78rem', color: 'var(--fc-text-secondary)', marginTop: '2px' }}>
+                              {showDay(s.screening_date)} · {clock(s.start_time)}{s.end_time ? ` – ${clock(s.end_time)}` : ''}{s.venue_name ? ` · ${s.venue_name}` : ''}
                             </span>
+                            {windowState(s, now) && (
+                              <span className={`fc-att-window is-${windowState(s, now).state}`}>{windowState(s, now).text}</span>
+                            )}
                           </span>
                           {isSelected && <CheckIcon size={16} style={{ color: 'var(--fc-brand-text)', flexShrink: 0, marginTop: '2px' }} />}
                         </button>
@@ -430,12 +466,15 @@ export default function AttendancePage() {
                   </div>
                 )}
 
-                {currentScreeningObj?.films?.length > 0 && (
-                  <div style={{ marginTop: '8px', fontSize: '0.78rem', color: 'var(--fc-text-muted)', lineHeight: 1.45 }}>
-                    <span style={{ fontWeight: 700 }}>Films ({currentScreeningObj.films.length}): </span>
-                    {currentScreeningObj.films.map(f => f.title).join(', ')}
-                  </div>
-                )}
+                {(() => {
+                  const films = currentScreeningObj?.films?.length ? currentScreeningObj.films.map(f => f.title) : (currentScreeningObj?.kashish_films || []).map(f => f.title || f.id);
+                  return films.length > 0 && (
+                    <div style={{ marginTop: '8px', fontSize: '0.78rem', color: 'var(--fc-text-muted)', lineHeight: 1.45 }}>
+                      <span style={{ fontWeight: 700 }}>Films ({films.length}): </span>
+                      {films.join(', ')}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 1. Live Camera QR Scanner Section */}
@@ -605,7 +644,7 @@ export default function AttendancePage() {
 
                   {lastScanResult.attendee && (
                     <div style={{ marginTop: '8px', fontSize: '0.9rem', color: 'var(--fc-text-main)' }}>
-                      <div>Delegate: <strong>{lastScanResult.attendee.name}</strong></div>
+                      <div>Delegate: <strong>{attendeeLabel(lastScanResult.attendee)}</strong></div>
                       <div>Category: <span style={{ fontWeight: 700, textTransform: 'uppercase' }}>{lastScanResult.attendee.delegate_category}</span></div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', marginTop: '4px' }}>Time: {lastScanResult.timestamp}</div>
                     </div>
@@ -685,7 +724,9 @@ export default function AttendancePage() {
                             {new Date(log.scanned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                           </td>
                           <td className="fc-ct-status" style={{ padding: '10px 12px' }}>
-                            <span style={{ color: 'var(--fc-success-text)', fontWeight: 600 }}>Verified</span>
+                            {log.scan_status === 'outside_window'
+                              ? <span style={{ color: 'var(--fc-warning-text)', fontWeight: 600 }}>Outside window</span>
+                              : <span style={{ color: 'var(--fc-success-text)', fontWeight: 600 }}>In window</span>}
                           </td>
                           <td className="fc-ct-by" style={{ padding: '10px 12px', color: 'var(--fc-text-muted)' }}>
                             {log.scanned_by_name || 'Volunteer'}

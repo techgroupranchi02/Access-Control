@@ -407,7 +407,7 @@ async function listUserMappings(req, res) {
           u.freecomers_attendee_id,
           u.matched_by,
           u.created_at,
-          a.name AS attendee_name,
+          COALESCE(NULLIF(TRIM(a.name), ''), a.phone) AS attendee_name,
           a.status AS attendee_status
         FROM kashish_user_mappings u
         LEFT JOIN saas_attendees a ON a.attendee_id = u.freecomers_attendee_id
@@ -468,7 +468,7 @@ async function listVoteReceipts(req, res) {
     const [rows, totals] = await Promise.all([
       query(`
         SELECT r.id, r.kashish_vote_id, r.outcome, r.reason, r.stars, r.source, r.voted_at, r.last_evaluated_at,
-               r.film_id, s.title AS film_title, r.attendee_id, a.name AS attendee_name, q.serial_no AS badge_serial,
+               r.film_id, s.title AS film_title, r.attendee_id, COALESCE(NULLIF(TRIM(a.name), ''), a.phone) AS attendee_name, q.serial_no AS badge_serial,
                JSON_UNQUOTE(JSON_EXTRACT(r.payload, '$.user.name')) AS kashish_user_name,
                JSON_UNQUOTE(JSON_EXTRACT(r.payload, '$.user.mobileNumber')) AS kashish_user_mobile,
                JSON_UNQUOTE(JSON_EXTRACT(r.payload, '$.movie.title')) AS kashish_movie_title
@@ -511,7 +511,25 @@ async function getExternalSummary(req, res) {
   }
 }
 
+/**
+ * Re-check the stored Kashish votes of a Kashish-source festival without calling Kashish, under the
+ * same per-event lock as a sync. Used after the schedule (shows, times, films) changes, so the
+ * per-show attendance rule (ADR 0004 Amendment 2) applies at once. Returns null when not applicable
+ * or when a sync is already running (that sync uses the new schedule anyway).
+ */
+async function recheckStoredExternalVotes(eventId) {
+  eventId = parseInt(eventId, 10);
+  if (!eventId || runningEvents.has(eventId) || !(await kashishExternal.isKashishSource(eventId))) return null;
+  runningEvents.add(eventId);
+  try {
+    return await kashishExternal.syncExternalVotes(eventId, { fetch: false });
+  } finally {
+    runningEvents.delete(eventId);
+  }
+}
+
 module.exports = {
+  recheckStoredExternalVotes,
   getExternalSummary,
   listVoteReceipts,
   syncEventVotes,

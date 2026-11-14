@@ -32,6 +32,7 @@ import {
   CloseIcon,
   FlashOnIcon
 } from '../components/common/Icons';
+import { attendeeLabel } from '../utils/attendeeDisplay';
 
 export default function AttendeeAssignQrPage() {
   const navigate = useNavigate();
@@ -56,7 +57,7 @@ export default function AttendeeAssignQrPage() {
   const [successResult, setSuccessResult] = useState(null);
   const [printItems, setPrintItems] = useState(null);
   // Categories for the pass print (loaded once a badge is paired; ADR 0005)
-  const { categories: passCategories } = usePassTemplates({ enabled: Boolean(successResult) });
+  const { categories: passCategories, festival: passFestival } = usePassTemplates({ enabled: Boolean(successResult) });
 
   const searchInputRef = useRef(null);
   const scannerCardRef = useRef(null);
@@ -244,7 +245,7 @@ export default function AttendeeAssignQrPage() {
     <div className="fc-registration-create-page animate-fade-in" style={{ paddingBottom: '80px', maxWidth: '1100px', margin: '0 auto' }}>
       <RegistrationHeader
         active="assign"
-        extraCrumb={selectedAttendee && !successResult ? `${selectedAttendee.name} (${serialNo})` : null}
+        extraCrumb={selectedAttendee && !successResult ? `${attendeeLabel(selectedAttendee)} (${serialNo})` : null}
       />
 
       {/* ── Error Banner ──────────────────────────────────────────────────── */}
@@ -328,7 +329,7 @@ export default function AttendeeAssignQrPage() {
                   Delegate
                 </div>
                 <div style={{ fontWeight: 700, color: 'var(--fc-text-main)', marginTop: '2px', overflowWrap: 'anywhere' }}>
-                  {paired.name}
+                  {attendeeLabel(paired)}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
                   {ribbon && (
@@ -407,7 +408,8 @@ export default function AttendeeAssignQrPage() {
               <PrintPassesDialog
                 items={printItems}
                 defaultMode="full"
-                title={`Print pass for ${paired.name || 'delegate'}`}
+                title={`Pass for ${attendeeLabel(paired)}`}
+                jobTitle={`${passFestival?.name || 'Festival'} passes`}
                 onClose={() => setPrintItems(null)}
               />
             )}
@@ -631,7 +633,7 @@ export default function AttendeeAssignQrPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                   <div>
                     <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--fc-text-main)' }}>
-                      {selectedAttendee.name}
+                      {attendeeLabel(selectedAttendee)}
                     </div>
                     <div style={{ fontSize: '0.84rem', color: 'var(--fc-text-secondary)', marginTop: '2px' }}>
                       Badge Serial: <strong style={{ fontFamily: 'monospace' }}>{serialNo}</strong> &bull; {selectedAttendee.phone || selectedAttendee.email || 'No contact'}
@@ -737,7 +739,7 @@ export default function AttendeeAssignQrPage() {
                     >
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '0.9rem', color: isCurSelected ? 'var(--fc-brand, var(--fc-brand-text))' : 'var(--fc-text-main)' }}>
-                          {a.name}
+                          {attendeeLabel(a)}
                         </div>
                         <div style={{ fontSize: '0.76rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>
                           Serial: <strong style={{ fontFamily: 'monospace' }}>{a.serial_no || ('KB26-' + a.attendee_id)}</strong> &bull; {a.phone || a.email || 'No contact'}

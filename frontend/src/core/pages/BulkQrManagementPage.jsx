@@ -24,7 +24,7 @@ import Pagination from '../components/common/Pagination';
 import {
   ConfirmationNumberIcon, 
   PrintIcon, 
-  UploadFileIcon, FileDownloadIcon, ArrowDropDownIcon, DescriptionIcon, 
+  UploadFileIcon, ArrowDropDownIcon, DescriptionIcon, BadgeIcon,
   CheckCircleIcon,
   QrCodeScannerIcon, CloseIcon, VisibilityIcon
 } from '../components/common/Icons';
@@ -242,7 +242,7 @@ export default function BulkQrManagementPage() {
   // Print dialog: Pass + QR or QR only, template and A4 layout (ADR 0005).
   // Lost badges are never printed (ADR 0001, Amendment 2). Badges print in number order
   // (#001 first), so each A4 page holds a run of numbers.
-  const openPrint = (badges, title) => {
+  const openPrint = (badges, title, mode = 'full') => {
     const seq = (q) => (q.sequence_no === null || q.sequence_no === undefined ? Infinity : Number(q.sequence_no));
     const printableBadges = badges.filter(q => q.status !== 'lost').sort((a, b) => seq(a) - seq(b));
     if (printableBadges.length === 0) {
@@ -251,11 +251,15 @@ export default function BulkQrManagementPage() {
     }
     setPrintJob({
       title,
+      mode,
       items: printableBadges.map((q, i) => ({ data: passDataFromBadge(q, i + 1), categoryCode: '' }))
     });
   };
 
-  const handlePrintSheet = () => openPrint(qrs, `Export QR: ${STATUS_LABEL[filterStatus] ? STATUS_LABEL[filterStatus].toLowerCase() + ' ' : ''}badges`);
+  // What the Print & export menu acts on: the badges in view (tab, search, number range); lost ones never print
+  const printableInView = qrs.filter(q => q.status !== 'lost').length;
+  const viewLabel = `${printableInView} ${{ unassigned: 'in-stock ', assigned: 'assigned ' }[filterStatus] || ''}badge${printableInView === 1 ? '' : 's'}`;
+  const runMenu = (action) => { setDownloadOpen(false); action(); };
 
   return (
     <div className="fc-bulk-qr-page animate-fade-in" style={{ paddingBottom: '80px', maxWidth: '1280px', margin: '0 auto' }}>
@@ -473,29 +477,6 @@ export default function BulkQrManagementPage() {
 
           {/* Right: Print & Export Actions */}
           <div className="fc-bq-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              type="button"
-              onClick={handlePrintSheet}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '8px',
-                border: '1px solid var(--fc-border)',
-                background: 'var(--fc-surface)',
-                color: 'var(--fc-text-main)',
-                fontWeight: 700,
-                fontSize: '0.85rem',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: 'var(--shadow-sm)'
-              }}
-              title="Export the QR codes in view: stickers or passes, on A4 or a card printer"
-            >
-              <PrintIcon size={16} />
-              <span>Export QR</span>
-            </button>
-
             <div className="fc-bq-download" ref={downloadRef}>
               <button
                 type="button"
@@ -503,21 +484,33 @@ export default function BulkQrManagementPage() {
                 onClick={() => setDownloadOpen((v) => !v)}
                 aria-haspopup="menu"
                 aria-expanded={downloadOpen}
-                title="Download the badges in view as a CSV file or a PDF list"
+                title="Print the badges in view, or export them as a list"
               >
-                <FileDownloadIcon size={16} />
-                <span>Download</span>
+                <PrintIcon size={16} />
+                <span>Print &amp; export</span>
                 <ArrowDropDownIcon size={18} />
               </button>
               {downloadOpen && (
-                <div className="fc-bq-download-menu" role="menu">
-                  <button type="button" role="menuitem" onClick={() => { setDownloadOpen(false); handleExportCsv(); }}>
-                    <UploadFileIcon size={15} />
-                    <span><strong>CSV</strong><small>Spreadsheet, for printing vendors</small></span>
+                <div className="fc-bq-download-menu" role="menu" aria-label="Print and export">
+                  <div className="fc-bq-menu-scope">{viewLabel} in view</div>
+                  <button type="button" role="menuitem" disabled={!printableInView}
+                    onClick={() => runMenu(() => openPrint(qrs, `Passes with QR · ${viewLabel}`, 'full'))}>
+                    <BadgeIcon size={15} />
+                    <span><strong>Passes with QR…</strong><small>The festival pass with each badge&apos;s QR, to print or save as PDFs</small></span>
                   </button>
-                  <button type="button" role="menuitem" onClick={() => { setDownloadOpen(false); handleExportPdf(); }}>
+                  <button type="button" role="menuitem" disabled={!printableInView}
+                    onClick={() => runMenu(() => openPrint(qrs, `QR stickers · ${viewLabel}`, 'qr-only'))}>
+                    <QrCodeScannerIcon size={15} />
+                    <span><strong>QR stickers…</strong><small>Small QR stickers with the badge number</small></span>
+                  </button>
+                  <div className="fc-bq-menu-divider" role="separator"><span>Lists</span></div>
+                  <button type="button" role="menuitem" onClick={() => runMenu(handleExportCsv)}>
+                    <UploadFileIcon size={15} />
+                    <span><strong>CSV file</strong><small>Every badge in view, for printing vendors</small></span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => runMenu(handleExportPdf)}>
                     <DescriptionIcon size={15} />
-                    <span><strong>PDF</strong><small>Badge list on A4 (choose "Save as PDF")</small></span>
+                    <span><strong>Badge list (PDF)</strong><small>A4 list of badge numbers and status</small></span>
                   </button>
                 </div>
               )}
@@ -761,8 +754,8 @@ export default function BulkQrManagementPage() {
             <div className="fc-modal-footer fc-bq-qr-footer">
               <button type="button" className="fc-bq-action" onClick={() => setQrModal(null)}>Close</button>
               {qrModal.status !== 'lost' && (
-                <button type="button" className="fc-bq-action" onClick={() => { const badge = qrModal; setQrModal(null); openPrint([badge], `Print badge ${badge.badge_serial || ''}`.trim()); }}>
-                  <PrintIcon size={14} /> Print this badge
+                <button type="button" className="fc-bq-action" onClick={() => { const badge = qrModal; setQrModal(null); openPrint([badge], `Pass for badge ${badge.badge_serial || ''}`.trim()); }}>
+                  <PrintIcon size={14} /> Print pass
                 </button>
               )}
               {qrModal.status === 'unassigned' && (
@@ -778,7 +771,7 @@ export default function BulkQrManagementPage() {
       {printJob && (
         <PrintPassesDialog
           items={printJob.items}
-          defaultMode="full"
+          defaultMode={printJob.mode || 'full'}
           title={printJob.title}
           jobTitle={`${currentFestival?.name || 'Festival'} badges`}
           onClose={() => setPrintJob(null)}

@@ -104,7 +104,7 @@ function PassTemplatesList() {
         <div>
           <h1 className="fc-pt-h1">Badges &amp; Passes</h1>
           <p className="fc-pt-sub">
-            Design the passes your festival prints. Desk staff pick a template when they print from Bulk QR, the Audience list or Assign QR, and choose Pass + QR, Pass only or QR only.
+            Design the passes your festival prints. Staff pick a template when they print passes from Bulk QR › Print &amp; export, or one delegate's pass from the Audience list or Assign QR.
           </p>
         </div>
         <button type="button" className="fc-pt-btn is-primary" onClick={() => navigate('/settings/badges/new')}>

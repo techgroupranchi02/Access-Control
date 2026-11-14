@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
+import ScreeningsEditor from '../components/audience/ScreeningsEditor';
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
 import {
   PaletteIcon,
@@ -1440,7 +1441,7 @@ function localInputToIso(value) {
 
 export default function AudienceSettingsPage() {
   const { currentFestival } = useFestivalConfig();
-  const [activeTab, setActiveTab] = useState('form_builder'); // 'form_builder' | 'categories' | 'voting_rules' | 'venues'
+  const [activeTab, setActiveTab] = useState('form_builder'); // 'form_builder' | 'categories' | 'voting_rules' | 'venues' | 'screenings'
 
   const [categories, setCategories] = useState([]);
   const [venues, setVenues] = useState([]);
@@ -1454,6 +1455,8 @@ export default function AudienceSettingsPage() {
     kashish_voting_from: null,
     kashish_voting_to: null,
     kashish_event_id: null,
+    attendance_window_before_min: 15,
+    attendance_window_end_before_min: 15,
     festival_name: ''
   });
   const [loading, setLoading] = useState(true);
@@ -2202,6 +2205,27 @@ export default function AudienceSettingsPage() {
         >
           <MovieIcon size={17} />
           Screening Venues
+        </button>
+
+        <button
+          onClick={() => setActiveTab('screenings')}
+          style={{
+            padding: '12px 20px',
+            background: 'none',
+            border: 'none',
+            borderBottom: activeTab === 'screenings' ? '3px solid var(--fc-brand)' : '3px solid transparent',
+            color: activeTab === 'screenings' ? 'var(--fc-brand-text)' : 'var(--fc-text-secondary)',
+            fontWeight: 700,
+            fontSize: '0.95rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginBottom: '-2px'
+          }}
+        >
+          <ScheduleIcon size={17} />
+          Screenings
         </button>
       </div>
 
@@ -3905,6 +3929,36 @@ export default function AudienceSettingsPage() {
               </div>
               </>)}
 
+              {/* Attendance window per show (ADR 0004 Amendment 2) */}
+              <div style={{ marginBottom: '16px' }}>
+                <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
+                  Attendance window for each show (minutes)
+                </span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--fc-text-secondary)' }}>
+                    Opens before the start
+                    <input
+                      type="number" min={0} max={180}
+                      value={settings.attendance_window_before_min ?? 15}
+                      onChange={(e) => setSettings({ ...settings, attendance_window_before_min: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
+                    />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--fc-text-secondary)' }}>
+                    Closes before the end
+                    <input
+                      type="number" min={0} max={180}
+                      value={settings.attendance_window_end_before_min ?? 15}
+                      onChange={(e) => setSettings({ ...settings, attendance_window_end_before_min: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
+                    />
+                  </label>
+                </div>
+                <small style={{ display: 'block', color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.75rem' }}>
+                  A 1:00–2:00 PM show with 15 and 15 takes attendance from 12:45 to 1:45 PM.{settings.voting_source === 'kashish' ? ' A vote counts only when the delegate was scanned in during a window of that film\'s show, before voting.' : ''} Shows and times are set in the Screenings tab.
+                </small>
+              </div>
+
               {/* Bayesian Number */}
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
@@ -3987,6 +4041,10 @@ export default function AudienceSettingsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'screenings' && (
+        <ScreeningsEditor venues={venues} isKashish={settings.voting_source === 'kashish'} />
       )}
 
       {/* ========================================================================= */}
