@@ -79,8 +79,10 @@ npm run lint
 - **Migrations**:
   - Files are named `backend/migrations/NNN_snake_description.js`, and each is a standalone node script.
   - They **must be idempotent** (`IF NOT EXISTS`, column checks), because Jenkins runs `npm run migrate` on every deploy.
-  - **Data migrations** (e.g. `027_kashish_bengaluru_2026_schedule.js`) read a JSON file from `migrations/data/`, find their festival by a setting (never a hard-coded event id), and record each applied item in `data_seed_log`, so staff edits survive the next deploy.
+  - **Data migrations** (e.g. `027_kashish_bengaluru_2026_schedule.js`) read a JSON file from `migrations/data/`, find their festival by a setting (never a hard-coded event id), and record each applied item in `data_seed_log`, so staff edits survive the next deploy. Schedule files are applied by `scheduleSeed.service.js`, which also runs when the Kashish event ID is saved in Voting Rules and from Screenings › Import films from Kashish, so the order of deploy and settings doesn't matter.
+  - **The runner keeps going after a failed migration** and lists the failures at the end (exit 1). Jenkins still runs `npm run migrate || true`, so a green deploy does not mean every migration ran: check the deploy log for `FAILED`.
   - **Add each new migration to the `MIGRATION_SCRIPTS` array** in `migrations/run_all_migrations.js` by hand. The runner currently starts at 005.
+- **`venues` differs between databases**: production kept its own `venues` table (no `venue_name`), because migration 006 uses `CREATE TABLE IF NOT EXISTS`. Read venues only through `core/services/venues.service.js`, never `v.venue_name` in SQL.
 - **Shared Freecomers tables**: these come from the shared Freecomers DB, not from migrations. Never alter them destructively:
   - `admins`, `users`, the base `events` table, `film_festivals*`, `saas_attendees`, `saas_qr`, `delegate_reviews`, `countries`.
 

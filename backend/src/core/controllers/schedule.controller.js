@@ -12,7 +12,8 @@ async function list(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
 
-    const venues = await query('SELECT venue_id as id, venue_name as name, capacity, event_id, created_at FROM venues WHERE event_id = ? ORDER BY venue_id ASC', [eventId]);
+    // venues.service reads whatever columns the venues table has (production's differs from dev's)
+    const venues = await require('../services/venues.service').listEventVenues(eventId);
 
     const slots = await query(`
       SELECT 

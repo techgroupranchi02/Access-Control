@@ -19,6 +19,7 @@ const cardPdf = require('../services/cardPdf.service');
 const showWindows = require('../services/showWindows.service');
 const { sendDelegateConfirmation, isDayPass } = require('../services/delegateConfirmationEmail');
 const kashishExternal = require('../services/kashishExternalVotes.service');
+const venuesService = require('../services/venues.service');
 const { getFilmFestivalId } = require('../services/festivalIds.service');
 
 const KASHISH_VOTING_MESSAGE = 'Audience voting for this festival happens in the Kashish Pride app.';
@@ -231,18 +232,12 @@ async function deleteCategory(req, res) {
 async function listVenues(req, res) {
   try {
     const eventId = getEventId(req);
-    const sql = `
-      SELECT 
-        v.venue_id AS id,
-        v.event_id,
-        v.venue_name AS name,
-        COALESCE(v.capacity, 100) AS capacity,
-        (SELECT COUNT(*) FROM screening_blocks sb WHERE sb.venue_id = v.venue_id) AS total_screenings
-      FROM venues v
-      WHERE v.event_id = ?
-      ORDER BY v.venue_id ASC
-    `;
-    const venues = await query(sql, [eventId]);
+    // venues.service reads whatever columns the venues table has (production's differs from dev's)
+    const list = await venuesService.listEventVenues(eventId);
+    const counts = new Map((await query(
+      'SELECT venue_id, COUNT(*) AS n FROM screening_blocks WHERE event_id = ? AND venue_id IS NOT NULL GROUP BY venue_id', [eventId]
+    )).map((r) => [Number(r.venue_id), Number(r.n)]));
+    const venues = list.map((v) => ({ ...v, capacity: v.capacity ?? 100, total_screenings: counts.get(Number(v.id)) || 0 }));
     res.json({ success: true, count: venues.length, venues });
   } catch (error) {
     console.error('[AudienceController] listVenues error:', error.message);
@@ -345,7 +340,13 @@ async function updateAudienceSettings(req, res) {
     `, [eventId, JSON.stringify(settings)]);
 
     // Window offsets, voting period or source may have changed: re-check stored Kashish votes now
-    recheckVotesSoon(eventId);
+    if (settings.kashish_event_id) {
+      // A schedule file for this Kashish event (migrations/data) arrives now, even if the ID is set after the
+      // deploy that ran migration 027; it re-checks the stored votes when it adds anything (ADR 0004 Amendment 5)
+      applySchedulesSoon(eventId);
+    } else {
+      recheckVotesSoon(eventId);
+    }
     res.json({ success: true, message: 'Audience settings saved successfully.', settings });
   } catch (error) {
     console.error('[AudienceController] updateAudienceSettings error:', error.message);
@@ -369,7 +370,6 @@ async function listScreeningBlocks(req, res) {
         sb.id,
         sb.event_id,
         sb.venue_id,
-        v.venue_name AS venue_name,
         sb.title,
         sb.block_type,
         sb.voting_enabled,
@@ -384,11 +384,13 @@ async function listScreeningBlocks(req, res) {
         (SELECT COUNT(*) FROM screening_checkins sc WHERE sc.screening_block_id = sb.id) AS scan_count,
         (SELECT COUNT(*) FROM audience_votes av WHERE av.screening_block_id = sb.id) AS total_votes_cast
       FROM screening_blocks sb
-      LEFT JOIN venues v ON v.venue_id = sb.venue_id
       WHERE sb.event_id = ?
       ORDER BY sb.screening_date ASC, sb.start_time ASC, sb.id ASC
     `;
     const screenings = await query(sql, [eventId]);
+    // Venue names come separately: the venues table's columns differ between databases (venues.service)
+    const venueNames = await venuesService.venueNameMap(eventId).catch(() => new Map());
+    screenings.forEach((sc) => { sc.venue_name = sc.venue_id ? venueNames.get(Number(sc.venue_id)) || null : null; });
 
     // Attendance windows and Kashish films (ADR 0004 Amendment 2)
     const { settings, shows } = await showWindows.listShows(eventId);
@@ -471,8 +473,7 @@ async function readShowBody(eventId, b = {}) {
   let venueId = null;
   if (b.venue_id !== undefined && b.venue_id !== null && b.venue_id !== '') {
     venueId = parseInt(b.venue_id, 10);
-    const v = Number.isInteger(venueId) ? await query('SELECT venue_id FROM venues WHERE venue_id = ? AND event_id = ? LIMIT 1', [venueId, eventId]) : [];
-    if (!v.length) return { error: 'Choose a venue of this festival.' };
+    if (!(await venuesService.venueBelongsToEvent(eventId, venueId))) return { error: 'Choose a venue of this festival.' };
   }
 
   let kashishFilms = null; // null = leave unchanged on update
@@ -509,6 +510,17 @@ async function saveKashishFilms(eventId, blockId, films) {
       [eventId, blockId, f.id, f.title]
     );
   }
+}
+
+/** Apply the festival's schedule files in the background, then re-check votes (never blocks or fails the save). */
+function applySchedulesSoon(eventId) {
+  const { applySchedulesForEvent } = require('../services/scheduleSeed.service');
+  applySchedulesForEvent(eventId)
+    .then((r) => {
+      if (r.created.length) console.log(`[Schedule] festival ${eventId}: ${r.created.length} show(s) added from the schedule file.`);
+      recheckVotesSoon(eventId);
+    })
+    .catch((err) => { console.error('[Schedule] schedule file not applied:', err.message); recheckVotesSoon(eventId); });
 }
 
 /** After a schedule change, re-check stored Kashish votes now (never blocks or fails the save). */
@@ -645,8 +657,8 @@ async function listKashishMoviesForSchedule(req, res) {
 
 /**
  * POST /api/audience/screenings/kashish-movies/import
- * Refresh the festival's films from the Kashish Movies API and link each film that is on no show to
- * the show it plays in (adds links only). Returns counts plus the films that could not be placed.
+ * Apply the festival's schedule file (shows it lacks), refresh the films from the Kashish Movies API and link
+ * each film that is on no show to the show it plays in (adds only). Returns counts plus the unplaced films.
  */
 async function importKashishMovies(req, res) {
   try {
@@ -654,11 +666,15 @@ async function importKashishMovies(req, res) {
     if (!(await kashishExternal.isKashishSource(eventId))) {
       return res.status(400).json({ error: 'This festival does not take its votes from Kashish (Settings › Audience › Voting Rules).' });
     }
+    // 1. The festival's schedule file, if it has one (shows + known film links; each item once)
+    const { applySchedulesForEvent } = require('../services/scheduleSeed.service');
+    const schedule = await applySchedulesForEvent(eventId);
+    // 2. Kashish's film list, then link each film that is still on no show
     const { refreshCatalog, autoLinkFilms } = require('../services/kashishMovies.service');
     const catalog = await refreshCatalog(eventId);
     const { linked, unmatched } = await autoLinkFilms(eventId);
-    if (linked.length) recheckVotesSoon(eventId);
-    res.json({ success: true, catalog, linked, unmatched });
+    if (linked.length || schedule.changed) recheckVotesSoon(eventId);
+    res.json({ success: true, schedule: { shows_added: schedule.created.length, changes: schedule.changed }, catalog, linked, unmatched });
   } catch (error) {
     console.error('[AudienceController] importKashishMovies error:', error.message);
     res.status(error.status || 502).json({ error: error.status ? error.message : `Could not import the films from Kashish: ${error.message}` });
@@ -2532,9 +2548,8 @@ async function listAttendance(req, res) {
         sb.voting_status,
         sb.voting_opened_at,
         sb.voting_closed_at,
-        COALESCE(v.venue_name, 'Main Auditorium') AS venue_name
+        sb.venue_id
       FROM screening_blocks sb
-      LEFT JOIN venues v ON v.venue_id = sb.venue_id
       WHERE sb.qr_token = ?
       LIMIT 1
     `, [token]);
@@ -2544,6 +2559,7 @@ async function listAttendance(req, res) {
       }
 
       const block = blockRows[0];
+      block.venue_name = (block.venue_id && (await venuesService.venueNameMap(block.event_id)).get(Number(block.venue_id))) || 'Main Auditorium';
       if (await kashishExternal.isKashishSource(block.event_id)) {
         return res.status(403).json({ error: KASHISH_VOTING_MESSAGE });
       }

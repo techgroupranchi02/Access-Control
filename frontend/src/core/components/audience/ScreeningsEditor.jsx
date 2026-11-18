@@ -110,10 +110,12 @@ export default function ScreeningsEditor({ venues = [], isKashish = false }) {
       const { data } = await api.post('/audience/screenings/kashish-movies/import');
       const total = data.catalog?.total ?? 0;
       const parts = [`${total} film${total === 1 ? '' : 's'} from Kashish`];
+      const added = data.schedule?.shows_added || 0;
+      if (added) parts.unshift(`${added} show${added === 1 ? '' : 's'} added from the festival schedule`);
       if (data.linked.length) parts.push(`linked ${data.linked.map((l) => `${l.title} to ${l.show}`).join(', ')}`);
       if (data.unmatched.length) {
         parts.push(`no show found for ${data.unmatched.map((f) => f.title).join(', ')}: add ${data.unmatched.length === 1 ? 'it' : 'them'} to the right show by hand`);
-      } else if (!data.linked.length) {
+      } else if (!data.linked.length && !added) {
         parts.push('every film was already on its show');
       }
       setNotice({ kind: data.unmatched.length ? 'warn' : 'ok', text: `${parts.join(' · ')}.` });

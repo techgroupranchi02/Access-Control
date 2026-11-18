@@ -35,7 +35,7 @@ _Nothing in progress._
 
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
-| 2026-11-18 | Production: set Vote source = Kashish app and Kashish event ID `EF3j920261` in Settings › Audience › Voting Rules **before** deploying migration 027 (or run `npm run migrate` after) | Festival team | Migration 027 finds the festival by that ID. Without it, it does nothing and logs "No festival has Kashish event ID". |
+| 2026-11-18 | Production: run the read-only check (`venues` columns; `voting_enabled`, `screening_block_kashish_films`, `data_seed_log`, `kashish_movies` present) and send the output. After the next deploy, check the deploy log for `FAILED` migrations, then press **Import films from Kashish** in Settings › Audience › Screenings if shows are still missing | DevOps / Festival team | Confirms whether migrations 026–028 ran on production. The venue fix works with any `venues` columns. |
 | 2026-11-14 | Production server time zone must be IST (attendance windows use the server's local time) | DevOps | Check `timedatectl` on the production host. |
 | 2026-11-12 | Ask Kashish to rotate the API key printed in their guide, then update `KASHISH_API_KEY` in dev and prod `.env` | Team | The guide's examples show our live key. Their Movies API guide (2026-11-18) prints a key again. |
 | 2026-11-14 | Ask Kashish whether shorts are voted on individually or as a package | Team | The Movies API lists each short as its own film, so individual voting is assumed. |
@@ -52,6 +52,22 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-18: Production Screenings: confirmed cause is the `venues` table** (`deployed` 2026-11-18).
+  - **Confirmed from the production log:** `listScreeningBlocks error: Unknown column 'v.venue_name'`. Migration 006 creates `venues` with `CREATE TABLE IF NOT EXISTS`, so production kept its existing (shared) `venues` table, which has no `venue_name`. Dev has ours.
+  - **What:** `src/core/services/venues.service.js` (new) reads the venues table's real column names once (id: venue_id/id; name: venue_name/name/title/venue/hall_name; festival: event_id, else festival_id). Every venue read goes through it: `listVenues`, `listScreeningBlocks` (no venues join any more; names attached after, and a venue failure can't break the list), the show save's venue check, the public vote page, and `schedule.controller.js` venues.
+  - **Checked:** dev lists 16 shows and its venues; mocked production-style columns (`id`, `name`, `event_id`) read correctly; a table without a name column gives no venues instead of an error. Backend restarted.
+  - **Still to confirm on production:** the columns of `venues` and whether 026–028 ran (see Needs action).
+- **2026-11-18: Migration runner and schedule hardening (found while investigating production)** (`deployed` 2026-11-18). [ADR 0004, Amendment 5](adr/0004-kashish-external-leaderboard.md).
+  - **Risk found (not the confirmed cause; see the entry above):** the migration runner stopped at the first failing migration, and Jenkins runs `npm run migrate || true`, so the deploy looked fine. Migration 014 throws when production's shared `saas_qr` has duplicate (event_id, serial_no). Everything after it was skipped: 026 (the `voting_enabled` column and `screening_block_kashish_films` table the screenings list reads → the 500) and 027 (the schedule → no shows). 027 also only ran at deploy, so a Kashish event ID saved later never got its schedule.
+  - **What:**
+    - `migrations/run_all_migrations.js`: runs every migration even after a failure, lists failures at the end, exit 1.
+    - `migrations/014_qr_credential_serial.js`: duplicates are logged and the unique key skipped, instead of failing.
+    - `src/core/services/scheduleSeed.service.js` (new): the schedule logic from 027, applied for every `migrations/data/*.json` matching the festival's Kashish event ID. `027` now calls it.
+    - `audience.controller.js`: saving Voting Rules with a Kashish event ID applies the schedule (background, then votes re-checked); `POST /screenings/kashish-movies/import` applies it before the films catalog. `ScreeningsEditor.jsx`: the Import notice says how many shows were added.
+  - **Checked on dev:**
+    - A temporary festival with the Kashish event ID and no shows got 16 shows and 44 film links; a second run changed nothing; test rows removed.
+    - The full `run_all_migrations.js` passes (exit 0). A copy of the runner with a failing script continued to the next script and exited 1.
+    - Import on festival 40: 0 shows added, 44 films, 0 unmatched. Frontend build passes, backend restarted.
 - **2026-11-18: Attendance camera closes after each scan** (`deployed` 2026-11-18).
   - **What:** `AttendancePage.jsx`: when the camera reads a badge, `executeCheckin` sets `isCameraActive` to false before recording, so the scanner stops at once (no double reads) and the result card stays on screen. The next badge is one tap on **Open Live Camera QR Scanner**. The hint under the camera says so. USB scanner and typing are unchanged.
   - **Checked:** lint shows no errors; the frontend build passes. The User Manual's Attendance steps (admin and volunteer) are updated. Not yet tried with a real camera on a phone.

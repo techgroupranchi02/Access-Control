@@ -124,3 +124,18 @@ Migration: `026_show_attendance_windows.js` (`voting_enabled`, `screening_block_
 - **Consequences:**
   - A film Kashish adds or moves later is picked up with one click. A film whose slot and show name match no show is listed, to be added by hand.
   - Voting stays our decision: Kashish marks every film `is_nominated`, including the features. The show's Audience Choice flag decides what counts.
+
+## Amendment 5: Schedule files apply on settings save and Import; runner no longer stops (2026-11-18)
+- **Context:**
+  - After deploying to production, Settings › Audience › Screenings showed "Failed to retrieve screening sessions." and no shows.
+  - The production log showed the direct cause: `Unknown column 'v.venue_name'`. Production's `venues` table is the shared one (migration 006's `CREATE TABLE IF NOT EXISTS` never replaced it) and its columns differ. Fixed by `venues.service.js`, which reads the real column names. The points below are the migration risks found on the way.
+  - The migration runner stopped at the first failing migration, and Jenkins runs `npm run migrate || true`, so the deploy stayed green. Migration 014 deliberately fails when the shared `saas_qr` table has duplicate (event_id, serial_no), which production data can have. Every later migration was then skipped, including 026 (`voting_enabled`, `screening_block_kashish_films`, which the screenings list reads) and 027 (the schedule). The Nov 12 "run 018–025 by hand on production" item fits this.
+  - Migration 027 also only ran at deploy, so a Kashish event ID saved after the deploy never got its schedule.
+- **Decision:**
+  - `run_all_migrations.js` runs every migration even after a failure (all are idempotent), then lists the failures and exits 1.
+  - Migration 014 logs the duplicates and skips the unique key instead of failing.
+  - The schedule logic moved to `scheduleSeed.service.js`. It applies every `migrations/data/*.json` file whose Kashish event ID matches the festival: from migration 027, when Voting Rules are saved with a Kashish event ID, and from Screenings › Import films from Kashish (before refreshing the films catalog). Still once per item (`data_seed_log`).
+- **Consequences:**
+  - The next deploy applies 015–028 on production even if 014 (or another) still fails; the log names what failed.
+  - After the deploy, pressing Import films from Kashish (or saving Voting Rules) loads the 16 shows if they are still missing.
+

@@ -86,10 +86,14 @@ async function up() {
        WHERE serial_no IS NOT NULL GROUP BY event_id, serial_no HAVING c > 1 LIMIT 5`
     );
     if (dupes.length > 0) {
-      throw new Error(`[Migration 014] Duplicate (event_id, serial_no) found, resolve before adding key: ${JSON.stringify(dupes)}`);
+      // saas_qr is shared with Laravel/festease, so production can hold duplicates dev never had. Skip the key
+      // (new badges stay unique through qrCredential.service) instead of failing, which used to stop the
+      // whole migration chain on deploy.
+      console.warn(`[Migration 014] ⚠ Duplicate (event_id, serial_no) found, so uk_event_serial is NOT added yet. Resolve these and run npm run migrate again: ${JSON.stringify(dupes)}`);
+    } else {
+      await query('ALTER TABLE saas_qr ADD UNIQUE KEY uk_event_serial (event_id, serial_no)');
+      console.log('[Migration 014] ✓ Added UNIQUE KEY uk_event_serial (event_id, serial_no)');
     }
-    await query('ALTER TABLE saas_qr ADD UNIQUE KEY uk_event_serial (event_id, serial_no)');
-    console.log('[Migration 014] ✓ Added UNIQUE KEY uk_event_serial (event_id, serial_no)');
   } else {
     console.log('[Migration 014] • uk_event_serial already exists');
   }

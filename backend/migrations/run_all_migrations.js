@@ -1,6 +1,7 @@
 /**
  * Master Migration Runner for Access-Control
- * Sequentially executes all migrations (005 -> 011) and platform spec synchronization.
+ * Runs every migration in order, then the platform spec sync. A failed migration does not stop the
+ * later ones (all are idempotent); failures are listed at the end and the exit code is 1.
  * 
  * Usage: node migrations/run_all_migrations.js
  */
@@ -44,6 +45,10 @@ async function run() {
   console.log(`[Master Migration] Target Host    : ${process.env.DB_HOST || '127.0.0.1'}`);
   console.log('====================================================\n');
 
+  // Every migration is idempotent, so one failure must not stop the later ones: a migration blocked by
+  // production data (e.g. 014's duplicate badge numbers) used to leave every later table missing while the
+  // deploy still looked green (Jenkins runs `npm run migrate || true`). Failures are listed at the end.
+  const failed = [];
   for (let i = 0; i < MIGRATION_SCRIPTS.length; i++) {
     const scriptPath = MIGRATION_SCRIPTS[i];
     const scriptName = path.basename(scriptPath);
@@ -59,13 +64,19 @@ async function run() {
       });
       console.log(`✓ [Step ${i + 1}/${MIGRATION_SCRIPTS.length}] ${scriptName} completed.\n`);
     } catch (err) {
-      console.error(`\n❌ [Step ${i + 1}/${MIGRATION_SCRIPTS.length}] ${scriptName} FAILED.`);
+      console.error(`\n❌ [Step ${i + 1}/${MIGRATION_SCRIPTS.length}] ${scriptName} FAILED; continuing with the next migration.`);
       console.error(err.message);
-      process.exit(1);
+      failed.push(scriptName);
     }
   }
 
   console.log('====================================================');
+  if (failed.length) {
+    console.error(`[Master Migration] ${failed.length} migration(s) FAILED: ${failed.join(', ')}`);
+    console.error('[Master Migration] Every other migration ran. Fix the failures above and run `npm run migrate` again.');
+    console.log('====================================================');
+    process.exit(1);
+  }
   console.log('🎉 All Access-Control migrations & specs synced successfully!');
   console.log('====================================================');
 }
