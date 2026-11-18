@@ -95,3 +95,32 @@ Migration: `023_kashish_sync_state.js`.
 6. Delegates already checked in are no longer refused as "Badge not issued" on a later scan.
 
 Migration: `026_show_attendance_windows.js` (`voting_enabled`, `screening_block_kashish_films`, the scans index change, `outside_window`, and the two vote outcomes).
+
+## Amendment 3: Festival schedule as a data migration (2026-11-18)
+- **Context:**
+  - The KASHISH x BENGALURU 2026 schedule was entered by hand on dev. Production needs the same schedule with the same rules: only the short films are in the Audience Choice vote; the 4 features, the ceremonies and the panel are not.
+  - The Kashish API has no films list: movie IDs appear only in the vote feed, once a film has a vote.
+- **Decision:**
+  - The schedule lives in `backend/migrations/data/kashish-bengaluru-2026-schedule.json`: shows, type, voting flag, films and their Kashish movie IDs (null until known).
+  - `027_kashish_bengaluru_2026_schedule.js` applies the file to every festival whose Voting Rules carry the file's Kashish event ID. No festival id is written in code.
+  - Shows are matched by date and start time; a missing show is created, and an existing one gets the file's type and voting flag. Films with an ID are linked.
+  - Each item is applied once and recorded in `data_seed_log` (seed key, event, item). Later edits in Settings › Audience › Screenings are kept, and IDs added to the file later are linked on the next deploy.
+  - Stored votes are re-checked after any change.
+- **Consequences:**
+  - The festival's Voting Rules must have the Kashish event ID before the migration can find it.
+  - Fixing a show the migration already applied is done in Screenings, not in the file.
+
+## Amendment 4: Films catalog from the Kashish Movies API (2026-11-18)
+- **Context:**
+  - Kashish added a Movies API: `GET /api/v1/movies?eventId=...` (same key, `x-api-key`). For `EF3j920261` it returns all 44 films, each with its id, title, category, Kashish show name (`subCategoryName`, "No Sub Category" for features) and screening slot ("Friday Nov 20, 2.00 PM | NGMA as part of FACE2FACE").
+  - This replaces Amendment 3's note that the API has no films list. Until now the Screenings picker offered only films that already had votes.
+- **Decision:**
+  - `fetchKashishMovies()` in `kashish-api.service.js`. The URL is `KASHISH_MOVIES_API_URL`, or else `KASHISH_API_URL` with `/votes` replaced by `/movies`.
+  - Our own table `kashish_movies` (migration 028) stores each festival's catalog. `kashishMovies.service.refreshCatalog()` upserts it and drops films Kashish no longer lists; an empty answer never clears it.
+  - `autoLinkFilms()` links each catalog film that is on no show. It matches the screening slot against the show's date and start time first, then the Kashish show name against the show title (for a feature, the film title). It only adds links and never removes or moves a staff link.
+  - Settings › Audience › Screenings › **Import films from Kashish** (`POST /api/audience/screenings/kashish-movies/import`, `audience.manage_settings`) runs both steps, then re-checks stored votes. A full "Sync now" also refreshes the catalog; scheduled syncs don't.
+  - `listKnownMovies()` returns the catalog plus vote-only films, so the picker and the "not on any show" warning cover films with no votes yet.
+  - The KASHISH x BENGALURU 2026 schedule file now has all 44 movie IDs, taken from the Movies API, so migration 027 links every film on deploy.
+- **Consequences:**
+  - A film Kashish adds or moves later is picked up with one click. A film whose slot and show name match no show is listed, to be added by hand.
+  - Voting stays our decision: Kashish marks every film `is_nominated`, including the features. The show's Audience Choice flag decides what counts.

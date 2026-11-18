@@ -32,7 +32,10 @@ import {
   CloseIcon,
   FlashOnIcon
 } from '../components/common/Icons';
-import { attendeeLabel } from '../utils/attendeeDisplay';
+import { attendeeLabel as fullLabel, maskPhone } from '../utils/attendeeDisplay';
+
+// Mobile numbers show only the first 3 and last 4 digits on this desk screen
+const attendeeLabel = (a) => fullLabel(a, undefined, { maskPhone: true });
 
 export default function AttendeeAssignQrPage() {
   const navigate = useNavigate();
@@ -341,7 +344,7 @@ export default function AttendeeAssignQrPage() {
                       {ribbon}
                     </span>
                   )}
-                  {paired.phone && <span style={{ fontSize: '0.82rem', color: 'var(--fc-text-muted)' }}>{paired.phone}</span>}
+                  {paired.phone && <span style={{ fontSize: '0.82rem', color: 'var(--fc-text-muted)' }}>{maskPhone(paired.phone)}</span>}
                 </div>
               </div>
             </div>
@@ -636,7 +639,7 @@ export default function AttendeeAssignQrPage() {
                       {attendeeLabel(selectedAttendee)}
                     </div>
                     <div style={{ fontSize: '0.84rem', color: 'var(--fc-text-secondary)', marginTop: '2px' }}>
-                      Badge Serial: <strong style={{ fontFamily: 'monospace' }}>{serialNo}</strong> &bull; {selectedAttendee.phone || selectedAttendee.email || 'No contact'}
+                      Badge Serial: <strong style={{ fontFamily: 'monospace' }}>{serialNo}</strong> &bull; {maskPhone(selectedAttendee.phone) || selectedAttendee.email || 'No contact'}
                     </div>
                     <div style={{ fontSize: '0.76rem', fontWeight: 700, color: selectedAttendee.qr_token ? 'var(--fc-success-text)' : 'var(--fc-warning-text)', marginTop: '4px' }}>
                       {selectedAttendee.qr_token ? 'QR Badge Already Active' : 'Ready to Pair Physical Badge'}
@@ -742,7 +745,7 @@ export default function AttendeeAssignQrPage() {
                           {attendeeLabel(a)}
                         </div>
                         <div style={{ fontSize: '0.76rem', color: 'var(--fc-text-muted)', marginTop: '2px' }}>
-                          Serial: <strong style={{ fontFamily: 'monospace' }}>{a.serial_no || ('KB26-' + a.attendee_id)}</strong> &bull; {a.phone || a.email || 'No contact'}
+                          Serial: <strong style={{ fontFamily: 'monospace' }}>{a.serial_no || ('KB26-' + a.attendee_id)}</strong> &bull; {maskPhone(a.phone) || a.email || 'No contact'}
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

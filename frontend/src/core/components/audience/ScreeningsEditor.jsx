@@ -7,11 +7,14 @@
  * Voting Rules); a vote for a film counts only with a scan inside a window of one of its shows,
  * before the vote. A delayed show is edited here and its window moves with it; stored votes are
  * re-checked on save. See docs/adr/0004-kashish-external-leaderboard.md, Amendment 2.
+ *
+ * Kashish festivals: "Import films from Kashish" reads the festival's films from the Kashish Movies API and
+ * links each film that is on no show to the show it plays in (Amendment 4); the film picker lists them all.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../../services/api';
-import { AddIcon, EditIcon, DeleteIcon, CloseIcon, WarningIcon, CheckCircleIcon, ScheduleIcon, HowToVoteIcon } from '../common/Icons';
+import { AddIcon, EditIcon, DeleteIcon, CloseIcon, WarningIcon, CheckCircleIcon, ScheduleIcon, HowToVoteIcon, SyncIcon } from '../common/Icons';
 
 const TYPES = [
   { value: 'feature', label: 'Feature' },
@@ -70,6 +73,7 @@ export default function ScreeningsEditor({ venues = [], isKashish = false }) {
   const [notice, setNotice] = useState(null); // { kind: 'ok' | 'warn', text }
   const [editing, setEditing] = useState(null); // { id|null, form }
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
@@ -98,6 +102,28 @@ export default function ScreeningsEditor({ venues = [], isKashish = false }) {
     return [...map.entries()];
   }, [shows]);
   const unscheduled = movies.filter((m) => !m.screening_ids.length);
+
+  const importFilms = async () => {
+    setImporting(true);
+    setNotice(null);
+    try {
+      const { data } = await api.post('/audience/screenings/kashish-movies/import');
+      const total = data.catalog?.total ?? 0;
+      const parts = [`${total} film${total === 1 ? '' : 's'} from Kashish`];
+      if (data.linked.length) parts.push(`linked ${data.linked.map((l) => `${l.title} to ${l.show}`).join(', ')}`);
+      if (data.unmatched.length) {
+        parts.push(`no show found for ${data.unmatched.map((f) => f.title).join(', ')}: add ${data.unmatched.length === 1 ? 'it' : 'them'} to the right show by hand`);
+      } else if (!data.linked.length) {
+        parts.push('every film was already on its show');
+      }
+      setNotice({ kind: data.unmatched.length ? 'warn' : 'ok', text: `${parts.join(' · ')}.` });
+      load();
+    } catch (err) {
+      setNotice({ kind: 'warn', text: err.response?.data?.error || 'Could not import the films from Kashish.' });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const openNew = () => {
     const last = shows[shows.length - 1];
@@ -140,7 +166,14 @@ export default function ScreeningsEditor({ venues = [], isKashish = false }) {
             {' '}When a show is delayed, change its times here: the window moves with it.
           </p>
         </div>
-        <button type="button" className="fc-sch-btn is-primary" onClick={openNew}><AddIcon size={16} /> Add show</button>
+        <div className="fc-sch-head-actions">
+          {isKashish && (
+            <button type="button" className="fc-sch-btn" onClick={importFilms} disabled={importing} title="Read this festival's films from the Kashish app and link each one to the show it plays in">
+              <SyncIcon size={16} /> {importing ? 'Importing…' : 'Import films from Kashish'}
+            </button>
+          )}
+          <button type="button" className="fc-sch-btn is-primary" onClick={openNew}><AddIcon size={16} /> Add show</button>
+        </div>
       </div>
 
       {notice && (
@@ -154,10 +187,10 @@ export default function ScreeningsEditor({ venues = [], isKashish = false }) {
 
       {isKashish && unscheduled.length > 0 && (
         <div className="fc-sch-unscheduled">
-          <div className="fc-sch-unscheduled-head"><WarningIcon size={16} /> {unscheduled.length} Kashish film{unscheduled.length === 1 ? '' : 's'} with votes {unscheduled.length === 1 ? 'is' : 'are'} not on any show</div>
-          <p>Their votes don&apos;t count until the film is added to the show it plays in.</p>
+          <div className="fc-sch-unscheduled-head"><WarningIcon size={16} /> {unscheduled.length} Kashish film{unscheduled.length === 1 ? '' : 's'} {unscheduled.length === 1 ? 'is' : 'are'} not on any show</div>
+          <p>Votes for {unscheduled.length === 1 ? 'it' : 'them'} don&apos;t count until the film is added to the show it plays in. Import films from Kashish links the ones Kashish lists with a show.</p>
           <div className="fc-sch-chips">
-            {unscheduled.map((m) => <span key={m.id} className="fc-sch-chip is-muted">{m.title} · {m.votes} vote{m.votes === 1 ? '' : 's'}</span>)}
+            {unscheduled.map((m) => <span key={m.id} className="fc-sch-chip is-muted">{m.title}{m.show_name ? ` · ${m.show_name}` : ''}{m.votes ? ` · ${m.votes} vote${m.votes === 1 ? '' : 's'}` : ''}</span>)}
           </div>
         </div>
       )}
@@ -362,10 +395,11 @@ function ShowDialog({ initial, offsets, venues, isKashish, movies, shows, onClos
               )}
               <div className="fc-sch-pick">
                 <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Kashish film">
-                  <option value="">Choose a film that has votes…</option>
+                  <option value="">Choose a Kashish film…</option>
                   {movies.filter((m) => !linked.has(m.id)).map((m) => {
                     const elsewhere = m.screening_ids.filter((id) => id !== initial.id).map(showTitle).filter(Boolean);
-                    return <option key={m.id} value={m.id}>{m.title} ({m.votes} vote{m.votes === 1 ? '' : 's'}){elsewhere.length ? ` · also in ${elsewhere.join(', ')}` : ''}</option>;
+                    const notes = [m.show_name && `Kashish: ${m.show_name}`, m.votes && `${m.votes} vote${m.votes === 1 ? '' : 's'}`, elsewhere.length && `also in ${elsewhere.join(', ')}`].filter(Boolean);
+                    return <option key={m.id} value={m.id}>{m.title}{notes.length ? ` (${notes.join(' · ')})` : ''}</option>;
                   })}
                 </select>
                 <button type="button" className="fc-sch-btn is-small" disabled={!pick} onClick={() => { const m = movies.find((x) => x.id === pick); if (m) addFilm({ id: m.id, title: m.title }); setPick(''); }}>Add</button>
@@ -375,7 +409,7 @@ function ShowDialog({ initial, offsets, venues, isKashish, movies, shows, onClos
                 <input type="text" value={manual.title} maxLength={255} onChange={(e) => setManual({ ...manual, title: e.target.value })} placeholder="Film title" aria-label="Film title" />
                 <button type="button" className="fc-sch-btn is-small" disabled={!/^[A-Za-z0-9_-]{1,64}$/.test(manual.id)} onClick={() => { addFilm({ id: manual.id, title: manual.title.trim() }); setManual({ id: '', title: '' }); }}>Add</button>
               </div>
-              <span className="fc-sch-hint">Films that haven&apos;t had a vote yet can be added by their Kashish movie ID.</span>
+              <span className="fc-sch-hint">A film Kashish doesn&apos;t list yet can be added by its Kashish movie ID.</span>
             </div>
           )}
           {error && <div className="fc-sch-notice is-warn" role="alert"><WarningIcon size={16} /> <span>{error}</span></div>}

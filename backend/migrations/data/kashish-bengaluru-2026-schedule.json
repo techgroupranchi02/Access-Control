@@ -1,0 +1,346 @@
+{
+  "seed_key": "kashish-bengaluru-2026-schedule",
+  "festival": "KASHISH x BENGALURU 2026, NGMA, Nov 20-22",
+  "kashish_event_id": "EF3j920261",
+  "notes": [
+    "Applied by migrations/027_kashish_bengaluru_2026_schedule.js to every festival whose Voting Rules have this Kashish event ID.",
+    "Each show and each film link is applied once (data_seed_log); later edits in Settings > Audience > Screenings are kept.",
+    "Only the short films are in the Audience Choice vote; the 4 features, the ceremonies and the panel are not.",
+    "Kashish movie IDs come from the Kashish Movies API (GET /api/v1/movies?eventId=...); Settings > Audience > Screenings > Import films from Kashish links new ones."
+  ],
+  "shows": [
+    {
+      "date": "2026-11-20",
+      "start": "11:00",
+      "end": "11:56",
+      "title": "TINY TAILS",
+      "type": "short_block",
+      "voting": true,
+      "films": [
+        {
+          "kashish_movie_id": "oxPbe0pR0AFJNtcOSpGZ",
+          "title": "MAD DOG (Molosse)"
+        },
+        {
+          "kashish_movie_id": "HL00b5bqQPgjxu9hbTgS",
+          "title": "NIPPLE (Teth)"
+        },
+        {
+          "kashish_movie_id": "DutGh3gvGHBkaXu9V9nh",
+          "title": "HOW'S ARCHIE?"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-20",
+      "start": "12:15",
+      "end": "13:40",
+      "title": "REFLECT, RESONATE, REJOICE",
+      "type": "short_block",
+      "voting": true,
+      "films": [
+        {
+          "kashish_movie_id": "457iAuv8U7ScU1TBOidU",
+          "title": "LIFE OF KAI"
+        },
+        {
+          "kashish_movie_id": "FgIoA0gCusZ0xUWGAEnC",
+          "title": "NEVER STAND DOWN: THE QURAISHI FAMILY"
+        },
+        {
+          "kashish_movie_id": "QxhpTSrEcaBVlfmXx1OA",
+          "title": "PORSHI"
+        },
+        {
+          "kashish_movie_id": "h9TrlRFf4z9xooGqbxRh",
+          "title": "THANKS BABS!"
+        },
+        {
+          "kashish_movie_id": "tHLmtP1DpK9UU7bxbZzo",
+          "title": "THE SAILOR & THE CHEF"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-20",
+      "start": "14:00",
+      "end": "15:54",
+      "title": "FACE2FACE",
+      "type": "short_block",
+      "voting": true,
+      "films": [
+        {
+          "kashish_movie_id": "C6e4m9Xbb0iRkMNb87mQ",
+          "title": "DELAY"
+        },
+        {
+          "kashish_movie_id": "0Il7gksz4SYqHo6UEDHQ",
+          "title": "DREAD"
+        },
+        {
+          "kashish_movie_id": "sA7ByGnnMnVwVXDfKBc2",
+          "title": "NO CONTEST (La Premiére Marche)"
+        },
+        {
+          "kashish_movie_id": "iFAnFagUMGzz8mGdV5Dz",
+          "title": "NOT CRAZY (No Estamos Locos)"
+        },
+        {
+          "kashish_movie_id": "APKFyB5501SxV2IjBGha",
+          "title": "SISTER OF MINE"
+        },
+        {
+          "kashish_movie_id": "OEO5tFPKHsuWJzfUQcdN",
+          "title": "NEVER NEVER NEVER"
+        },
+        {
+          "kashish_movie_id": "Azok6oHzpMLGVSuhdS6i",
+          "title": "NARMOOK"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-20",
+      "start": "16:00",
+      "end": "17:45",
+      "title": "OPENING CEREMONY",
+      "type": "gala",
+      "voting": false,
+      "films": []
+    },
+    {
+      "date": "2026-11-20",
+      "start": "18:15",
+      "end": "19:18",
+      "title": "QUEERING INDIA",
+      "type": "feature",
+      "voting": false,
+      "films": [
+        {
+          "kashish_movie_id": "PGDtz8ovYR6ufBvyKrXa",
+          "title": "QUEERING INDIA"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-21",
+      "start": "11:00",
+      "end": "11:46",
+      "title": "QTOONS",
+      "type": "short_block",
+      "voting": true,
+      "films": [
+        {
+          "kashish_movie_id": "89u0PHcfyJFvJax3EqUD",
+          "title": "APRIL"
+        },
+        {
+          "kashish_movie_id": "KuprL2uF1gJQowbXm0Jd",
+          "title": "CLEANLINESS"
+        },
+        {
+          "kashish_movie_id": "pOAnwzDsSzBQTzsG7WVk",
+          "title": "FROM MALE AND FEMALE"
+        },
+        {
+          "kashish_movie_id": "ZnStlWpYKcN0pad2HgCg",
+          "title": "THE EATING OF AN ORANGE"
+        },
+        {
+          "kashish_movie_id": "nCUJY7ApiQZXq8vfRey5",
+          "title": "WHALE 52 - SUITE FOR MAN, BOY, AND WHALE"
+        },
+        {
+          "kashish_movie_id": "8sZDRoWN2CXzDByETeaE",
+          "title": "WITHIN (Bheetar)"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-21",
+      "start": "12:15",
+      "end": "13:42",
+      "title": "I AM GOING TO MISS YOU",
+      "type": "feature",
+      "voting": false,
+      "films": [
+        {
+          "kashish_movie_id": "HK7GM0cxj7rgHY6lUKvr",
+          "title": "I AM GOING TO MISS YOU (Eu Vou Ter Saudades de Você)"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-21",
+      "start": "14:00",
+      "end": "15:17",
+      "title": "LIVING, BECOMING, THRIVING",
+      "type": "short_block",
+      "voting": true,
+      "films": [
+        {
+          "kashish_movie_id": "HWxVRJIiRQExf0r82xV5",
+          "title": "THIS WAY (Iss Taraf)"
+        },
+        {
+          "kashish_movie_id": "A6k2UYQ5a7ocTLcOBlpx",
+          "title": "JO'S TURN! (Tumhari Baari, Jo!)"
+        },
+        {
+          "kashish_movie_id": "skSrscRsW4vEhfSnnz9Y",
+          "title": "TARA"
+        },
+        {
+          "kashish_movie_id": "Ej4wX86cLtUzxvVF63zo",
+          "title": "NISHA"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-21",
+      "start": "16:00",
+      "end": "16:45",
+      "title": "PANEL DISCUSSION",
+      "type": "panel",
+      "voting": false,
+      "films": []
+    },
+    {
+      "date": "2026-11-21",
+      "start": "17:00",
+      "end": "17:51",
+      "title": "INDIAN MASALA SHORTS 1",
+      "type": "short_block",
+      "voting": true,
+      "films": [
+        {
+          "kashish_movie_id": "hCkE2d04TXT3Jjijgm4c",
+          "title": "THE CRACK (Fatol)"
+        },
+        {
+          "kashish_movie_id": "6aTeCjh7cePJ8NPUNYWy",
+          "title": "YOUR FRAGRANCE (Tumhari Khushboo)"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-21",
+      "start": "18:15",
+      "end": "19:25",
+      "title": "THE CROWD",
+      "type": "feature",
+      "voting": false,
+      "films": [
+        {
+          "kashish_movie_id": "jifU9CiMYsymHncjKkiE",
+          "title": "THE CROWD (Jamaat)"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-22",
+      "start": "11:00",
+      "end": "12:02",
+      "title": "GENDERATION SHORTS",
+      "type": "short_block",
+      "voting": true,
+      "films": [
+        {
+          "kashish_movie_id": "NYYs53TsjxwN99n3uaAd",
+          "title": "A HANDSHAKE LATER"
+        },
+        {
+          "kashish_movie_id": "Yeqy6WdP1Tea5Zn9zIF8",
+          "title": "I HATE HELEN"
+        },
+        {
+          "kashish_movie_id": "yBxtHCqaKOCUNN18sgdU",
+          "title": "HOLDING YOUR BREATH (El bañador)"
+        },
+        {
+          "kashish_movie_id": "KUBondPmUVm9ERrYrrXi",
+          "title": "SHOWTIME (像这样的时刻)"
+        },
+        {
+          "kashish_movie_id": "aCERenfDsk34rSeOuUDJ",
+          "title": "PRECIOUS FANTASY"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-22",
+      "start": "12:15",
+      "end": "13:30",
+      "title": "TWO OF US",
+      "type": "short_block",
+      "voting": true,
+      "films": [
+        {
+          "kashish_movie_id": "fjwQeKRgEBPiWJvWpo4J",
+          "title": "CUPBOARD PICKLE (Almari ka Achaar)"
+        },
+        {
+          "kashish_movie_id": "v8oikpBAMhNYtclpSy2L",
+          "title": "GREESHMAANT"
+        },
+        {
+          "kashish_movie_id": "X04ReU9zFk0lcJ6GwuhN",
+          "title": "AUTOMAGIC"
+        },
+        {
+          "kashish_movie_id": "aWKjKTEp6aZviwzNSaAC",
+          "title": "THE EXPIRY DATE"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-22",
+      "start": "14:00",
+      "end": "15:32",
+      "title": "INDIAN MASALA SHORTS 2",
+      "type": "short_block",
+      "voting": true,
+      "films": [
+        {
+          "kashish_movie_id": "6FzKYLeVPp9wFrezLw4t",
+          "title": "TEA POWDER (Chayapodi)"
+        },
+        {
+          "kashish_movie_id": "4GVgZrCOkB8eZJ3Oy30m",
+          "title": "HILLS DON’T DANCE ALONE"
+        },
+        {
+          "kashish_movie_id": "JqdyufVjkjjUy89W93Ee",
+          "title": "UPON STARVATION (Upaasmaar)"
+        },
+        {
+          "kashish_movie_id": "GqFMpXOHShnpxfcP3Vnd",
+          "title": "SERVED COLD"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-22",
+      "start": "16:00",
+      "end": "16:45",
+      "title": "FILMMAKER INTERFACE + AWARD CEREMONY",
+      "type": "gala",
+      "voting": false,
+      "films": []
+    },
+    {
+      "date": "2026-11-22",
+      "start": "17:00",
+      "end": "19:03",
+      "title": "KUCH SAPNEY APNE",
+      "type": "feature",
+      "voting": false,
+      "films": [
+        {
+          "kashish_movie_id": "URWm3DFHGGTf5dYHaVnh",
+          "title": "KUCH SAPNEY APNE (Dreams Such As Ours)"
+        }
+      ]
+    }
+  ]
+}

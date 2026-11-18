@@ -82,6 +82,11 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'scan',
 
     // Festivals whose films live only in the Kashish app (docs/adr/0004)
     if (await kashishExternal.isKashishSource(eventId)) {
+      if (full) {
+        // "Sync now" also refreshes the films catalog, so new Kashish films show in Screenings (ADR 0004 Amendment 4)
+        await require('../services/kashishMovies.service').refreshCatalog(eventId)
+          .catch((err) => console.warn('[KashishSync] films catalog refresh skipped:', err.message));
+      }
       return await kashishExternal.syncExternalVotes(eventId, { apiKey, logId, full });
     }
 
@@ -267,6 +272,23 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'scan',
  * POST /api/kashish-sync/sync-votes
  * Manual sync (the auto-sync timer calls syncEventVotes directly).
  */
+/** Every skipped group with votes in it, named as on the Sync status tiles. */
+const SKIPPED_LABELS = [
+  ['unregistered', 'not a registered delegate'],
+  ['not_checked_in', 'not scanned in for the show'],
+  ['voted_before_checkin', 'voted before the scan'],
+  ['unscheduled', 'not in the vote / not on the schedule'],
+  ['outside_period', 'outside the voting period'],
+  ['not_verified', 'not verified'],
+  ['invalid', 'invalid'],
+  ['duplicate', 'repeat vote']
+];
+function skippedText(outcomes, removedFromFeed) {
+  const parts = SKIPPED_LABELS.filter(([key]) => Number(outcomes[key]) > 0).map(([key, label]) => `${outcomes[key]} ${label}`);
+  if (removedFromFeed) parts.push(`${removedFromFeed} no longer in the event feed`);
+  return parts.length ? `Skipped: ${parts.join(', ')}.` : 'Nothing skipped.';
+}
+
 async function syncKashishVotes(req, res) {
   try {
     // "Sync now" re-reads the festival's whole Kashish feed (the timer fetches only new votes)
@@ -282,7 +304,7 @@ async function syncKashishVotes(req, res) {
       const o = summary.outcomes;
       return res.json({
         success: true,
-        message: `Sync completed: ${o.counted} counted of ${summary.total_fetched} fetched${summary.kashish_event_id ? ` for Kashish event ${summary.kashish_event_id}` : ''}. Skipped: ${o.unregistered} not registered, ${o.not_checked_in} not checked in, ${o.outside_period} outside the voting period${summary.removed_from_feed ? `; ${summary.removed_from_feed} no longer in the event feed` : ''}.`,
+        message: `Sync completed: ${o.counted} counted of ${summary.total_fetched} fetched${summary.kashish_event_id ? ` for Kashish event ${summary.kashish_event_id}` : ''}. ${skippedText(o, summary.removed_from_feed)}`,
         summary
       });
     }

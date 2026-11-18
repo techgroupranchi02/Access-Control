@@ -16854,6 +16854,7 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
 /* ── Settings › Audience › Screenings (ScreeningsEditor.jsx) ─────────────── */
 .fc-sch { background: var(--fc-surface-card); border: 1px solid var(--fc-border); border-radius: 12px; padding: 24px; box-shadow: var(--shadow-sm); color: var(--fc-text-main); }
 .fc-sch-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.fc-sch-head-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
 .fc-sch-title { margin: 0 0 4px; font-size: 1.25rem; font-weight: 700; color: var(--fc-text-main); }
 .fc-sch-sub { margin: 0; max-width: 720px; font-size: 0.85rem; line-height: 1.5; color: var(--fc-text-secondary); }
 .fc-sch-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--fc-border); background: var(--fc-surface-card); color: var(--fc-text-main); font-size: 0.85rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
@@ -16921,6 +16922,7 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
 @media (max-width: 640px) {
   .fc-sch { padding: 16px; }
   .fc-sch-head { flex-direction: column; }
+  .fc-sch-head-actions { width: 100%; flex-direction: column; }
   .fc-sch-head .fc-sch-btn { width: 100%; }
   .fc-sch-row { grid-template-columns: 1fr auto; gap: 8px 12px; padding: 12px; }
   .fc-sch-time { grid-column: 1 / -1; flex-direction: row; gap: 6px; align-items: baseline; }

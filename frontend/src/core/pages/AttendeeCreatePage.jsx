@@ -41,6 +41,7 @@ export default function AttendeeCreatePage() {
   const [successInfo, setSuccessInfo] = useState(null); // { message, attendeeId, paired }
   // Set when the server refuses the mobile number as already registered (409)
   const [serverDuplicate, setServerDuplicate] = useState(null);
+  const [sendConfirmationChoice, setSendConfirmationChoice] = useState(null); // null = follow the default (on when there is an email)
   const formDefaultsRef = useRef({}); // schema/category-driven defaults applied after load
 
   // Form State
@@ -71,6 +72,7 @@ export default function AttendeeCreatePage() {
     setBadgeStatus(null);
     setErrorMessage(null);
     setServerDuplicate(null);
+    setSendConfirmationChoice(null);
   };
 
   const convertToIsoDate = (val) => {
@@ -172,6 +174,9 @@ export default function AttendeeCreatePage() {
     : ['Full-Festival Pass', 'Day Pass (Choose Days)'];
 
   const isDayPassActive = intakeForm.pass_type?.toLowerCase().includes('day');
+  // Email the confirmation: ticked by default once there is an email
+  const hasEmail = Boolean(intakeForm.email && intakeForm.email.trim());
+  const sendConfirmation = hasEmail && (sendConfirmationChoice ?? true);
 
   const handleCustomFieldChange = (key, value) => {
     setIntakeForm(prev => ({
@@ -296,12 +301,17 @@ export default function AttendeeCreatePage() {
         receive_updates: intakeForm.receive_updates,
         appear_in_attendee_list: intakeForm.appear_in_attendee_list,
         certified_18_plus: intakeForm.certified_18_plus,
-        custom_data: intakeForm.custom_data || {}
+        custom_data: intakeForm.custom_data || {},
+        send_confirmation: sendConfirmation
       };
 
       const res = await api.post('/registration/attendees', payload);
       let newAttendee = res.data?.attendee;
       const who = attendeeLabel({ name: intakeForm.name, phone: intakeForm.phone.trim() });
+      const mail = res.data?.confirmation_email;
+      const mailNote = !mail ? ''
+        : mail.sent ? ` The confirmation was emailed to ${mail.to}.`
+          : ` The confirmation couldn't be emailed: ${mail.reason || 'unknown error'}`;
       let successMessage = `Success! Attendee registered and Delegate Pass generated for ${who}.`;
 
       // Pair the pre-printed pass right away (spot registration in one step)
@@ -316,6 +326,8 @@ export default function AttendeeCreatePage() {
           successMessage = `${who} was registered, but the pass could not be assigned: ${assignErr.response?.data?.error || 'unknown error'}. Assign it from the delegate's badge.`;
         }
       }
+
+      successMessage += mailNote;
 
       if (canViewRoster) {
         navigate('/audience', {
@@ -410,10 +422,8 @@ export default function AttendeeCreatePage() {
               <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--fc-text-main)' }}>
                 {formSchema?.form_title || 'Delegate Registration Form'}
               </h2>
-              <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--fc-text-muted)' }}>
-                {formSchema?.form_subtitle || 'Every person wishing to attend the festival HAS to register as a delegate by filling out the Festival Registration Form to obtain a Festival Pass.'}
-              </p>
-              <p style={{ margin: '8px 0 0', fontSize: '0.8rem', fontWeight: 600, color: 'var(--fc-text-secondary)' }}>
+              {/* The form subtitle is for the public online form; the desk shows only its own note */}
+              <p style={{ margin: '6px 0 0', fontSize: '0.8rem', fontWeight: 600, color: 'var(--fc-text-secondary)' }}>
                 Only the mobile number is needed at the desk. The rest can be added later from the paper form (the delegate shows as "Details pending" until then).
               </p>
             </div>
@@ -1003,6 +1013,24 @@ export default function AttendeeCreatePage() {
                   })}
                 </div>
               )}
+
+              {/* Email the Delegate Registration Confirmation (docs/adr/0006, Amendment 1) */}
+              <label className={`fc-ae-send-confirmation ${hasEmail ? '' : 'is-disabled'}`}>
+                <input
+                  type="checkbox"
+                  checked={sendConfirmation}
+                  disabled={!hasEmail}
+                  onChange={(e) => setSendConfirmationChoice(e.target.checked)}
+                />
+                <span>
+                  <strong>{hasEmail ? `Email the confirmation to ${intakeForm.email.trim()}` : 'Email the confirmation'}</strong>
+                  <small>
+                    {hasEmail
+                      ? 'The delegate gets the Delegate Registration Confirmation, as online registrations do. Untick it to register without emailing.'
+                      : 'Add an email address to send the delegate their Delegate Registration Confirmation.'}
+                  </small>
+                </span>
+              </label>
 
               {/* Form Action Buttons */}
               <div className="fc-form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '16px', borderTop: '1px solid var(--fc-border)' }}>

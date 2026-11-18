@@ -35,10 +35,10 @@ _Nothing in progress._
 
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
-| 2026-11-14 | Production: enter the KASHISH schedule in Settings › Audience › Screenings (16 shows, Nov 20–22; dev festival 40 has them to copy) and link each film's Kashish movie ID to its show | Festival team | Votes for films not linked to a show don't count ("Film not on the schedule"). Shorts packages need each short's Kashish movie ID. |
-| 2026-11-14 | Ask Kashish for a films list endpoint (movie IDs and titles for event EF3j920261), and whether shorts are voted on individually or as a package | Team | Until then films can only be picked once they have a vote, or added by ID. |
+| 2026-11-18 | Production: set Vote source = Kashish app and Kashish event ID `EF3j920261` in Settings › Audience › Voting Rules **before** deploying migration 027 (or run `npm run migrate` after) | Festival team | Migration 027 finds the festival by that ID. Without it, it does nothing and logs "No festival has Kashish event ID". |
 | 2026-11-14 | Production server time zone must be IST (attendance windows use the server's local time) | DevOps | Check `timedatectl` on the production host. |
-| 2026-11-12 | Ask Kashish to rotate the API key printed in their guide, then update `KASHISH_API_KEY` in dev and prod `.env` | Team | The guide's examples show our live key. |
+| 2026-11-12 | Ask Kashish to rotate the API key printed in their guide, then update `KASHISH_API_KEY` in dev and prod `.env` | Team | The guide's examples show our live key. Their Movies API guide (2026-11-18) prints a key again. |
+| 2026-11-14 | Ask Kashish whether shorts are voted on individually or as a package | Team | The Movies API lists each short as its own film, so individual voting is assumed. |
 | 2026-11-12 | On production, open Settings › Audience › Audience Voting Rules for KASHISH x BENGALURU 2026: set **Where audience votes come from** = Kashish Pride app and **Kashish event ID** = EF3j920261, then Save and run Voting › Sync status › Sync now | Festival team | Root cause of prod showing the screening-QR tabs on /voting: the vote source is per festival in each database and was set only on dev (dev festival 40; prod's KASHISH has another ID). |
 | 2026-11-12 | Production backend `.env`: set `KASHISH_API_KEY` | DevOps | The code has no fallback key; without it Kashish sync stops with "API key is missing". |
 | 2026-11-12 | Production: run `node migrations/run_all_migrations.js` (018–025) | DevOps | 023 `kashish_sync_state` (Kashish sync), 024 `qr_print_log` (print history) and 025 (clears stale pass days) are needed by the deployed code. |
@@ -52,6 +52,74 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-18: Attendance camera closes after each scan** (`deployed` 2026-11-18).
+  - **What:** `AttendancePage.jsx`: when the camera reads a badge, `executeCheckin` sets `isCameraActive` to false before recording, so the scanner stops at once (no double reads) and the result card stays on screen. The next badge is one tap on **Open Live Camera QR Scanner**. The hint under the camera says so. USB scanner and typing are unchanged.
+  - **Checked:** lint shows no errors; the frontend build passes. The User Manual's Attendance steps (admin and volunteer) are updated. Not yet tried with a real camera on a phone.
+- **2026-11-18: Lost Badge masks contact details like Assign QR** (`deployed` 2026-11-18).
+  - **What:**
+    - `utils/attendeeDisplay.js`: new `maskEmail()`: first 2 and last 1 characters before the @ (at most 6 dots), domain shown, e.g. sk••••••2@gmail.com.
+    - `LostBadgePage.jsx`: uses the shared `maskPhone()` / `maskEmail()` instead of its own versions. Mobile is now first 3 + last 4 (was first 4 only); this applies to the search results, the delegate card, and the label of delegates without a name.
+  - **Decision:** the user chose to show the last 4 digits. The screen now shows the digits the last-4 check asks for, so that check no longer proves identity (the user was told before choosing).
+  - **Checked:** helper output verified; lint shows no errors; the frontend build passes; screenshots taken as admin and volunteer.
+- **2026-11-18: Assign QR hides the middle of mobile numbers** (`deployed` 2026-11-18).
+  - **What:**
+    - `utils/attendeeDisplay.js`: new `maskPhone()` (first 3 and last 4 digits, e.g. 766•••0178). `attendeeLabel()` takes `{ maskPhone: true }` for delegates who have no name yet.
+    - `AttendeeAssignQrPage.jsx`: masked in the target-delegate card, the roster, the paired success card and the breadcrumb. Search by the full number still works.
+  - **Checked:** helper output verified; lint shows no errors; the frontend build passes.
+- **2026-11-18: On Spot Registration no longer shows the form subtitle** (`deployed` 2026-11-18).
+  - **Why:** the desk form showed "Every person wishing to attend the festival HAS to register as a delegate…". The line is meant for the public online form, not desk staff.
+  - **What:** `AttendeeCreatePage.jsx` no longer renders the form subtitle or its hardcoded fallback text. The heading (the festival's form title) and the desk note stay. The subtitle setting (Settings › Audience › Form Subtitle) is unchanged, so the public form keeps it.
+  - **Checked:** lint shows no errors; the frontend build passes.
+- **2026-11-18: all 44 KASHISH films linked; films catalog from the Kashish Movies API** (`deployed` 2026-11-18). [ADR 0004, Amendment 4](adr/0004-kashish-external-leaderboard.md).
+  - **Why:** only 4 of the 44 films had Kashish movie IDs, so votes for the other 40 would not have counted. Kashish then shared a Movies API that lists every film of the event.
+  - **What:**
+    - `migrations/data/kashish-bengaluru-2026-schedule.json`: all 44 movie IDs, taken from the Movies API and matched by title within each show; every film's Kashish show and slot agree with ours. Titles are now Kashish's own.
+    - `kashish-api.service.js`: `fetchKashishMovies()`, plus a shared request helper (timeout, 429 retry). `environment.js`: optional `KASHISH_MOVIES_API_URL`.
+    - `migrations/028_kashish_movies_catalog.js` (added to `run_all_migrations.js`): the `kashish_movies` table.
+    - `kashishMovies.service.js` (new): `refreshCatalog()` and `autoLinkFilms()`, which matches by screening slot, then by show name, and only adds links.
+    - `kashishExternalVotes.service.js`: `listKnownMovies()` merges the catalog with vote-only films.
+    - `audience.controller.js` / `audience.routes.js`: `POST /api/audience/screenings/kashish-movies/import`. `kashish-sync.controller.js`: a full sync refreshes the catalog first.
+    - `ScreeningsEditor.jsx` / `index.css`: the **Import films from Kashish** button with a result notice. The warning now reads "N Kashish films are not on any show"; the picker lists every film with its Kashish show name.
+  - **Checked on dev (festival 40):**
+    - Migration 027 linked 40 films and reported 0 without an ID; a second run made 0 changes. 44 links, and every voting show has its films.
+    - Import: 44 catalog films, 0 newly linked, 0 unmatched. After unlinking DREAD, Import linked it back to FACE2FACE.
+    - The picker lists 44 films, none off a show. A full sync refreshed the catalog. The 2 new votes (HOW'S ARCHIE?, NIPPLE) are now checked against Tiny Tails; both voters are not registered delegates.
+    - Frontend build and lint pass (0 errors); backend restarted.
+    - Follow-up: the Screenings header buttons stacked at desktop width; `.fc-sch-head-actions` now has `flex-shrink: 0` (seen while taking the user-manual screenshots).
+- **2026-11-18: KASHISH schedule as a data migration** (`deployed` 2026-11-18). [ADR 0004, Amendment 3](adr/0004-kashish-external-leaderboard.md).
+  - **What:**
+    - `migrations/data/kashish-bengaluru-2026-schedule.json`: the final schedule. 16 shows; the short films are in the vote; the 4 features, the ceremonies and the panel are not; each show lists its films, with the Kashish movie ID where known.
+    - `migrations/027_kashish_bengaluru_2026_schedule.js` (added to `run_all_migrations.js`):
+      - finds the festival by the file's Kashish event ID;
+      - creates any missing show (matched by date and start time) and sets each show's type and voting flag;
+      - links every film that has an ID, then re-checks stored votes.
+    - The new table `data_seed_log` records each applied item, so staff edits survive later deploys and IDs added to the file later are linked on the next run.
+  - **IDs known (from the Kashish vote feed, which lists only voted films):** Mad Dog → Tiny Tails; Queering India, I Am Going to Miss You and Kuch Sapney Apne → their own shows. The other 40 IDs came later from the Kashish Movies API (see the entry above).
+  - **Dev data:** "TEST – E2E" was deleted with its scan. Rohan was kept; his test vote is now "Not scanned in for the show", because MAD DOG plays in Tiny Tails on Nov 20.
+  - **Checked on dev:** the migration found festival 40 and made 20 changes (16 shows recorded, 4 links). A second run made 0 changes. Stored votes were re-checked.
+- **2026-11-18: desk registrations get the confirmation email; real registration source on the pass** (`deployed` 2026-11-18). [ADR 0006, Amendment 2](adr/0006-festiplus-delegate-confirmation-email.md).
+  - **Why:** a delegate registered through On Spot Registration got no email, because only Laravel's online form sent one. The pass dialog also showed every delegate as "Online".
+  - **What:**
+    - `AttendeeCreatePage.jsx`: "Email the confirmation to {email}" checkbox, ticked by default once an email is entered. The success message says whether the email went.
+    - `audience.controller.js`: `registerAttendee` sends the email when `send_confirmation` is true and returns `confirmation_email` and `registration_type`. `listAttendees` returns `registration_type`.
+    - `delegateConfirmationEmail.js`: `{ updated: false }` drops "(updated)" from the subject.
+    - `utils/attendeeDisplay.js`: `registrationSourceLabel()`. `RegistrationPage.jsx` shows "Online", "Online (guest)" or "On spot (desk)" in place of the fixed "Online".
+    - CLAUDE.md, ADR 0006.
+  - **Checked on dev:** `registerAttendee` was called directly with the mail sender stubbed, so nothing was sent; the 3 test rows were deleted afterwards.
+    - With an email and ticked, 1 email was built, with the subject "Delegate Registration Confirmation — KASHISH x BENGALURU 2026 [KB26-0304]".
+    - Unticked, or with no email, nothing was sent.
+    - `send_confirmation` isn't stored in `custom_data`, and `registration_type` comes back as `desk`.
+    - Lint shows no new warnings, the build passes and the backend was restarted. The browser click-through is still to do (the saved login had expired).
+- **2026-11-18: dev reset of KASHISH delegates** (data only). All 21 delegates of festival 40 were deleted with their check-ins, in-house votes, reviews, Kashish vote records and receipts, and voter mappings. Badge 270167 went back to stock (425 in stock). A backup was kept in the session scratchpad.
+- **2026-11-18: feature films out of the KASHISH Audience Choice vote** (`deployed` 2026-11-18). [ADR 0004, Amendment 2](adr/0004-kashish-external-leaderboard.md).
+  - **Rule (client):** only the 40 short films are in the vote. The 4 features (Queering India, I Am Going to Miss You, The Crowd, Kuch Sapney Apne) are out, like the ceremonies and the panel.
+  - **What:**
+    - Dev data: `voting_enabled = 0` on the 4 feature shows of festival 40 (409, 411, 415, 420). Stored votes were then re-checked (`recheckStoredExternalVotes`).
+    - `kashishExternalVotes.service.js`: a vote for a film that plays only in shows with voting off stays `unscheduled`, with the reason "Film's shows have no Audience Choice vote". No schema change.
+    - `KashishVotingBoard.jsx`: the tile and column are renamed "Not in the vote / not on the schedule".
+    - `computeExternalStandings`: the leaderboard (and published results) lists only films on a show with voting on, plus any film that still has counted votes. The 0-vote feature films no longer appear.
+    - `kashish-sync.controller.js`: the "Sync now" message lists every skipped group with votes in it, named as on the tiles (`skippedText`). For example: "Skipped: 1 not a registered delegate, 3 not in the vote / not on the schedule."
+  - **Checked on dev:** the 3 stored feature-film votes now show the new reason, and Counted no longer includes them. The standings list only MAD DOG (1 vote, from the end-to-end test: register, Assign QR, scan at TEST – E2E, then a vote in the Kashish app, counted). The message covers all 5 votes. Frontend built, backend restarted.
 - **2026-11-14: Print & export menu hid under the sidebar on 14" laptops** (`deployed` 2026-11-14).
   - **Cause:** the menu was right-aligned to its button. With the sidebar open at about 1280–1366 px, the toolbar wraps, the button moves to the left of the card, and the menu extended left under the sidebar.
   - **Fix:** `BulkQrManagementPage.jsx` measures the space when the menu opens and lines it up with the button's left edge when a right-aligned menu wouldn't fit. `index.css` adds `.fc-bq-download-menu.is-left`.

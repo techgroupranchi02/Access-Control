@@ -40,3 +40,11 @@
   - Only the subject marks it as an update ("Delegate Registration Confirmation (updated) — …").
 - **Consequence:** a design change to the Laravel email has to be copied here by hand.
 
+
+## Amendment 2: First confirmation for desk registrations (2026-11-18)
+- **Context:** Laravel sends the first confirmation only for the public online form. A delegate registered at the FestiPlus desk (On Spot Registration) got no email, even when an email address was given.
+- **Decision:**
+  - The On Spot form has "Email the confirmation to {email}" above Register. It is ticked by default once an email is entered, and disabled without one.
+  - `registerAttendee` takes `send_confirmation: true` and sends the same email with `sendDelegateConfirmation(eventId, attendee, { updated: false })`. The subject has no "(updated)". The response returns `confirmation_email: { sent, to, reason }`, and the success message says whether it went. A failed email never undoes the registration.
+  - The pass dialog's "Registration record" shows the real source from `saas_attendees.registration_type`, via `registrationSourceLabel()` in `utils/attendeeDisplay.js`. Laravel writes `online` / `guest_online`, the desk writes `desk`, and older rows use `Pre-Registered` / `On-Spot`. It no longer shows a fixed "Online". `listAttendees` and `registerAttendee` now return `registration_type`.
+- **Consequence:** FestiPlus now sends the first confirmation for desk registrations, and Laravel still sends it for online ones. Each delegate gets only one first email.

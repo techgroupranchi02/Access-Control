@@ -644,6 +644,28 @@ async function listKashishMoviesForSchedule(req, res) {
 }
 
 /**
+ * POST /api/audience/screenings/kashish-movies/import
+ * Refresh the festival's films from the Kashish Movies API and link each film that is on no show to
+ * the show it plays in (adds links only). Returns counts plus the films that could not be placed.
+ */
+async function importKashishMovies(req, res) {
+  try {
+    const eventId = getEventId(req);
+    if (!(await kashishExternal.isKashishSource(eventId))) {
+      return res.status(400).json({ error: 'This festival does not take its votes from Kashish (Settings › Audience › Voting Rules).' });
+    }
+    const { refreshCatalog, autoLinkFilms } = require('../services/kashishMovies.service');
+    const catalog = await refreshCatalog(eventId);
+    const { linked, unmatched } = await autoLinkFilms(eventId);
+    if (linked.length) recheckVotesSoon(eventId);
+    res.json({ success: true, catalog, linked, unmatched });
+  } catch (error) {
+    console.error('[AudienceController] importKashishMovies error:', error.message);
+    res.status(error.status || 502).json({ error: error.status ? error.message : `Could not import the films from Kashish: ${error.message}` });
+  }
+}
+
+/**
  * POST /api/audience/screenings/:id/open-voting
  * Open the voting window for a screening
  */
@@ -967,7 +989,7 @@ async function listAttendance(req, res) {
 
       const customData = req.body.custom_data || {};
       for (const [k, v] of Object.entries(req.body)) {
-        if (!['name', 'email', 'phone', 'delegate_category', 'registration_type', 'remarks', 'custom_data', 'issue_qr_now'].includes(k)) {
+        if (!['name', 'email', 'phone', 'delegate_category', 'registration_type', 'remarks', 'custom_data', 'issue_qr_now', 'send_confirmation'].includes(k)) {
           // Unanswered fields aren't stored (a mobile-only desk entry records only what was given)
           if (v === null || v === undefined || v === '') continue;
           customData[k] = v;
@@ -1003,8 +1025,18 @@ async function listAttendance(req, res) {
         await query('UPDATE saas_attendees SET qr_token = ? WHERE attendee_id = ?', [qrToken, attendeeId]);
       }
 
+      // Desk registrations get the same confirmation email as online ones when staff tick it
+      // (docs/adr/0006, Amendment 1). A failed email never undoes the registration; the result is reported.
+      let confirmationEmail = null;
+      if (req.body.send_confirmation === true && email) {
+        confirmationEmail = await sendDelegateConfirmation(eventId, {
+          name, email, delegate_category: category, custom_data: customData
+        }, { updated: false });
+      }
+
       res.json({
         success: true,
+        confirmation_email: confirmationEmail,
         message: issueQrNow
           ? 'Attendee registered and QR badge issued successfully.'
           : 'Attendee registered successfully. QR Badge can be issued upon physical venue arrival.',
@@ -1015,6 +1047,7 @@ async function listAttendance(req, res) {
           email,
           phone,
           delegate_category: category,
+          registration_type: regType,
           pass_type: customData.pass_type || 'Full-Festival Pass',
           pass_days: customData.pass_days || ['All Days'],
           custom_data: customData,
@@ -1872,6 +1905,7 @@ async function listAttendance(req, res) {
         sa.status,
         sa.qr_token,
         sa.registered_at,
+        sa.registration_type,
         sa.custom_data,
         (SELECT COUNT(DISTINCT sc.screening_block_id) FROM screening_checkins sc WHERE sc.attendee_id = sa.attendee_id) AS screenings_attended,
         (SELECT sq.serial_no FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.serial_no IS NOT NULL AND sq.is_lost = 0 ORDER BY sq.qr_id DESC LIMIT 1) AS badge_serial,
@@ -3326,6 +3360,7 @@ async function listAttendance(req, res) {
     updateScreeningBlock,
     deleteScreeningBlock,
     listKashishMoviesForSchedule,
+    importKashishMovies,
     openVotingWindow,
     closeVotingWindow,
     performScreeningCheckin,

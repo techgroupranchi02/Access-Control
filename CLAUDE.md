@@ -79,6 +79,7 @@ npm run lint
 - **Migrations**:
   - Files are named `backend/migrations/NNN_snake_description.js`, and each is a standalone node script.
   - They **must be idempotent** (`IF NOT EXISTS`, column checks), because Jenkins runs `npm run migrate` on every deploy.
+  - **Data migrations** (e.g. `027_kashish_bengaluru_2026_schedule.js`) read a JSON file from `migrations/data/`, find their festival by a setting (never a hard-coded event id), and record each applied item in `data_seed_log`, so staff edits survive the next deploy.
   - **Add each new migration to the `MIGRATION_SCRIPTS` array** in `migrations/run_all_migrations.js` by hand. The runner currently starts at 005.
 - **Shared Freecomers tables**: these come from the shared Freecomers DB, not from migrations. Never alter them destructively:
   - `admins`, `users`, the base `events` table, `film_festivals*`, `saas_attendees`, `saas_qr`, `delegate_reviews`, `countries`.
@@ -106,7 +107,8 @@ npm run lint
 - **Delegates**: registered attendees in `saas_attendees`, grouped by `audience_categories`.
   - **Pass days:** only a Day Pass (pass type containing "Day Pass", `isDayPass()`) keeps `custom_data.pass_days`; every other pass saves `[]`. The public confirmation on the Freecomers site prints `pass_days` when it isn't empty.
   - **Desk (On Spot) registration needs only the mobile number** (10–15 digits, one delegate per mobile per festival: `findAttendeeByPhone()` compares the last 10 digits, `registerAttendee` returns `409`). Name may be `''` until the paper form is entered; show delegates with `attendeeLabel()` (`utils/attendeeDisplay.js`) or `labelOf()` / `COALESCE(NULLIF(TRIM(name),''), phone)` on the backend, never a bare `name`. `listAttendees` returns `details_pending` (no name or no email). The form schema's `required` flags still apply to the edit page and the public Laravel form.
-  - **Updated confirmation email:** the edit form's "Email the updated confirmation" checkbox sends it from FestiPlus (`delegateConfirmationEmail.js`, `mail.service.js`); Laravel still sends the first one at registration. See [ADR 0006](docs/adr/0006-festiplus-delegate-confirmation-email.md).
+  - **Confirmation email:** Laravel sends the first one for online registrations. FestiPlus sends it for desk registrations (On Spot form, "Email the confirmation", `registerAttendee` with `send_confirmation`) and after edits (the edit form's "Email the updated confirmation"), through `delegateConfirmationEmail.js` and `mail.service.js`. See [ADR 0006](docs/adr/0006-festiplus-delegate-confirmation-email.md), Amendment 2.
+  - **Registration source:** `saas_attendees.registration_type` (`online` / `guest_online` from Laravel, `desk` from FestiPlus). Show it with `registrationSourceLabel()`; never write the source as fixed text.
 - **QR badges**: `saas_qr` rows, which are issued, assigned, revoked or bulk-generated as pre-printed stock. See [ADR 0001](docs/adr/0001-qr-credential-uuid-and-festival-serial.md).
   - **Lost badges** (ADR 0001, Amendment 2): `saas_qr.is_lost` / `lost_at` / `lost_by_user_id`.
     - A lost badge is refused at check-in, voting and pairing, and never returns to stock.
@@ -132,7 +134,7 @@ npm run lint
   - API: `/api/pass-templates` (`pass-templates.controller.js`, validation and starters in `passTemplates.service.js`). Listing needs `registration.view`; changes need `settings.manage`.
   - **Where staff print:** Bulk QR › **Print & export** (badge stock: Passes with QR, QR stickers, CSV, badge list) and one delegate's pass from their row or the Assign QR success screen. There is no bulk delegate print (ADR 0005 Amendment 6).
   - Print badges and passes only through `frontend/src/core/utils/passRenderer.js` and `components/print/PrintPassesDialog.jsx`. Never hard-code festival text (name, venue, dates) on a pass; it comes from the festival's records or the template.
-- **Screening blocks** (shows): venue time slots with a film playlist (`screening_blocks`, `screening_block_films`; Kashish films in `screening_block_kashish_films`), edited in Settings › Audience › Screenings (`ScreeningsEditor.jsx`). `voting_enabled` is off for ceremonies and panels.
+- **Screening blocks** (shows): venue time slots with a film playlist (`screening_blocks`, `screening_block_films`; Kashish films in `screening_block_kashish_films`), edited in Settings › Audience › Screenings (`ScreeningsEditor.jsx`). `voting_enabled` is off for ceremonies, panels and films out of the vote (KASHISH: the 4 features); their films' votes are `unscheduled` with the reason "Film's shows have no Audience Choice vote".
 - **Attendance**: gate check-ins recorded in `screening_checkins`. Every scan is kept (no unique key since migration 026); `scan_status` is `valid` (inside the selected show's window) or `outside_window`. Count delegates with `COUNT(DISTINCT attendee_id)`.
 - **Audience voting**: done through `/vote/:token`, stored in `audience_votes`, with scores in `audience_voting_scores`.
 - **Jury ballots**: kept separately in `jury_ballots`.
@@ -142,6 +144,7 @@ npm run lint
     - Code: `core/services/kashishExternalVotes.service.js`.
     - Tables: `kashish_external_votes` and `kashish_results_publications`.
     - A vote counts only from a registered delegate (matched by email, then phone) who was **scanned in during the attendance window of a show of that film, before voting**, inside the voting period (ADR 0004 Amendment 2). Window: `attendance_window_before_min` before the start to `attendance_window_end_before_min` before the end (default 15/15), in `showWindows.service.js`. Films are linked to shows in `screening_block_kashish_films`; votes for films on no show are `unscheduled`.
+    - **Films catalog:** `kashish_movies` (migration 028) holds the festival's films from the Kashish Movies API (`fetchKashishMovies`, `KASHISH_MOVIES_API_URL`, default `KASHISH_API_URL` with `/votes` → `/movies`). Screenings › **Import films from Kashish** refreshes it and links each film that is on no show by its screening slot or Kashish show name (`kashishMovies.service.js`, adds links only); full "Sync now" refreshes it too. See ADR 0004 Amendment 4.
     - Votes are fetched for the festival's **Kashish event ID** (`settings_json.kashish_event_id`, KASHISH = `EF3j920261`), scan votes only. Scheduled runs use `updatedSince` (state in `kashish_sync_state`); "Sync now" is a full sync that marks votes outside the event `removed`. See ADR 0004 Amendment 1.
     - Published results are frozen snapshots.
     - FestiPlus `/vote` is off for these festivals.
@@ -153,7 +156,7 @@ npm run lint
 - **Jenkins**: pushes to `main` deploy to prod, and any other branch deploys to dev.
   - Steps: `npm ci`, build the frontend, rsync, `npm run migrate || true`, `pm2 reload access-control-backend`, reload nginx.
 - **pm2**: `backend/ecosystem.config.cjs` runs one instance on port 4000.
-- **Backend env keys**: `DB_*`, `APP_PORT`, `NODE_ENV`, `FRONTEND_URL`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL`, `KASHISH_API_KEY`, `KASHISH_API_URL`, `KASHISH_SYNC_INTERVAL_SEC` (default 120; 0 disables auto-sync), and `FREECOMERS_API_URL`.
+- **Backend env keys**: `DB_*`, `APP_PORT`, `NODE_ENV`, `FRONTEND_URL`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL`, `KASHISH_API_KEY`, `KASHISH_API_URL`, `KASHISH_MOVIES_API_URL` (optional), `KASHISH_SYNC_INTERVAL_SEC` (default 120; 0 disables auto-sync), and `FREECOMERS_API_URL`.
   - `FREECOMERS_API_URL` is this environment's Freecomers Laravel API, used for media/avatar URLs, the login fallback and admin JWT checks.
     - If unset, it follows `FRONTEND_URL`: autovertest gives `api.autovertest.com`, anything else gives `api.freecomers.com`.
     - Never hard-code either host; use `env.freecomersApiUrl` and `utils/media.utils.js`.

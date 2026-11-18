@@ -35,6 +35,7 @@ audienceRouter.put('/registration-form', requirePermission('audience.manage_sett
 
 audienceRouter.get('/screenings', requirePermission('audience.view'), audienceController.listScreeningBlocks);
 audienceRouter.get('/screenings/kashish-movies', requirePermission('audience.manage_settings'), audienceController.listKashishMoviesForSchedule);
+audienceRouter.post('/screenings/kashish-movies/import', requirePermission('audience.manage_settings'), audienceController.importKashishMovies);
 audienceRouter.post('/screenings', requirePermission('audience.manage_settings'), audienceController.createScreeningBlock);
 audienceRouter.put('/screenings/:id', requirePermission('audience.manage_settings'), audienceController.updateScreeningBlock);
 audienceRouter.delete('/screenings/:id', requirePermission('audience.manage_settings'), audienceController.deleteScreeningBlock);

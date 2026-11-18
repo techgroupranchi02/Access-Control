@@ -20,19 +20,12 @@ import {
   QrCodeScannerIcon,
   CloseIcon
 } from '../components/common/Icons';
-import { attendeeLabel } from '../utils/attendeeDisplay';
+import { attendeeLabel as fullLabel, maskPhone as maskMobile, maskEmail as maskMail } from '../utils/attendeeDisplay';
 
-function maskPhone(phone) {
-  const digits = String(phone || '').replace(/\D/g, '');
-  if (digits.length < 6) return digits ? '••••' : '—';
-  return `${digits.slice(0, digits.length - 6)}${'•'.repeat(6)}`;
-}
-
-function maskEmail(email) {
-  if (!email || !email.includes('@')) return email || '—';
-  const [user, domain] = email.split('@');
-  return `${user.slice(0, 2)}${'•'.repeat(Math.max(user.length - 2, 2))}@${domain}`;
-}
+// Contact details show partly hidden: mobile first 3 + last 4, email first 2 + last 1 before the @
+const attendeeLabel = (a) => fullLabel(a, undefined, { maskPhone: true });
+const maskPhone = (phone) => maskMobile(phone) || '—';
+const maskEmail = (email) => maskMail(email) || '—';
 
 function formatDate(value) {
   if (!value) return '';

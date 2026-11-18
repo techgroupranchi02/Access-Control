@@ -189,7 +189,7 @@ function appBlock(v, festivalTitle, androidUrl, iosUrl, afterDonation) {
  * @param {object} a         { name, email, custom_data }
  * @returns {Promise<{ subject, html, text, attachments }>}
  */
-async function buildEmail(festival, a) {
+async function buildEmail(festival, a, { updated = true } = {}) {
   const cd = parseJson(a.custom_data);
   const v = festival.venue || {};
   const festivalTitle = festival.name;
@@ -205,7 +205,7 @@ async function buildEmail(festival, a) {
   const iosUrl = isHttpUrl(v.app_ios_url) ? v.app_ios_url.trim() : '';
   const supportEmail = isEmail(v.support_email) ? v.support_email.trim() : (isEmail(env.mail.fromAddress) ? env.mail.fromAddress : '');
   const organizer = v.organizer_name ? String(v.organizer_name).trim() : festivalTitle;
-  const subject = `Delegate Registration Confirmation (updated) — ${festivalTitle}${serialNo ? ` [${serialNo}]` : ''}`;
+  const subject = `Delegate Registration Confirmation${updated ? ' (updated)' : ''} — ${festivalTitle}${serialNo ? ` [${serialNo}]` : ''}`;
 
   // Inline images (cid:) instead of hosted ones
   const attachments = [];
@@ -347,14 +347,15 @@ ${appBlock(v, festivalTitle, androidUrl, iosUrl, Boolean(donationUrl))}
 }
 
 /**
- * Email the updated confirmation to a delegate. Never throws.
+ * Email the confirmation to a delegate: the first one for a desk registration (`updated: false`),
+ * or the updated one after an edit (default). Never throws.
  * @returns {Promise<{ sent: boolean, to: string, reason?: string }>}
  */
-async function sendDelegateConfirmation(eventId, attendee) {
+async function sendDelegateConfirmation(eventId, attendee, { updated = true } = {}) {
   if (!attendee?.email) return { sent: false, to: '', reason: 'This delegate has no email address.' };
   try {
     const festival = await loadFestival(eventId);
-    const { subject, html, text, attachments } = await buildEmail(festival, attendee);
+    const { subject, html, text, attachments } = await buildEmail(festival, attendee, { updated });
     return await sendMail({ to: attendee.email, subject, html, text, attachments });
   } catch (err) {
     console.error('[DelegateConfirmationEmail] Could not build or send:', err.message);

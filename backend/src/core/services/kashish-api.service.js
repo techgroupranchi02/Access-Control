@@ -1,6 +1,7 @@
 /**
  * Kashish Votes API Service
- * Fetches voting data from the Kashish external API (kashish-admin.vercel.app/api/v1/votes).
+ * Fetches votes (kashish-admin.vercel.app/api/v1/votes) and the event's films (/api/v1/movies)
+ * from the Kashish external API.
  * Reference: Kashish "Votes & Activity Log API" integration guide (Nov 2026), docs/adr/0004.
  *
  * Supported query parameters we use:
@@ -18,35 +19,11 @@ const RETRY_AFTER_MS = 5000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Fetch a single page of votes from the Kashish API.
- *
- * @param {string} apiKey - API key (header: x-api-key); defaults to KASHISH_API_KEY
- * @param {Object} options
- * @param {string} [options.source='scan']   'scan' | 'normal' | 'all'
- * @param {string} [options.eventId]         Kashish event ID filter
- * @param {string} [options.updatedSince]    ISO time: only votes new since then
- * @param {number} [options.page=1]
- * @param {number} [options.limit=200]       max 200
- * @param {string} [options.sort='asc']      'asc' | 'desc'
- * @returns {Promise<Object>} API response: { data, pagination, summary, sync, eventId }
- */
-async function fetchKashishVotes(apiKey, options = {}) {
-  const key = apiKey || env.kashishApiKey;
-  if (!key) {
-    throw new Error('Kashish API Key is missing. Configure KASHISH_API_KEY in the backend .env.');
-  }
+/** Movies API URL: KASHISH_MOVIES_API_URL, else the votes URL with /votes replaced by /movies. */
+const moviesApiUrl = () => env.kashishMoviesApiUrl || DEFAULT_API_URL.replace(/\/votes\/?$/, '/movies');
 
-  const { source = 'scan', eventId, updatedSince, page = 1, limit = 200, sort = 'asc' } = options;
-
-  const url = new URL(DEFAULT_API_URL);
-  url.searchParams.set('source', source);
-  url.searchParams.set('page', String(page));
-  url.searchParams.set('limit', String(Math.min(limit, 200)));
-  url.searchParams.set('sort', sort);
-  if (eventId) url.searchParams.set('eventId', eventId);
-  if (updatedSince) url.searchParams.set('updatedSince', updatedSince);
-
+/** GET a Kashish API URL with the x-api-key header: 15s timeout, one retry after a 429. */
+async function getJson(url, key) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -80,6 +57,38 @@ async function fetchKashishVotes(apiKey, options = {}) {
     }
   }
   return null; // not reached
+}
+
+/**
+ * Fetch a single page of votes from the Kashish API.
+ *
+ * @param {string} apiKey - API key (header: x-api-key); defaults to KASHISH_API_KEY
+ * @param {Object} options
+ * @param {string} [options.source='scan']   'scan' | 'normal' | 'all'
+ * @param {string} [options.eventId]         Kashish event ID filter
+ * @param {string} [options.updatedSince]    ISO time: only votes new since then
+ * @param {number} [options.page=1]
+ * @param {number} [options.limit=200]       max 200
+ * @param {string} [options.sort='asc']      'asc' | 'desc'
+ * @returns {Promise<Object>} API response: { data, pagination, summary, sync, eventId }
+ */
+async function fetchKashishVotes(apiKey, options = {}) {
+  const key = apiKey || env.kashishApiKey;
+  if (!key) {
+    throw new Error('Kashish API Key is missing. Configure KASHISH_API_KEY in the backend .env.');
+  }
+
+  const { source = 'scan', eventId, updatedSince, page = 1, limit = 200, sort = 'asc' } = options;
+
+  const url = new URL(DEFAULT_API_URL);
+  url.searchParams.set('source', source);
+  url.searchParams.set('page', String(page));
+  url.searchParams.set('limit', String(Math.min(limit, 200)));
+  url.searchParams.set('sort', sort);
+  if (eventId) url.searchParams.set('eventId', eventId);
+  if (updatedSince) url.searchParams.set('updatedSince', updatedSince);
+
+  return getJson(url, key);
 }
 
 /**
@@ -120,7 +129,39 @@ async function fetchAllKashishVotes(apiKey, options = {}) {
   };
 }
 
+/**
+ * Fetch every film of a Kashish event from the Movies API (GET /api/v1/movies, Kashish
+ * "Movies Catalog & Metadata API" guide, Nov 2026). With eventId and no limit Kashish returns all
+ * films in one response; later pages are still followed if it says hasMore.
+ *
+ * @param {string} apiKey - defaults to KASHISH_API_KEY
+ * @param {{ eventId: string, updatedSince?: string }} options
+ * @returns {Promise<{ movies: Array, syncedAt: string|null, total: number }>}
+ *   each movie: { id, title, categoryName, subCategoryName, screening, is_nominated, is_shown, posterUrl, updatedAt, ... }
+ */
+async function fetchKashishMovies(apiKey, { eventId, updatedSince } = {}) {
+  const key = apiKey || env.kashishApiKey;
+  if (!key) throw new Error('Kashish API Key is missing. Configure KASHISH_API_KEY in the backend .env.');
+  if (!eventId) throw new Error('Kashish event ID is missing. Set it in Settings › Audience › Voting Rules.');
+
+  const movies = [];
+  let syncedAt = null;
+  for (let page = 1; page <= 50; page += 1) {
+    const url = new URL(moviesApiUrl());
+    url.searchParams.set('eventId', eventId);
+    if (updatedSince) url.searchParams.set('updatedSince', updatedSince);
+    if (page > 1) url.searchParams.set('page', String(page));
+    const payload = await getJson(url, key);
+    if (Array.isArray(payload?.data)) movies.push(...payload.data);
+    if (!syncedAt && payload?.sync?.syncedAt) syncedAt = payload.sync.syncedAt;
+    const p = payload?.pagination || {};
+    if (p.hasMore !== true || page >= (p.totalPages || 1)) break;
+  }
+  return { movies, syncedAt, total: movies.length };
+}
+
 module.exports = {
   fetchKashishVotes,
-  fetchAllKashishVotes
+  fetchAllKashishVotes,
+  fetchKashishMovies
 };

@@ -186,6 +186,7 @@ const OUTCOME_REASON = {
   unregistered: 'Voter is not a registered delegate of this festival (no email or phone match)',
   not_checked_in: "Delegate wasn't scanned in during this film's show",
   unscheduled: 'Film is not on the schedule (Settings › Audience › Screenings)',
+  no_voting_show: "Film's shows have no Audience Choice vote",
   voted_before_checkin: 'Voted before being scanned in for the show',
   duplicate: 'Delegate already has a counted vote for this film',
   removed: "Not in this festival's Kashish event feed",
@@ -278,6 +279,8 @@ async function syncExternalVotes(eventId, { apiKey, logId = null, full = false, 
   // Per-show attendance (ADR 0004 Amendment 2): the voting shows each Kashish film plays in
   const { shows } = await showWindows.listShows(eventId);
   const showsByMovie = new Map();
+  // Films on the schedule only in shows with voting off (e.g. features out of competition)
+  const scheduledMovies = new Set(shows.flatMap((sh) => sh.kashish_films.map((f) => String(f.id))));
   shows.filter((sh) => sh.voting_enabled && sh.window).forEach((sh) => {
     sh.kashish_films.forEach((f) => {
       const key = String(f.id);
@@ -322,7 +325,10 @@ async function syncExternalVotes(eventId, { apiKey, logId = null, full = false, 
     } else if (row.stars === null) row.outcome = 'invalid';
     else if (String(row.kashish_status || '').toLowerCase() !== VERIFIED_STATUS) row.outcome = 'not_verified';
     else if (!row.voted_at || (config.from && row.voted_at < config.from) || (config.to && row.voted_at > config.to)) row.outcome = 'outside_period';
-    else if (!showsByMovie.has(row.kashish_movie_id)) row.outcome = 'unscheduled';
+    else if (!showsByMovie.has(row.kashish_movie_id)) {
+      row.outcome = 'unscheduled';
+      if (scheduledMovies.has(row.kashish_movie_id)) row.reason = OUTCOME_REASON.no_voting_show;
+    }
 
     if (row.outcome === 'counted') {
       const match = await matchKashishUserToAttendee(eventId, v.user, userCache);
@@ -492,11 +498,17 @@ async function computeExternalStandings(eventId, config = null) {
     GROUP BY kashish_movie_id
   `, [eventId]);
 
-  const totalVotes = films.reduce((t, f) => t + Number(f.v), 0);
-  const totalStars = films.reduce((t, f) => t + Number(f.sum_stars), 0);
+  // Only films in the Audience Choice vote: on a show with voting on (features out of competition,
+  // or films on no show, are left out), plus any film that still has counted votes
+  const { shows } = await showWindows.listShows(eventId);
+  const inVote = new Set(shows.filter((sh) => sh.voting_enabled).flatMap((sh) => sh.kashish_films.map((f) => String(f.id))));
+  const ranked = films.filter((f) => inVote.has(String(f.kashish_movie_id)) || Number(f.v) > 0);
+
+  const totalVotes = ranked.reduce((t, f) => t + Number(f.v), 0);
+  const totalStars = ranked.reduce((t, f) => t + Number(f.sum_stars), 0);
   const C = totalVotes > 0 ? totalStars / totalVotes : DEFAULT_FESTIVAL_MEAN;
 
-  const rows = films.map(f => {
+  const rows = ranked.map(f => {
     const v = Number(f.v);
     const R = v > 0 ? Number(f.sum_stars) / v : 0;
     const W = v > 0 ? (v / (v + m)) * R + (m / (v + m)) * C : 0;
@@ -612,13 +624,33 @@ async function getExternalSummary(eventId) {
  * Kashish movies seen in this festival's votes, for linking films to shows in the schedule editor
  * (Kashish has no films list API yet).
  */
+/**
+ * Every Kashish film known for a festival: the Kashish films catalog (kashish_movies, Movies API) plus
+ * films that only appear in votes. [{ id, title, show_name, votes, in_catalog }], by title.
+ */
 async function listKnownMovies(eventId) {
-  const rows = await query(`
-    SELECT kashish_movie_id AS id, MAX(kashish_movie_title) AS title, COUNT(*) AS votes
-    FROM kashish_external_votes WHERE event_id = ? AND outcome <> 'removed'
-    GROUP BY kashish_movie_id ORDER BY title ASC
-  `, [eventId]);
-  return rows.map((r) => ({ id: r.id, title: r.title, votes: Number(r.votes) }));
+  const [voted, catalog] = await Promise.all([
+    query(`
+      SELECT kashish_movie_id AS id, MAX(kashish_movie_title) AS title, COUNT(*) AS votes
+      FROM kashish_external_votes WHERE event_id = ? AND outcome <> 'removed'
+      GROUP BY kashish_movie_id
+    `, [eventId]),
+    query('SELECT kashish_movie_id AS id, title, sub_category_name FROM kashish_movies WHERE event_id = ?', [eventId])
+  ]);
+  const byId = new Map();
+  catalog.forEach((c) => byId.set(c.id, {
+    id: c.id,
+    title: c.title,
+    show_name: c.sub_category_name && !/^no sub category$/i.test(c.sub_category_name.trim()) ? c.sub_category_name : null,
+    votes: 0,
+    in_catalog: true
+  }));
+  voted.forEach((v) => {
+    const known = byId.get(v.id);
+    if (known) known.votes = Number(v.votes);
+    else byId.set(v.id, { id: v.id, title: v.title, show_name: null, votes: Number(v.votes), in_catalog: false });
+  });
+  return [...byId.values()].sort((a, b) => String(a.title).localeCompare(String(b.title)));
 }
 
 module.exports = {

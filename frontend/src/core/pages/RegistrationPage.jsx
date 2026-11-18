@@ -11,7 +11,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
-import { attendeeLabel, isDetailsPending } from '../utils/attendeeDisplay';
+import { attendeeLabel, isDetailsPending, registrationSourceLabel } from '../utils/attendeeDisplay';
 import {
   MovieIcon,
   ConfirmationNumberIcon,
@@ -1630,7 +1630,7 @@ return (
                         Registration Record
                       </div>
                       <div style={{ color: 'var(--fc-text-secondary)' }}>
-                        {[regDate, 'Online'].filter(Boolean).join(' • ')}
+                        {[regDate, registrationSourceLabel(badgeModal.registration_type)].filter(Boolean).join(' • ') || '—'}
                       </div>
                     </div>
 

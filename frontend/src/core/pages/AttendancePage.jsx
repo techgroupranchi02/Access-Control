@@ -201,6 +201,9 @@ export default function AttendancePage() {
       }
     }
 
+    // A camera read closes the camera straight away: one badge per opening, the result stays on screen
+    if (isFromCamera) setIsCameraActive(false);
+
     try {
       isProcessingRef.current = true;
       lastScannedRef.current = { code: clean, timestamp: now };
@@ -554,7 +557,7 @@ export default function AttendancePage() {
                     )}
 
                     <div style={{ color: 'var(--fc-text-muted)', fontSize: '0.74rem', marginTop: '8px' }}>
-                      Point camera at delegate's badge QR code or mobile screen to check in automatically.
+                      Point the camera at the badge QR or the delegate's phone screen. It checks in and closes after each scan.
                     </div>
                   </div>
                 )}

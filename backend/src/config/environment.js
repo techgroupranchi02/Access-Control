@@ -116,6 +116,7 @@ const env = {
   // No fallback: the key must come from .env (the old fallback was published in Kashish's docs)
   kashishApiKey: process.env.KASHISH_API_KEY || '',
   kashishApiUrl: process.env.KASHISH_API_URL || 'https://kashish-admin.vercel.app/api/v1/votes',
+  kashishMoviesApiUrl: process.env.KASHISH_MOVIES_API_URL || '',  // default: KASHISH_API_URL with /votes -> /movies
 };
 
 module.exports = env;
