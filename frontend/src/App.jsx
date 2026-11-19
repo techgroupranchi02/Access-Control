@@ -591,7 +591,7 @@ function App() {
               path="/settings/audience"
               element={
                 <ModuleGate module="audience" fallback={<AccessDenied module="audience" />}>
-                  <PermissionGate anyPermissions={['audience.view', 'audience:view', 'audience.manage', 'audience:manage', 'settings.manage', 'settings:manage', 'settings.view', 'settings:view']} fallback={<AccessDenied />}>
+                  <PermissionGate anyPermissions={['audience.manage_settings', 'audience:manage_settings', 'audience.manage_categories', 'audience:manage_categories', 'audience.manage_screenings', 'audience:manage_screenings']} fallback={<AccessDenied />}>
                     <AudienceSettingsPage />
                   </PermissionGate>
                 </ModuleGate>

@@ -21,6 +21,13 @@ const { sendDelegateConfirmation, isDayPass } = require('../services/delegateCon
 const kashishExternal = require('../services/kashishExternalVotes.service');
 const venuesService = require('../services/venues.service');
 const { getFilmFestivalId } = require('../services/festivalIds.service');
+const { hasAnyPermission } = require('../middleware/permission.middleware');
+
+// Settings › Audience › Voting Rules: only users with a voting permission see the tab or may change these
+// (2026-11-19). Others (e.g. a Volunteer Manager group) still save the rest of the audience settings.
+const VOTING_PERMISSIONS = ['voting.view_results', 'voting.control_window', 'voting.audit_fraud', 'voting.vote'];
+const VOTING_RULE_KEYS = ['voting_source', 'kashish_voting_from', 'kashish_voting_to', 'kashish_event_id',
+  'voting_window_minutes', 'adjustment_number', 'require_screening_checkin', 'enable_did_not_watch_skip'];
 
 const KASHISH_VOTING_MESSAGE = 'Audience voting for this festival happens in the Kashish Pride app.';
 
@@ -308,6 +315,17 @@ async function updateAudienceSettings(req, res) {
     // festival_name is derived from events.name on read; don't persist a copy that can go stale
     const { festival_name: _ignoredName, festival_banner_url: _b, festival_logo_url: _l, ...settings } = req.body || {};
 
+    // Without a voting permission the Voting Rules stay as stored, whatever the request carries
+    if (!(await hasAnyPermission(req, VOTING_PERMISSIONS))) {
+      const rows = await query('SELECT settings_json FROM audience_settings WHERE event_id = ? LIMIT 1', [eventId]);
+      let stored = rows[0]?.settings_json || {};
+      if (typeof stored === 'string') { try { stored = JSON.parse(stored); } catch { stored = {}; } }
+      for (const key of VOTING_RULE_KEYS) {
+        if (stored[key] === undefined) delete settings[key];
+        else settings[key] = stored[key];
+      }
+    }
+
     // Vote source + Kashish voting period: keep only known values / valid dates
     settings.voting_source = settings.voting_source === 'kashish' ? 'kashish' : 'freecomers';
     for (const key of ['kashish_voting_from', 'kashish_voting_to']) {
@@ -351,6 +369,39 @@ async function updateAudienceSettings(req, res) {
   } catch (error) {
     console.error('[AudienceController] updateAudienceSettings error:', error.message);
     res.status(500).json({ error: 'Failed to save audience settings.' });
+  }
+}
+
+/**
+ * PUT /api/audience/settings/attendance-window
+ * { attendance_window_before_min, attendance_window_end_before_min }: only these two settings, so Manage Screenings
+ * (Settings › Audience › Screenings) can set them without the rest of the audience settings.
+ */
+async function updateAttendanceWindow(req, res) {
+  try {
+    const eventId = getEventId(req);
+    const patch = {};
+    for (const key of ['attendance_window_before_min', 'attendance_window_end_before_min']) {
+      const n = Number(req.body?.[key]);
+      if (req.body?.[key] === '' || req.body?.[key] == null || !Number.isInteger(n) || n < 0 || n > showWindows.MAX_OFFSET_MIN) {
+        return res.status(400).json({ error: `Attendance window minutes must be a whole number from 0 to ${showWindows.MAX_OFFSET_MIN}.` });
+      }
+      patch[key] = n;
+    }
+    const rows = await query('SELECT settings_json FROM audience_settings WHERE event_id = ? LIMIT 1', [eventId]);
+    let settings = rows[0]?.settings_json || {};
+    if (typeof settings === 'string') { try { settings = JSON.parse(settings); } catch { settings = {}; } }
+    Object.assign(settings, patch);
+    await query(`
+      INSERT INTO audience_settings (event_id, settings_json)
+      VALUES (?, ?)
+      ON DUPLICATE KEY UPDATE settings_json = VALUES(settings_json), updated_at = CURRENT_TIMESTAMP
+    `, [eventId, JSON.stringify(settings)]);
+    recheckVotesSoon(eventId); // windows decide which stored Kashish votes count
+    res.json({ success: true, message: 'Attendance window saved.', ...patch });
+  } catch (error) {
+    console.error('[AudienceController] updateAttendanceWindow error:', error.message);
+    res.status(500).json({ error: 'Failed to save the attendance window.' });
   }
 }
 
@@ -3363,6 +3414,7 @@ async function listAttendance(req, res) {
   }
 
   module.exports = {
+    updateAttendanceWindow,
   getPublicResults,
     listCategories,
     createCategory,

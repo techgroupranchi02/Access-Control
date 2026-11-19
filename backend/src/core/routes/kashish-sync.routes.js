@@ -4,7 +4,8 @@
 
 const express = require('express');
 const { authenticate } = require('../middleware/auth.middleware');
-const { requirePermission, requireModule } = require('../middleware/permission.middleware');
+const { requirePermission, requireAnyPermission, requireModule } = require('../middleware/permission.middleware');
+const canManageScreenings = requireAnyPermission(['audience.manage_settings', 'audience.manage_screenings']);
 const kashishSyncController = require('../controllers/kashish-sync.controller');
 
 const kashishSyncRouter = express.Router();
@@ -16,8 +17,8 @@ kashishSyncRouter.post('/sync-votes', requirePermission('voting.control_window')
 
 // Movie mappings
 kashishSyncRouter.get('/movie-mappings', requirePermission('audience.view'), kashishSyncController.listMovieMappings);
-kashishSyncRouter.post('/movie-mappings', requirePermission('audience.manage_settings'), kashishSyncController.createMovieMapping);
-kashishSyncRouter.delete('/movie-mappings/:id', requirePermission('audience.manage_settings'), kashishSyncController.deleteMovieMapping);
+kashishSyncRouter.post('/movie-mappings', canManageScreenings, kashishSyncController.createMovieMapping);
+kashishSyncRouter.delete('/movie-mappings/:id', canManageScreenings, kashishSyncController.deleteMovieMapping);
 
 // User mappings & sync history
 kashishSyncRouter.get('/user-mappings', requirePermission('audience.view'), kashishSyncController.listUserMappings);

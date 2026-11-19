@@ -3,8 +3,8 @@
  *
  * Each show is a screening block: date, start, end, title, type, Audience Choice voting on/off and,
  * for festivals whose votes come from the Kashish app, the Kashish films it plays. Every show has an
- * attendance window (from `before` minutes before the start to `endBefore` minutes before the end,
- * Voting Rules); a vote for a film counts only with a scan inside a window of one of its shows,
+ * attendance window (from `before` minutes before the start to `endBefore` minutes before the end, set in
+ * the card above this editor); a vote for a film counts only with a scan inside a window of one of its shows,
  * before the vote. A delayed show is edited here and its window moves with it; stored votes are
  * re-checked on save. See docs/adr/0004-kashish-external-leaderboard.md, Amendment 2.
  *
@@ -163,7 +163,7 @@ export default function ScreeningsEditor({ venues = [], isKashish = false }) {
         <div>
           <h2 className="fc-sch-title">Screenings</h2>
           <p className="fc-sch-sub">
-            Each show&apos;s attendance window runs from {offsets.before_min} min before it starts to {offsets.end_before_min} min before it ends (Voting Rules).
+            Each show&apos;s attendance window runs from {offsets.before_min} min before it starts to {offsets.end_before_min} min before it ends (set above).
             {isKashish ? ' A vote for a film counts only when the delegate was scanned in during a window of one of its shows, before voting.' : ''}
             {' '}When a show is delayed, change its times here: the window moves with it.
           </p>

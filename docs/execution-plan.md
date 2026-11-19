@@ -52,6 +52,23 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-19: Settings › Audience: each tab only for users who can change it; new Manage Screenings permission** (`deployed` 2026-11-19). [ADR 0004, Amendment 7](adr/0004-kashish-external-leaderboard.md).
+  - **Why:** the Volunteer Manager custom group should see only the Screenings tab in Settings.
+  - **What:**
+    - `sync_specs_to_database.js`: new `audience:manage_screenings` (Manage Screenings), Admin group only. Ran the sync on dev.
+    - `permission.middleware.js`: `requireAnyPermission(keys)`. Screening writes, Kashish film import and film links accept Manage Audience Settings or Manage Screenings (`audience.routes.js`, `kashish-sync.routes.js`).
+    - `audience.controller.js`: `PUT /audience/settings/attendance-window` saves only the two window fields; the Screenings card uses it.
+    - `AudienceSettingsPage.jsx`: tabs by permission (Form Builder and Venues: Manage Audience Settings; Categories: that or Manage Delegate Categories; Voting Rules: that plus a voting permission; Screenings: that or Manage Screenings); a message when none apply.
+    - `Sidebar.jsx`, `App.jsx`, `routePermissions.js`: Settings › Audience only for users who can change a tab; Settings section shown when any item in it is available; Review Stage still needs core Settings.
+  - **Checked on dev (festival 40), user 6 with a temporary custom group (View Audience Hub + Manage Screenings), removed afterwards and settings restored:** only the Screenings tab with the attendance card and Import button; attendance-window save 200, Kashish films 200; `PUT /audience/settings`, registration form and new category 403; bad minutes 400. Without the group (standard Volunteer) there is no Settings section and the page redirects. Frontend built, backend restarted.
+  - **Note:** a user in any custom group gets only that group's permissions (existing behaviour in `auth.service.js`), so the Volunteer Manager group must list the registration and attendance permissions too.
+- **2026-11-19: Settings › Audience › Voting Rules only for users with a voting permission** (`deployed` 2026-11-19). [ADR 0004, Amendment 7](adr/0004-kashish-external-leaderboard.md).
+  - **Why:** a Volunteer Manager custom group (Audience, Registration and Attendance permissions, no voting) could still change the vote source and Kashish event ID through Manage Audience Settings.
+  - **What:**
+    - `AudienceSettingsPage.jsx`: the Voting Rules tab shows only with a voting permission. The attendance window minutes moved to a card above the Screenings list, with its own Save; the list refreshes its windows after saving.
+    - `audience.controller.js` › `updateAudienceSettings`: without a voting permission, the voting-rule fields are kept as stored.
+    - `userHasPermission` moved from `pass-templates.controller.js` to `permission.middleware.js`, plus `hasAnyPermission`.
+  - **Checked on dev (festival 40):** admin sees all five tabs; volunteer user 6 (no voting permission) sees four, without Voting Rules, and both see the attendance card on Screenings. A save as a user without a voting permission that tried to change `voting_source` and `kashish_event_id` kept both and saved the attendance minutes; admin could change them; settings restored identical. Frontend built, backend restarted.
 - **2026-11-19: Kashish sync: `updatedSince` confirmed; automatic full sync every hour** (`deployed` 2026-11-19). [ADR 0004, Amendment 6](adr/0004-kashish-external-leaderboard.md).
   - **Analysis:** scheduled syncs already use `updatedSince` (resume point = Kashish's `sync.syncedAt` in `kashish_sync_state`). Kashish honours it: full feed 21 votes, since the last sync 0, since Nov 17 = 5. Gap: deleted votes don't come back incrementally, so they were cleaned up only by Sync now.
   - **What:** `kashishExternalVotes.service.js`: a scheduled run is full when the last full sync is older than `KASHISH_FULL_SYNC_INTERVAL_MIN` (new optional env in `environment.js`, default 60; 0 = off).

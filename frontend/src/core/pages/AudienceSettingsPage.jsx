@@ -9,6 +9,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import ScreeningsEditor from '../components/audience/ScreeningsEditor';
 import { useFestivalConfig } from '../hooks/useFestivalConfig';
+import { usePermissions } from '../hooks/usePermissions';
 import {
   PaletteIcon,
   DescriptionIcon,
@@ -1441,7 +1442,25 @@ function localInputToIso(value) {
 
 export default function AudienceSettingsPage() {
   const { currentFestival } = useFestivalConfig();
+  const { canAny } = usePermissions();
+  // Each tab shows only to users who can change it (the backend checks the same permissions):
+  // Manage Audience Settings opens all but Voting Rules, which also needs a voting permission (its fields are kept
+  // as stored otherwise); Manage Delegate Categories opens Categories; Manage Screenings opens Screenings only.
+  const has = (key) => canAny([key, key.replace('.', ':')]);
+  const canManageSettings = has('audience.manage_settings');
+  const canVoting = ['voting.view_results', 'voting.control_window', 'voting.audit_fraud', 'voting.vote'].some(has);
+  const tabAllowed = {
+    form_builder: canManageSettings,
+    categories: canManageSettings || has('audience.manage_categories'),
+    voting_rules: canManageSettings && canVoting,
+    venues: canManageSettings,
+    screenings: canManageSettings || has('audience.manage_screenings')
+  };
+  const firstTab = ['form_builder', 'categories', 'voting_rules', 'venues', 'screenings'].find((t) => tabAllowed[t]) || null;
   const [activeTab, setActiveTab] = useState('form_builder'); // 'form_builder' | 'categories' | 'voting_rules' | 'venues' | 'screenings'
+  useEffect(() => {
+    if (!tabAllowed[activeTab] && firstTab) setActiveTab(firstTab);
+  }, [activeTab, firstTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [categories, setCategories] = useState([]);
   const [venues, setVenues] = useState([]);
@@ -1461,6 +1480,7 @@ export default function AudienceSettingsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [windowVersion, setWindowVersion] = useState(0); // remounts ScreeningsEditor so show windows use the saved minutes
 
   // Form Builder State
   const [formSchema, setFormSchema] = useState(null);
@@ -1640,6 +1660,24 @@ export default function AudienceSettingsPage() {
       alert('Audience settings saved successfully!');
     } catch (err) {
       alert(err?.response?.data?.error || 'Failed to save settings.');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Settings › Audience › Screenings: only the two window settings (Manage Screenings may save these alone)
+  const handleSaveAttendanceWindow = async (e) => {
+    e?.preventDefault();
+    try {
+      setSavingSettings(true);
+      await api.put('/audience/settings/attendance-window', {
+        attendance_window_before_min: settings.attendance_window_before_min ?? 15,
+        attendance_window_end_before_min: settings.attendance_window_end_before_min ?? 15
+      });
+      setWindowVersion((v) => v + 1);
+      alert('Attendance window saved.');
+    } catch (err) {
+      alert(err?.response?.data?.error || 'Failed to save the attendance window.');
     } finally {
       setSavingSettings(false);
     }
@@ -2049,7 +2087,7 @@ export default function AudienceSettingsPage() {
         </div>
 
         <div className="fc-sp-actions" style={{ display: 'flex', gap: '10px' }}>
-          {activeTab === 'categories' && (
+          {activeTab === 'categories' && tabAllowed.categories && (
             <button 
               className="fc-btn fc-btn-primary" 
               onClick={() => setShowCatModal(true)}
@@ -2074,7 +2112,7 @@ export default function AudienceSettingsPage() {
             </button>
           )}
 
-          {activeTab === 'form_builder' && (
+          {activeTab === 'form_builder' && tabAllowed.form_builder && (
             <>
               <button
                 onClick={() => setShowPreviewModal(true)}
@@ -2121,8 +2159,14 @@ export default function AudienceSettingsPage() {
         </div>
       </div>
 
+      {!firstTab && (
+        <div className="fc-kv-hint" style={{ marginBottom: '16px' }}>
+          You can't change any Audience settings. Ask a festival admin for Manage Audience Settings, Manage Delegate Categories or Manage Screenings.
+        </div>
+      )}
       {/* Navigation Tabs */}
       <div className="fc-sp-tabs" style={{ display: 'flex', gap: '8px', borderBottom: '2px solid var(--fc-border)', marginBottom: '24px' }}>
+        {tabAllowed.form_builder && (
         <button
           onClick={() => setActiveTab('form_builder')}
           style={{
@@ -2143,7 +2187,9 @@ export default function AudienceSettingsPage() {
           <DescriptionIcon size={17} />
           Registration Form Builder
         </button>
+        )}
 
+        {tabAllowed.categories && (
         <button
           onClick={() => setActiveTab('categories')}
           style={{
@@ -2164,7 +2210,9 @@ export default function AudienceSettingsPage() {
           <PeopleIcon size={17} />
           Categories &amp; Badges
         </button>
+        )}
 
+        {tabAllowed.voting_rules && (
         <button
           onClick={() => setActiveTab('voting_rules')}
           style={{
@@ -2185,7 +2233,9 @@ export default function AudienceSettingsPage() {
           <HowToVoteIcon size={17} />
           Audience Voting Rules
         </button>
+        )}
 
+        {tabAllowed.venues && (
         <button
           onClick={() => setActiveTab('venues')}
           style={{
@@ -2206,7 +2256,9 @@ export default function AudienceSettingsPage() {
           <MovieIcon size={17} />
           Screening Venues
         </button>
+        )}
 
+        {tabAllowed.screenings && (
         <button
           onClick={() => setActiveTab('screenings')}
           style={{
@@ -2227,6 +2279,7 @@ export default function AudienceSettingsPage() {
           <ScheduleIcon size={17} />
           Screenings
         </button>
+        )}
       </div>
 
       {formSuccessMsg && (
@@ -2239,7 +2292,7 @@ export default function AudienceSettingsPage() {
       {/* ========================================================================= */}
       {/* TAB 1: REGISTRATION FORM BUILDER (COMPACT COLLAPSIBLE ACCORDIONS)         */}
       {/* ========================================================================= */}
-      {activeTab === 'form_builder' && (
+      {activeTab === 'form_builder' && tabAllowed.form_builder && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
           {/* Top Status & Utility Toolbar */}
@@ -3752,7 +3805,7 @@ export default function AudienceSettingsPage() {
       {/* ========================================================================= */}
       {/* TAB 2: DELEGATE CATEGORIES & BADGES                                       */}
       {/* ========================================================================= */}
-      {activeTab === 'categories' && (
+      {activeTab === 'categories' && tabAllowed.categories && (
         <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)' }}>
             Delegate Categories & Ribbon Badges
@@ -3826,7 +3879,7 @@ export default function AudienceSettingsPage() {
       {/* ========================================================================= */}
       {/* TAB 3: AUDIENCE VOTING RULES & SCREENING PARAMETERS                       */}
       {/* ========================================================================= */}
-      {activeTab === 'voting_rules' && (
+      {activeTab === 'voting_rules' && tabAllowed.voting_rules && (
         <div style={{ maxWidth: '880px', width: '100%' }}>
           <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)' }}>
@@ -3929,36 +3982,6 @@ export default function AudienceSettingsPage() {
               </div>
               </>)}
 
-              {/* Attendance window per show (ADR 0004 Amendment 2) */}
-              <div style={{ marginBottom: '16px' }}>
-                <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
-                  Attendance window for each show (minutes)
-                </span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--fc-text-secondary)' }}>
-                    Opens before the start
-                    <input
-                      type="number" min={0} max={180}
-                      value={settings.attendance_window_before_min ?? 15}
-                      onChange={(e) => setSettings({ ...settings, attendance_window_before_min: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
-                    />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--fc-text-secondary)' }}>
-                    Closes before the end
-                    <input
-                      type="number" min={0} max={180}
-                      value={settings.attendance_window_end_before_min ?? 15}
-                      onChange={(e) => setSettings({ ...settings, attendance_window_end_before_min: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
-                    />
-                  </label>
-                </div>
-                <small style={{ display: 'block', color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.75rem' }}>
-                  A 1:00–2:00 PM show with 15 and 15 takes attendance from 12:45 to 1:45 PM.{settings.voting_source === 'kashish' ? ' A vote counts only when the delegate was scanned in during a window of that film\'s show, before voting.' : ''} Shows and times are set in the Screenings tab.
-                </small>
-              </div>
-
               {/* Bayesian Number */}
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
@@ -4020,7 +4043,7 @@ export default function AudienceSettingsPage() {
       {/* ========================================================================= */}
       {/* TAB 4: SCREENING VENUES                                                   */}
       {/* ========================================================================= */}
-      {activeTab === 'venues' && (
+      {activeTab === 'venues' && tabAllowed.venues && (
         <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '24px', boxShadow: 'var(--shadow-sm)' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 16px 0', color: 'var(--fc-text-main)' }}>
             Screening Venues & Auditoriums
@@ -4043,8 +4066,48 @@ export default function AudienceSettingsPage() {
         </div>
       )}
 
-      {activeTab === 'screenings' && (
-        <ScreeningsEditor venues={venues} isKashish={settings.voting_source === 'kashish'} />
+      {activeTab === 'screenings' && tabAllowed.screenings && (
+        <form onSubmit={handleSaveAttendanceWindow} className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '20px 24px', boxShadow: 'var(--shadow-sm)', marginBottom: '20px' }}>
+          {/* Attendance window per show (ADR 0004 Amendment 2); here rather than in Voting Rules so staff
+              without a voting permission can set it */}
+              <div>
+                <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginBottom: '6px' }}>
+                  Attendance window for each show (minutes)
+                </span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--fc-text-secondary)' }}>
+                    Opens before the start
+                    <input
+                      type="number" min={0} max={180}
+                      value={settings.attendance_window_before_min ?? 15}
+                      onChange={(e) => setSettings({ ...settings, attendance_window_before_min: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
+                    />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--fc-text-secondary)' }}>
+                    Closes before the end
+                    <input
+                      type="number" min={0} max={180}
+                      value={settings.attendance_window_end_before_min ?? 15}
+                      onChange={(e) => setSettings({ ...settings, attendance_window_end_before_min: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
+                      style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)' }}
+                    />
+                  </label>
+                </div>
+                <small style={{ display: 'block', color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.75rem' }}>
+                  A 1:00–2:00 PM show with 15 and 15 takes attendance from 12:45 to 1:45 PM.{settings.voting_source === 'kashish' ? ' A vote counts only when the delegate was scanned in during a window of that film\'s show, before voting.' : ''} Shows and times are set below.
+                </small>
+              </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+            <button type="submit" className="fc-btn-primary" disabled={savingSettings}>
+              {savingSettings ? 'Saving…' : 'Save attendance window'}
+            </button>
+          </div>
+        </form>
+      )}
+      {activeTab === 'screenings' && tabAllowed.screenings && (
+        <ScreeningsEditor key={windowVersion} venues={venues} isKashish={settings.voting_source === 'kashish'} />
       )}
 
       {/* ========================================================================= */}

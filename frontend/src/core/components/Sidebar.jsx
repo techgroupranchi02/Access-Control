@@ -201,7 +201,8 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
 
   const isAudienceModEnabled = isModuleEnabled('audience');
   const canManagePassTemplates = isAudienceModEnabled && (isAdminUser || canAny(['settings.manage', 'settings:manage']));
-  const canAccessAudienceSettings = (isAudienceModEnabled || isModuleEnabled('settings')) && (isAdminUser || canAny(['audience.view', 'audience:view', 'audience.manage', 'audience:manage', 'settings.view', 'settings:view', 'settings.manage', 'settings:manage']));
+  // Settings › Audience: only for users who can change at least one of its tabs (AudienceSettingsPage)
+  const canAccessAudienceSettings = (isAudienceModEnabled || isModuleEnabled('settings')) && (isAdminUser || canAny(['audience.manage_settings', 'audience:manage_settings', 'audience.manage_categories', 'audience:manage_categories', 'audience.manage_screenings', 'audience:manage_screenings']));
   const canAccessRegistration = isAudienceModEnabled && (isAdminUser || canAny(['registration.view', 'registration:view', 'tickets.view', 'tickets:view']));
   const canAccessAttendance = isAudienceModEnabled && (isAdminUser || canAny(['attendance.view', 'attendance:view']));
   const canAccessVoting = isAudienceModEnabled && (isAdminUser || canAny(['voting.view_results', 'voting:view_results', 'voting.vote', 'voting:vote']));
@@ -663,7 +664,7 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
         )}
 
         {/* ── SETTINGS: pinned to the bottom of the sidebar, just above the user footer ── */}
-        {canAccessSettings && (
+        {(canAccessSettings || canAccessAudienceSettings || canManagePassTemplates) && (
           <div style={{ marginTop: 'auto', paddingTop: '12px' }}>
             <div className="fc-section-divider"></div>
             <div className="fc-module-block" style={{ marginTop: '4px' }}>
@@ -684,6 +685,7 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
               </button>
               {openModules.settings && (
                 <div className="fc-sub-nav">
+                  {canAccessSettings && (
                   <NavLink
                     to="/settings/review-stage"
                     title="Review Stage"
@@ -692,6 +694,7 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
                     <TuneIcon size={15} style={{ marginRight: '8px' }} />
                     <span>Review Stage</span>
                   </NavLink>
+                  )}
                   {canAccessAudienceSettings && (
                     <NavLink
                       to="/settings/audience"

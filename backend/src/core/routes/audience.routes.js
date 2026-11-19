@@ -7,7 +7,10 @@
 
 const express = require('express');
 const { authenticate } = require('../middleware/auth.middleware');
-const { requirePermission, requireModule } = require('../middleware/permission.middleware');
+const { requirePermission, requireAnyPermission, requireModule } = require('../middleware/permission.middleware');
+
+// Settings › Audience › Screenings: full audience settings, or Manage Screenings alone (e.g. a Volunteer Manager group)
+const canManageScreenings = requireAnyPermission(['audience.manage_settings', 'audience.manage_screenings']);
 const audienceController = require('../controllers/audience.controller');
 const {
   publicVoteIpLimiter,
@@ -30,15 +33,16 @@ audienceRouter.delete('/categories/:id', requirePermission('audience.manage_cate
 audienceRouter.get('/venues', requirePermission('audience.view'), audienceController.listVenues);
 audienceRouter.get('/settings', requirePermission('audience.view'), audienceController.getAudienceSettings);
 audienceRouter.put('/settings', requirePermission('audience.manage_settings'), audienceController.updateAudienceSettings);
+audienceRouter.put('/settings/attendance-window', canManageScreenings, audienceController.updateAttendanceWindow);
 audienceRouter.get('/registration-form', requirePermission('audience.view'), audienceController.getRegistrationFormSchema);
 audienceRouter.put('/registration-form', requirePermission('audience.manage_settings'), audienceController.saveRegistrationFormSchema);
 
 audienceRouter.get('/screenings', requirePermission('audience.view'), audienceController.listScreeningBlocks);
-audienceRouter.get('/screenings/kashish-movies', requirePermission('audience.manage_settings'), audienceController.listKashishMoviesForSchedule);
-audienceRouter.post('/screenings/kashish-movies/import', requirePermission('audience.manage_settings'), audienceController.importKashishMovies);
-audienceRouter.post('/screenings', requirePermission('audience.manage_settings'), audienceController.createScreeningBlock);
-audienceRouter.put('/screenings/:id', requirePermission('audience.manage_settings'), audienceController.updateScreeningBlock);
-audienceRouter.delete('/screenings/:id', requirePermission('audience.manage_settings'), audienceController.deleteScreeningBlock);
+audienceRouter.get('/screenings/kashish-movies', canManageScreenings, audienceController.listKashishMoviesForSchedule);
+audienceRouter.post('/screenings/kashish-movies/import', canManageScreenings, audienceController.importKashishMovies);
+audienceRouter.post('/screenings', canManageScreenings, audienceController.createScreeningBlock);
+audienceRouter.put('/screenings/:id', canManageScreenings, audienceController.updateScreeningBlock);
+audienceRouter.delete('/screenings/:id', canManageScreenings, audienceController.deleteScreeningBlock);
 audienceRouter.post('/screenings/:id/open-voting', requirePermission('voting.control_window'), audienceController.openVotingWindow);
 audienceRouter.post('/screenings/:id/close-voting', requirePermission('voting.control_window'), audienceController.closeVotingWindow);
 

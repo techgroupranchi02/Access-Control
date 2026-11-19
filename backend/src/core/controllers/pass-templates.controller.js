@@ -18,16 +18,7 @@ const { query, getConnection } = require('../../config/database');
 const { festivalImageUrl } = require('../utils/media.utils');
 const { PREBUILT_TEMPLATES } = require('../services/registration-form-templates');
 const svc = require('../services/passTemplates.service');
-const { requirePermission } = require('../middleware/permission.middleware');
-
-/** True when the user passes requirePermission(key) (admins, owners and granted groups). */
-function userHasPermission(req, key) {
-  const probe = { ...req, headers: req.headers, query: req.query, user: req.user };
-  return new Promise((resolve) => {
-    const res = { status: () => ({ json: () => resolve(false) }) };
-    requirePermission(key)(probe, res, () => resolve(true)).catch(() => resolve(false));
-  });
-}
+const { userHasPermission } = require('../middleware/permission.middleware');
 
 async function getQrSettings(eventId) {
   const rows = await query('SELECT qr_json FROM pass_print_settings WHERE event_id = ? LIMIT 1', [eventId]);

@@ -35,7 +35,7 @@ export function checkRouteAccess(pathname, isModuleEnabled, hasPermission, isSup
 
   // Audience Settings
   if (path.startsWith('/settings/audience')) {
-    return isModOn('audience') && (isAdmin || canAccess('audience.view') || canAccess('audience.manage') || canAccess('settings.view'));
+    return isModOn('audience') && (isAdmin || canAccess('audience.manage_settings') || canAccess('audience.manage_categories') || canAccess('audience.manage_screenings'));
   }
 
   // General Settings & Review Stages

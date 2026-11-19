@@ -177,4 +177,35 @@ function requireModule(moduleKey) {
 // Backward-compatible alias
 const requireFeature = requireModule;
 
-module.exports = { requirePermission, requireModule, requireFeature };
+/**
+ * True when the user passes requirePermission(key) (admins, owners and granted groups). For checks inside a
+ * handler, e.g. a field only some users may change.
+ */
+function userHasPermission(req, key) {
+  const probe = { ...req, headers: req.headers, query: req.query, user: req.user };
+  return new Promise((resolve) => {
+    const res = { status: () => ({ json: () => resolve(false) }) };
+    requirePermission(key)(probe, res, () => resolve(true)).catch(() => resolve(false));
+  });
+}
+
+/** True when the user passes requirePermission for at least one of the keys. */
+async function hasAnyPermission(req, keys) {
+  for (const key of keys) {
+    if (await userHasPermission(req, key)) return true;
+  }
+  return false;
+}
+
+/** Like requirePermission, but passes when the user has at least one of the keys. */
+function requireAnyPermission(keys) {
+  return async (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required.' });
+    for (const key of keys) {
+      if (await userHasPermission(req, key)) return requirePermission(key)(req, res, next); // sets req.permissionScope
+    }
+    return res.status(403).json({ error: `Permission denied. Requires one of: ${keys.join(', ')}.` });
+  };
+}
+
+module.exports = { requirePermission, requireAnyPermission, requireModule, requireFeature, userHasPermission, hasAnyPermission };
