@@ -10,6 +10,7 @@
  */
 const crypto = require('crypto');
 const { query } = require('../../config/database');
+const { FREECOMERS_ADMIN_LABEL } = require('../utils/actor');
 
 const MODES = ['full', 'qr-only'];
 const MAX_ITEMS = 2000;
@@ -49,7 +50,7 @@ async function getPrintStatus(eventId, qrValues = []) {
     const part = qrIds.slice(i, i + CHUNK);
     const rows = await query(
       `SELECT l.qr_id, agg.cnt, l.printed_at, l.print_mode,
-              COALESCE(ind.name, org.name, u.email) AS printed_by_name
+              CASE WHEN l.printed_by_admin_id IS NOT NULL THEN ? ELSE COALESCE(ind.name, org.name, u.email) END AS printed_by_name
          FROM (
            SELECT qr_id, COUNT(*) AS cnt, MAX(id) AS last_id
              FROM qr_print_log
@@ -60,7 +61,7 @@ async function getPrintStatus(eventId, qrValues = []) {
          LEFT JOIN users u ON u.id = l.printed_by
          LEFT JOIN individuals ind ON ind.user_id = u.id
          LEFT JOIN organizations org ON org.user_id = u.id`,
-      [eventId, ...part]
+      [FREECOMERS_ADMIN_LABEL, eventId, ...part]
     );
     rows.forEach((r) => {
       status[byId.get(r.qr_id)] = {
@@ -79,7 +80,7 @@ async function getPrintStatus(eventId, qrValues = []) {
  * @param {Array<{qr_value: string, template_id?: string}>} items
  * @returns {Promise<{ recorded: number, print_job: string }>}
  */
-async function recordPrints(eventId, items = [], { mode, userId } = {}) {
+async function recordPrints(eventId, items = [], { mode, userId, adminId } = {}) {
   if (!MODES.includes(mode)) {
     const err = new Error('Unknown print mode.');
     err.status = 400;
@@ -93,11 +94,11 @@ async function recordPrints(eventId, items = [], { mode, userId } = {}) {
 
   const ids = await qrIdsFor(eventId, [...new Set(list.map((it) => it.value))]);
   const rows = list.filter((it) => ids.has(it.value))
-    .map((it) => [eventId, ids.get(it.value), printJob, mode, mode === 'qr-only' ? null : it.template, userId || null]);
+    .map((it) => [eventId, ids.get(it.value), printJob, mode, mode === 'qr-only' ? null : it.template, userId || null, adminId || null]);
   for (let i = 0; i < rows.length; i += CHUNK) {
     const part = rows.slice(i, i + CHUNK);
     await query(
-      `INSERT INTO qr_print_log (event_id, qr_id, print_job, print_mode, template_id, printed_by) VALUES ${part.map(() => '(?, ?, ?, ?, ?, ?)').join(',')}`,
+      `INSERT INTO qr_print_log (event_id, qr_id, print_job, print_mode, template_id, printed_by, printed_by_admin_id) VALUES ${part.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(',')}`,
       part.flat()
     );
   }

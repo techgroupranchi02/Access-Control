@@ -4,6 +4,7 @@
  */
 
 const { query } = require('../../config/database');
+const { logActor, actorUserId, FREECOMERS_ADMIN_LABEL } = require('../utils/actor'); // label is a code constant, safe to inline in SQL
 const { scopeSubmissionsQuery, canAccessSubmission } = require('../services/scoping.service');
 const { formatThumbnailUrl } = require('../utils/media.utils');
 
@@ -815,7 +816,7 @@ async function getById(req, res) {
 
     // Fetch audit logs
     const logs = await query(`
-      SELECT sl.action, sl.notes, sl.created_at, COALESCE(i.name, o.name, u.email) as actor_name
+      SELECT sl.action, sl.notes, sl.created_at, CASE WHEN sl.actor_admin_id IS NOT NULL THEN '${FREECOMERS_ADMIN_LABEL}' ELSE COALESCE(i.name, o.name, u.email) END as actor_name
       FROM submission_logs sl
       LEFT JOIN users u ON u.id = sl.actor_user_id
       LEFT JOIN individuals i ON i.user_id = u.id
@@ -970,9 +971,9 @@ async function reject(req, res) {
     `, [id]);
 
     await query(`
-      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-      VALUES (?, 'REJECT', ?, ?)
-    `, [id, `Rejected with reason: "${trimmedReason}"`, req.user.id]);
+      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+      VALUES (?, 'REJECT', ?, ?, ?)
+    `, [id, `Rejected with reason: "${trimmedReason}"`, ...(await logActor(req))]);
 
     res.json({
       message: 'Submission rejected and filmmaker notification queued.',
@@ -1002,9 +1003,9 @@ async function flag(req, res) {
     `, [flag_id || null, id]);
 
     await query(`
-      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-      VALUES (?, 'FLAG_UPDATE', ?, ?)
-    `, [id, flag_id ? `Flag updated to ${flag_id}` : 'Flag cleared', req.user.id]);
+      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+      VALUES (?, 'FLAG_UPDATE', ?, ?, ?)
+    `, [id, flag_id ? `Flag updated to ${flag_id}` : 'Flag cleared', ...(await logActor(req))]);
 
     const updatedRows = await query(`
       SELECT 
@@ -1065,9 +1066,9 @@ async function updateStatus(req, res) {
     `, [ffsStatus, id]);
 
     await query(`
-      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-      VALUES (?, 'STATUS_CHANGE', ?, ?)
-    `, [id, `Status transitioned to ${status}`, req.user.id]);
+      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+      VALUES (?, 'STATUS_CHANGE', ?, ?, ?)
+    `, [id, `Status transitioned to ${status}`, ...(await logActor(req))]);
 
     res.json({ message: `Submission status updated to ${status}.` });
   } catch (error) {
@@ -1094,9 +1095,9 @@ async function updateCategory(req, res) {
     await query('UPDATE submissions SET category = ?, updated_at = NOW() WHERE id = ? AND event_id = ?', [category.trim(), id, eventId]);
 
     await query(`
-      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-      VALUES (?, 'CATEGORY_UPDATE', ?, ?)
-    `, [id, `Category changed to: ${category.trim()}`, req.user.id]);
+      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+      VALUES (?, 'CATEGORY_UPDATE', ?, ?, ?)
+    `, [id, `Category changed to: ${category.trim()}`, ...(await logActor(req))]);
 
     res.json({ success: true, message: 'Category updated successfully.', category: category.trim() });
   } catch (error) {
@@ -1152,9 +1153,9 @@ async function updateStage(req, res) {
     await autoAssignJuryForFilmStage(eventId, id, state.id, state.stage_order);
 
     await query(`
-      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-      VALUES (?, 'STAGE_CHANGE', ?, ?)
-    `, [id, `Moved to stage: ${state.unique_name}`, req.user.id]);
+      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+      VALUES (?, 'STAGE_CHANGE', ?, ?, ?)
+    `, [id, `Moved to stage: ${state.unique_name}`, ...(await logActor(req))]);
 
     const updatedRows = await query('SELECT * FROM submissions WHERE id = ?', [id]);
 
@@ -1289,9 +1290,9 @@ async function advanceFilm(req, res) {
     await autoAssignJuryForFilmStage(eventId, id, nextStage.id, nextStage.stage_order);
 
     await query(`
-      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-      VALUES (?, 'STAGE_ADVANCE', ?, ?)
-    `, [id, `Advanced from ${currentOrder === 0 ? 'Submitted' : `Stage ${currentOrder}`} to Stage ${nextStage.stage_order} (${nextStage.unique_name})`, req.user.id]);
+      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+      VALUES (?, 'STAGE_ADVANCE', ?, ?, ?)
+    `, [id, `Advanced from ${currentOrder === 0 ? 'Submitted' : `Stage ${currentOrder}`} to Stage ${nextStage.stage_order} (${nextStage.unique_name})`, ...(await logActor(req))]);
 
     const updatedRows = await query('SELECT * FROM submissions WHERE id = ?', [id]);
 
@@ -1367,11 +1368,11 @@ async function bulkAssign(req, res) {
             WHERE id = ? AND event_id = ?
           `, [stage1.id, stage1.unique_name, stage1.unique_name, filmId, eventId]);
 
-          const actorId = (req.user && req.user.id) || 1;
+          const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
           await query(`
-            INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-            VALUES (?, 'STAGE_ADVANCE', ?, ?)
-          `, [filmId, `Promoted from Submitted to Stage 1 (${stage1.unique_name}) upon reviewer assignment`, actorId]);
+            INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+            VALUES (?, 'STAGE_ADVANCE', ?, ?, ?)
+          `, [filmId, `Promoted from Submitted to Stage 1 (${stage1.unique_name}) upon reviewer assignment`, actorId, actorAdmin]);
 
           filmRound = 1;
         }
@@ -1459,11 +1460,11 @@ async function bulkAssign(req, res) {
         }
       }
 
-      const actorId = (req.user && req.user.id) || 1;
+      const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
       await query(`
-        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-        VALUES (?, 'JURY_ASSIGNED', ?, ?)
-      `, [filmId, `Bulk assigned to ${jury_user_ids.length} juror(s) with scope_key: assigned`, actorId]);
+        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+        VALUES (?, 'JURY_ASSIGNED', ?, ?, ?)
+      `, [filmId, `Bulk assigned to ${jury_user_ids.length} juror(s) with scope_key: assigned`, actorId, actorAdmin]);
     }
 
     res.json({
@@ -1491,7 +1492,7 @@ async function bulkAdvance(req, res) {
     }
 
     let advancedCount = 0;
-    const actorId = (req.user && req.user.id) || 1;
+    const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
 
     for (const filmId of film_ids) {
       const filmRows = await query('SELECT id, event_id, review_state_id, status FROM submissions WHERE id = ?', [filmId]);
@@ -1521,9 +1522,9 @@ async function bulkAdvance(req, res) {
           await autoAssignJuryForFilmStage(filmEventId, filmId, nextStage.id, nextStage.stage_order);
 
           await query(`
-            INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-            VALUES (?, 'STAGE_ADVANCE', ?, ?)
-          `, [filmId, `Bulk advanced from ${currentOrder === 0 ? 'Submitted' : `Stage ${currentOrder}`} to Stage ${nextStage.stage_order} (${nextStage.unique_name})`, actorId]);
+            INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+            VALUES (?, 'STAGE_ADVANCE', ?, ?, ?)
+          `, [filmId, `Bulk advanced from ${currentOrder === 0 ? 'Submitted' : `Stage ${currentOrder}`} to Stage ${nextStage.stage_order} (${nextStage.unique_name})`, actorId, actorAdmin]);
 
           advancedCount++;
         }
@@ -1552,19 +1553,19 @@ async function bulkReject(req, res) {
     }
 
     const trimmedReason = (reason && reason.trim()) ? reason.trim() : 'Does not meet competition criteria for progression.';
-    const actorId = (req.user && req.user.id) || 1;
+    const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
 
     for (const filmId of film_ids) {
       await query(`
         UPDATE submissions 
         SET status = 'Rejected', rejection_reason = ?, rejected_by_user_id = ?, rejected_at = NOW(), updated_at = NOW()
         WHERE id = ?
-      `, [trimmedReason, actorId, filmId]);
+      `, [trimmedReason, actorUserId(req), filmId]);
 
       await query(`
-        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-        VALUES (?, 'REJECT', ?, ?)
-      `, [filmId, `Bulk rejected with reason: "${trimmedReason}"`, actorId]);
+        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+        VALUES (?, 'REJECT', ?, ?, ?)
+      `, [filmId, `Bulk rejected with reason: "${trimmedReason}"`, actorId, actorAdmin]);
     }
 
     res.json({ success: true, message: `Successfully rejected ${film_ids.length} film(s).`, rejectedCount: film_ids.length });
@@ -1839,7 +1840,7 @@ async function removeAwardCategory(req, res) {
 async function advanceNominationsToJury(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
-    const actorId = (req.user && req.user.id) || 1;
+    const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
     const { current_stage_id, target_stage_id } = req.body || {};
 
     let currentStage = null;
@@ -1931,9 +1932,9 @@ async function advanceNominationsToJury(req, res) {
 
       const fromLabel = currentStage ? `${currentStage.unique_name}` : 'Nominations';
       await query(`
-        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-        VALUES (?, 'STAGE_ADVANCE', ?, ?)
-      `, [filmId, `Advanced from ${fromLabel} to Stage ${targetStage.stage_order} (${targetStage.unique_name})`, actorId]);
+        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+        VALUES (?, 'STAGE_ADVANCE', ?, ?, ?)
+      `, [filmId, `Advanced from ${fromLabel} to Stage ${targetStage.stage_order} (${targetStage.unique_name})`, actorId, actorAdmin]);
 
       advancedCount++;
     }
@@ -2258,7 +2259,7 @@ async function assignAllCategoryJury(req, res) {
 async function advanceToResults(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
-    const actorId = (req.user && req.user.id) || 1;
+    const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
     const currentStageId = req.body?.current_stage_id;
     const targetStageId = req.body?.target_stage_id;
 
@@ -2335,9 +2336,9 @@ async function advanceToResults(req, res) {
       `, [nextStage.id, nextStage.unique_name, nextStage.unique_name, f.id, eventId]);
 
       await query(`
-        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-        VALUES (?, 'STAGE_ADVANCE', ?, ?)
-      `, [f.id, `Advanced from ${currentStage?.unique_name || 'Jury Stage'} to Stage ${nextStage.stage_order} (${nextStage.unique_name})`, actorId]);
+        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+        VALUES (?, 'STAGE_ADVANCE', ?, ?, ?)
+      `, [f.id, `Advanced from ${currentStage?.unique_name || 'Jury Stage'} to Stage ${nextStage.stage_order} (${nextStage.unique_name})`, actorId, actorAdmin]);
 
       advancedCount++;
     }
@@ -2517,7 +2518,7 @@ async function getFinalistsBoard(req, res) {
 async function selectWinner(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
-    const actorId = (req.user && req.user.id) || 1;
+    const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
     const { award_name, submission_id, award_category_id } = req.body;
 
     if (!award_name || !submission_id) {
@@ -2555,8 +2556,8 @@ async function selectWinner(req, res) {
     const filmTitle = filmRow[0]?.title || `Film #${filmId}`;
 
     await query(
-      'INSERT INTO submission_logs (submission_id, action, notes, actor_user_id) VALUES (?, "WINNER_SELECTED", ?, ?)',
-      [filmId, `Declared Official Winner of "${trimmedAward}"`, actorId]
+      'INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id) VALUES (?, "WINNER_SELECTED", ?, ?, ?)',
+      [filmId, `Declared Official Winner of "${trimmedAward}"`, actorId, actorAdmin]
     );
 
     res.json({
@@ -2579,7 +2580,7 @@ async function selectWinner(req, res) {
 async function removeWinner(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
-    const actorId = (req.user && req.user.id) || 1;
+    const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
     const { award_name, submission_id } = req.body;
 
     if (!award_name || !submission_id) {
@@ -2595,8 +2596,8 @@ async function removeWinner(req, res) {
     );
 
     await query(
-      'INSERT INTO submission_logs (submission_id, action, notes, actor_user_id) VALUES (?, "WINNER_REVOKED", ?, ?)',
-      [filmId, `Revoked Winner status for "${trimmedAward}"`, actorId]
+      'INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id) VALUES (?, "WINNER_REVOKED", ?, ?, ?)',
+      [filmId, `Revoked Winner status for "${trimmedAward}"`, actorId, actorAdmin]
     );
 
     res.json({
@@ -2616,7 +2617,7 @@ async function removeWinner(req, res) {
 async function advanceToWinners(req, res) {
   try {
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
-    const actorId = (req.user && req.user.id) || 1;
+    const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
 
     const targetStageId = req.body?.target_stage_id;
     const currentStageId = req.body?.current_stage_id;
@@ -2659,8 +2660,8 @@ async function advanceToWinners(req, res) {
         [winnerStage.id, winnerStage.unique_name, winnerStage.unique_name, row.submission_id, eventId]
       );
       await query(
-        'INSERT INTO submission_logs (submission_id, action, notes, actor_user_id) VALUES (?, "STAGE_ADVANCE", ?, ?)',
-        [row.submission_id, `Advanced to Stage 7 (${winnerStage.unique_name}) as Official Award Winner`, actorId]
+        'INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id) VALUES (?, "STAGE_ADVANCE", ?, ?, ?)',
+        [row.submission_id, `Advanced to Stage 7 (${winnerStage.unique_name}) as Official Award Winner`, actorId, actorAdmin]
       );
       advancedCount++;
     }
@@ -2965,8 +2966,8 @@ async function getActivityLogs(req, res) {
         s.category as category_name,
         COALESCE(s.current_stage_name, s.status) as current_stage_name,
         s.event_id,
-        COALESCE(i.name, o.name, u.email, 'System') as actor_name,
-        COALESCE(i.thumbnail_pic, o.thumbnail_pic, i.profile_pic, o.profile_pic) as actor_thumbnail_pic,
+        CASE WHEN sl.actor_admin_id IS NOT NULL THEN '${FREECOMERS_ADMIN_LABEL}' ELSE COALESCE(i.name, o.name, u.email, 'System') END as actor_name,
+        CASE WHEN sl.actor_admin_id IS NOT NULL THEN NULL ELSE COALESCE(i.thumbnail_pic, o.thumbnail_pic, i.profile_pic, o.profile_pic) END as actor_thumbnail_pic,
         u.email as actor_email,
         COALESCE(g.label, CASE WHEN sl.action = 'REVIEW_SUBMITTED' THEN 'Jury' ELSE 'Admin' END) as actor_group,
         COALESCE(g.group_key, CASE WHEN sl.action = 'REVIEW_SUBMITTED' THEN 'jury' ELSE 'admin' END) as actor_group_key
@@ -3068,7 +3069,7 @@ async function exportActivityCsv(req, res) {
         sl.created_at,
         s.title as film_title,
         s.category as category_name,
-        COALESCE(i.name, o.name, u.email, 'System') as actor_name,
+        CASE WHEN sl.actor_admin_id IS NOT NULL THEN '${FREECOMERS_ADMIN_LABEL}' ELSE COALESCE(i.name, o.name, u.email, 'System') END as actor_name,
         u.email as actor_email,
         COALESCE(g.label, CASE WHEN sl.action = 'REVIEW_SUBMITTED' THEN 'Jury' ELSE 'Admin' END) as actor_group
       FROM submission_logs sl

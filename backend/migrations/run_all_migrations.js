@@ -36,6 +36,7 @@ const MIGRATION_SCRIPTS = [
   path.resolve(__dirname, '026_show_attendance_windows.js'),
   path.resolve(__dirname, '027_kashish_bengaluru_2026_schedule.js'),
   path.resolve(__dirname, '028_kashish_movies_catalog.js'),
+  path.resolve(__dirname, '029_freecomers_admin_actor.js'),
   path.resolve(__dirname, '../src/scripts/sync_specs_to_database.js'),
 ];
 

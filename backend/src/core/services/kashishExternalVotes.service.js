@@ -541,19 +541,20 @@ async function computeExternalStandings(eventId, config = null) {
 
 async function getLatestPublication(eventId) {
   const rows = await query(
-    'SELECT id, standings, voting_from, voting_to, published_by_user_id, published_at FROM kashish_results_publications WHERE event_id = ? ORDER BY published_at DESC, id DESC LIMIT 1',
+    'SELECT id, standings, voting_from, voting_to, published_by_user_id, published_by_admin_id, published_at FROM kashish_results_publications WHERE event_id = ? ORDER BY published_at DESC, id DESC LIMIT 1',
     [eventId]
   );
   if (!rows.length) return null;
   return { ...rows[0], standings: parseJson(rows[0].standings) };
 }
 
-async function publishExternalResults(eventId, userId) {
+/** userId: the publisher's users.id; adminId: a Freecomers admin's admins.id (ADR 0007). */
+async function publishExternalResults(eventId, userId, adminId = null) {
   const cfg = await getVotingConfig(eventId);
   const { standings } = await computeExternalStandings(eventId, cfg);
   await query(
-    'INSERT INTO kashish_results_publications (event_id, standings, voting_from, voting_to, published_by_user_id) VALUES (?, ?, ?, ?, ?)',
-    [eventId, JSON.stringify(standings), cfg.from, cfg.to, userId || null]
+    'INSERT INTO kashish_results_publications (event_id, standings, voting_from, voting_to, published_by_user_id, published_by_admin_id) VALUES (?, ?, ?, ?, ?, ?)',
+    [eventId, JSON.stringify(standings), cfg.from, cfg.to, userId || null, adminId || null]
   );
   return getLatestPublication(eventId);
 }

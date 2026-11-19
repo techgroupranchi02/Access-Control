@@ -22,6 +22,7 @@ const kashishExternal = require('../services/kashishExternalVotes.service');
 const venuesService = require('../services/venues.service');
 const { getFilmFestivalId } = require('../services/festivalIds.service');
 const { hasAnyPermission } = require('../middleware/permission.middleware');
+const { actorUserId, actorAdminId, requiredActorUserId, FREECOMERS_ADMIN_LABEL } = require('../utils/actor');
 
 // Settings › Audience › Voting Rules: only users with a voting permission see the tab or may change these
 // (2026-11-19). Others (e.g. a Volunteer Manager group) still save the rest of the audience settings.
@@ -806,7 +807,7 @@ const clockLabel = (d) => d.toLocaleTimeString('en-IN', { hour: 'numeric', minut
 async function performScreeningCheckin(req, res) {
   try {
     const eventId = getEventId(req);
-    const userId = req.user ? req.user.id : 1;
+    const adminId = actorAdminId(req); // a Freecomers admin shows as "Freecomers Admin" (ADR 0007)
     const qr_token = req.body.qr_token || req.body.badge_identifier || req.body.badge_token || req.body.token;
     const attendee_id = req.body.attendee_id || req.body.attendeeId;
     const screening_block_id = req.body.screening_block_id || req.body.screeningBlockId || req.body.screening_id;
@@ -902,9 +903,9 @@ async function performScreeningCheckin(req, res) {
       }
 
       await query(`
-        INSERT INTO screening_checkins (event_id, screening_block_id, attendee_id, venue_id, scanned_by_user_id, scan_status)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [eventId, block.id, targetAttendeeId, venue_id || null, userId, inWindow ? 'valid' : 'outside_window']);
+        INSERT INTO screening_checkins (event_id, screening_block_id, attendee_id, venue_id, scanned_by_user_id, scanned_by_admin_id, scan_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [eventId, block.id, targetAttendeeId, venue_id || null, await requiredActorUserId(req, eventId), adminId, inWindow ? 'valid' : 'outside_window']);
 
       // Also update saas_attendees status if registered
       await query("UPDATE saas_attendees SET status = 'checked_in' WHERE attendee_id = ? AND event_id = ?", [targetAttendeeId, eventId]);
@@ -948,7 +949,7 @@ async function listAttendance(req, res) {
         COALESCE(ac.badge_ribbon_text, UPPER(sa.delegate_category)) AS badge_ribbon,
         sc.scanned_at,
         sc.scan_status,
-        COALESCE(ind.name, u.email, 'Gate Staff') AS scanned_by_name
+        CASE WHEN sc.scanned_by_admin_id IS NOT NULL THEN ? ELSE COALESCE(ind.name, u.email, 'Gate Staff') END AS scanned_by_name
       FROM screening_checkins sc
       JOIN screening_blocks sb ON sb.id = sc.screening_block_id
       JOIN saas_attendees sa ON sa.attendee_id = sc.attendee_id
@@ -957,7 +958,7 @@ async function listAttendance(req, res) {
       LEFT JOIN individuals ind ON ind.user_id = u.id
       WHERE sc.event_id = ?
     `;
-      const params = [eventId];
+      const params = [FREECOMERS_ADMIN_LABEL, eventId]; // label for scans by a Freecomers admin (ADR 0007)
 
       if (screeningId) {
         sql += ' AND sc.screening_block_id = ?';
@@ -978,12 +979,11 @@ async function listAttendance(req, res) {
           OR sa.phone LIKE ?
           OR sa.delegate_category LIKE ?
           OR ac.badge_ribbon_text LIKE ?
-          OR ind.name LIKE ?
-          OR u.email LIKE ?
+          OR (CASE WHEN sc.scanned_by_admin_id IS NOT NULL THEN ? ELSE CONCAT_WS(' ', ind.name, u.email) END) LIKE ?
           OR (? <> '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(sa.phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ?)
           OR (? <> '' AND EXISTS (SELECT 1 FROM saas_qr sq WHERE sq.attendee_id = sa.attendee_id AND sq.event_id = sc.event_id AND sq.serial_no = ?))
         )`;
-        params.push(like, like, like, like, like, like, like, phoneDigits, `%${phoneDigits}%`, badgeSerial, badgeSerial);
+        params.push(like, like, like, like, like, FREECOMERS_ADMIN_LABEL, like, phoneDigits, `%${phoneDigits}%`, badgeSerial, badgeSerial);
       }
 
       sql += ' ORDER BY sc.scanned_at DESC LIMIT ?';
@@ -1021,7 +1021,7 @@ async function listAttendance(req, res) {
   async function registerAttendee(req, res) {
     try {
       const eventId = getEventId(req);
-      const userId = req.user ? req.user.id : 1;
+      const userId = await requiredActorUserId(req, eventId); // NOT NULL registered_by_user_id (ADR 0007)
       const { delegate_category, registration_type, remarks } = req.body;
       // Desk registration needs only the mobile number (paper form entered later); name may be ''
       // because saas_attendees.name is NOT NULL in the shared table.
@@ -1374,7 +1374,7 @@ async function listAttendance(req, res) {
         return res.status(400).json({ error: `${labelOf(attendee)} has no active badge to mark as lost. Assign a new badge instead.` });
       }
 
-      const { lostSerials } = await qrCredential.markBadgesLost(eventId, attendeeId, req.user ? req.user.id : null);
+      const { lostSerials } = await qrCredential.markBadgesLost(eventId, attendeeId, actorUserId(req));
       res.json({
         success: true,
         attendee_id: attendeeId,
@@ -1473,7 +1473,7 @@ async function listAttendance(req, res) {
         return res.status(404).json({ error: 'Attendee not found.' });
       }
 
-      const { lostSerials } = await qrCredential.markBadgesLost(eventId, attendeeId, req.user ? req.user.id : null);
+      const { lostSerials } = await qrCredential.markBadgesLost(eventId, attendeeId, actorUserId(req));
 
       res.json({
         success: true,
@@ -1580,7 +1580,7 @@ async function listAttendance(req, res) {
       if (items.length > qrPrintLog.MAX_ITEMS) {
         return res.status(400).json({ success: false, message: `Record up to ${qrPrintLog.MAX_ITEMS} badges at a time.` });
       }
-      const result = await qrPrintLog.recordPrints(eventId, items, { mode: req.body?.mode, userId: req.user ? req.user.id : null });
+      const result = await qrPrintLog.recordPrints(eventId, items, { mode: req.body?.mode, userId: actorUserId(req), adminId: actorAdminId(req) });
       res.json({ success: true, ...result });
     } catch (err) {
       if (err.status === 400) return res.status(400).json({ success: false, message: err.message });
@@ -2058,7 +2058,7 @@ async function listAttendance(req, res) {
   async function bulkImportAttendees(req, res) {
     try {
       const eventId = getEventId(req);
-      const userId = req.user ? req.user.id : 1;
+      const userId = await requiredActorUserId(req, eventId); // NOT NULL registered_by_user_id (ADR 0007)
       const { delegates } = req.body;
 
       if (!Array.isArray(delegates) || delegates.length === 0) {
@@ -2105,7 +2105,7 @@ async function listAttendance(req, res) {
       await query(`
       INSERT INTO festival_external_sync_logs (event_id, source_system, entity_type, records_fetched, records_created, records_updated, synced_by_user_id)
       VALUES (?, 'kashish_csv_bulk', 'attendees', ?, ?, ?, ?)
-    `, [eventId, delegates.length, createdCount, updatedCount, userId]);
+    `, [eventId, delegates.length, createdCount, updatedCount, actorUserId(req)]);
 
       res.json({
         success: true,
@@ -2252,7 +2252,7 @@ async function listAttendance(req, res) {
             ? {
               is_approved: true,
               approved_at: publication.published_at,
-              approved_by: await getApproverName(publication.published_by_user_id),
+              approved_by: publication.published_by_admin_id ? FREECOMERS_ADMIN_LABEL : await getApproverName(publication.published_by_user_id),
               changed_since: kashishExternal.standingsChanged(publication.standings, standings)
             }
             : { is_approved: false, approved_at: null, approved_by: null, changed_since: false }
@@ -2427,12 +2427,12 @@ async function listAttendance(req, res) {
   async function approveResults(req, res) {
     try {
       const eventId = getEventId(req);
-      const userId = req.user ? req.user.id : 1;
+      const userId = actorUserId(req);
       const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '127.0.0.1';
 
       // Kashish-app festivals: freeze the current standings as the published results (docs/adr/0004)
       if (await kashishExternal.isKashishSource(eventId)) {
-        const publication = await kashishExternal.publishExternalResults(eventId, req.user ? req.user.id : null);
+        const publication = await kashishExternal.publishExternalResults(eventId, actorUserId(req), actorAdminId(req));
         await query(`
           INSERT INTO audience_voting_audit_logs (event_id, vote_id, action, actor_user_id, reason, ip_address)
           VALUES (?, NULL, 'results_approved', ?, 'Kashish Audience Choice standings published (frozen snapshot)', ?)
@@ -2477,7 +2477,7 @@ async function listAttendance(req, res) {
           success: true,
           is_approved: true,
           approved_at: publication.published_at,
-          approved_by: await getApproverName(publication.published_by_user_id)
+          approved_by: publication.published_by_admin_id ? FREECOMERS_ADMIN_LABEL : await getApproverName(publication.published_by_user_id)
         });
       }
       const rows = await query(`
@@ -2556,7 +2556,7 @@ async function listAttendance(req, res) {
   async function voidVote(req, res) {
     try {
       const eventId = getEventId(req);
-      const userId = req.user ? req.user.id : 1;
+      const userId = actorUserId(req);
       const { vote_id, reason } = req.body;
 
       if (!vote_id) return res.status(400).json({ error: 'Vote ID is required.' });
@@ -3351,7 +3351,7 @@ async function listAttendance(req, res) {
     try {
       const reviewId = parseInt(req.params.id, 10);
       const { status } = req.body;
-      const userId = req.user?.id || req.user?.userId || 1;
+      const userId = actorUserId(req);
 
       if (!reviewId) {
         return res.status(400).json({ error: 'Valid review ID is required.' });

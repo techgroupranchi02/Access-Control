@@ -7,6 +7,7 @@
  */
 
 const { query } = require('../../config/database');
+const { actorUserId } = require('../utils/actor');
 
 /**
  * GET /api/chat/channels
@@ -96,6 +97,10 @@ async function sendMessage(req, res) {
 
     if (!content || !content.trim()) {
       return res.status(400).json({ error: 'Message content cannot be empty.' });
+    }
+    // A message needs a team member as sender; a Freecomers admin has no users.id (ADR 0007)
+    if (!actorUserId(req)) {
+      return res.status(403).json({ error: 'Sign in as a team member to send messages.' });
     }
 
     const msgId = `msg-${Date.now()}`;

@@ -6,6 +6,7 @@
  */
 
 const { query } = require('../../config/database');
+const { logActor, actorUserId } = require('../utils/actor');
 const { formatThumbnailUrl } = require('../utils/media.utils');
 
 /**
@@ -486,11 +487,11 @@ async function assignJury(req, res) {
           [newStatus, stage1Id, stage1Name, film_id, eventId]
         );
 
-        if (wasSubmitted && req.user && req.user.id) {
+        if (wasSubmitted) {
           await query(`
-            INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-            VALUES (?, 'STAGE_ADVANCE', ?, ?)
-          `, [film_id, `Promoted from New Submission to Stage 1 (${stage1Name}) upon reviewer assignment`, req.user.id]);
+            INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+            VALUES (?, 'STAGE_ADVANCE', ?, ?, ?)
+          `, [film_id, `Promoted from New Submission to Stage 1 (${stage1Name}) upon reviewer assignment`, ...(await logActor(req))]);
         }
       } else if (round === 2) {
         const revs = await query(
@@ -539,6 +540,8 @@ const assignJudges = assignJury;
  */
 async function submitScorecard(req, res) {
   try {
+    // Scores and ballots belong to a jury member's account; a Freecomers admin has none (ADR 0007)
+    if (!actorUserId(req)) return res.status(403).json({ error: 'Sign in as a jury member to submit a scorecard.' });
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
     const { assignment_id, film_id, round_number = 1, scores, notes } = req.body;
 
@@ -622,12 +625,12 @@ async function submitScorecard(req, res) {
     // Record activity log for the juror review submission
     try {
       await query(`
-        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-        VALUES (?, 'REVIEW_SUBMITTED', ?, ?)
+        INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+        VALUES (?, 'REVIEW_SUBMITTED', ?, ?, ?)
       `, [
         film_id,
         `Submitted scorecard evaluation for Round ${round} with overall score: ${overallRating}${notes ? ` ("${notes.slice(0, 100)}")` : ''}`,
-        req.user.id
+        ...(await logActor(req))
       ]);
     } catch (logErr) {
       console.warn('[ReviewController] Failed to record REVIEW_SUBMITTED log:', logErr.message);
@@ -719,9 +722,9 @@ async function makeDecision(req, res) {
     `, [ffsStatus, film_id]);
 
     await query(`
-      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-      VALUES (?, 'DECISION', ?, ?)
-    `, [film_id, `Pipeline decision applied: ${status}`, req.user.id]);
+      INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+      VALUES (?, 'DECISION', ?, ?, ?)
+    `, [film_id, `Pipeline decision applied: ${status}`, ...(await logActor(req))]);
 
     res.json({
       message: `Decision applied: Film is now "${status}".`,
@@ -760,6 +763,8 @@ async function toggleVoting(req, res) {
  */
 async function submitBallot(req, res) {
   try {
+    // Scores and ballots belong to a jury member's account; a Freecomers admin has none (ADR 0007)
+    if (!actorUserId(req)) return res.status(403).json({ error: 'Sign in as a jury member to submit a ballot.' });
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
     const { category_id, ranked_nominees } = req.body;
 
@@ -841,9 +846,9 @@ async function completeStage(req, res) {
         `, [nextStage.id, nextStage.unique_name, film.id, eventId]);
 
         await query(`
-          INSERT INTO submission_logs (submission_id, action, notes, actor_user_id)
-          VALUES (?, 'AUTO_ADVANCE', ?, ?)
-        `, [film.id, `Advanced from ${currentStage.unique_name} to ${nextStage.unique_name} (Score: ${score} >= ${cutoff})`, req.user.id]);
+          INSERT INTO submission_logs (submission_id, action, notes, actor_user_id, actor_admin_id)
+          VALUES (?, 'AUTO_ADVANCE', ?, ?, ?)
+        `, [film.id, `Advanced from ${currentStage.unique_name} to ${nextStage.unique_name} (Score: ${score} >= ${cutoff})`, ...(await logActor(req))]);
 
         advancedFilms.push({ id: film.id, title: film.title, score });
       } else if (score > 0 && score < rejectCutoff) {

@@ -53,7 +53,11 @@ npm run lint
   - The `authenticate` middleware (`core/middleware/auth.middleware.js`) checks `Authorization: Bearer` first, then the `__Host-access-token` or `access-token` cookie.
   - The frontend stores the token in `localStorage.authToken`.
 - **User types**:
-  - **Platform admin**: a row in the `admins` table. Gets `role:'admin'` and `isSuperAdmin:true`.
+  - **Platform admin**: a row in the `admins` table. Gets `role:'admin'` and `isSuperAdmin:true`. **`admins.id` is not a `users.id`** (users.id 1 is a real person):
+    - `req.user` for them has `id: null`, `adminId` and `isFreecomersAdmin` (`auth.middleware.js` › `toRequestUser`). `/auth/me` returns the same.
+    - Record who acted with `core/utils/actor.js` (`actorUserId`, `actorAdminId`, `requiredActorUserId`, `logActor`). **Never fall back to a fixed user id such as 1.**
+    - Tables that show an actor by name have a nullable `*_admin_id` column (migration 029) and show "Freecomers Admin". See [ADR 0007](docs/adr/0007-freecomers-admin-identity.md).
+    - `getProfile` adds a user as festival Admin automatically only when they own the festival.
   - **Festival users**: rows in the shared `users` table. Access comes from `user_event_groups` (admin, volunteer or jury), event ownership, or approved `film_festivals_claims`.
 - **Route guards** (`core/middleware/permission.middleware.js`):
   - `requirePermission('module.action')`: `.` and `:` mean the same thing, and so do `view` and `read`. It sets `req.permissionScope.scopeKey` to `all`, `jury_panel` or `assigned`.

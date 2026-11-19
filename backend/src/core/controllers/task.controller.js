@@ -7,6 +7,7 @@
  */
 
 const { query } = require('../../config/database');
+const { requiredActorUserId } = require('../utils/actor');
 const { scopeTasksQuery } = require('../services/scoping.service');
 
 /**
@@ -143,7 +144,7 @@ async function create(req, res) {
     const result = await query(`
       INSERT INTO tasks (event_id, title, department, priority, due_date, status, created_by_user_id)
       VALUES (?, ?, ?, ?, COALESCE(?, '2026-06-05 12:00:00'), 'To Do', ?)
-    `, [eventId, title.trim(), department, priority, due_date || null, req.user.id]);
+    `, [eventId, title.trim(), department, priority, due_date || null, await requiredActorUserId(req, eventId)]); // NOT NULL; never user 1 (ADR 0007)
 
     const taskId = result.insertId;
 

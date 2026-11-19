@@ -106,7 +106,8 @@ async function me(req, res) {
       setAuthCookies(req, res, req.bearerToken);
     }
     const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || req.query.editionId || req.query.festivalId || null;
-    const profile = await authService.getProfile(req.user.id, req.user.role, eventId, req.user);
+    // A Freecomers admin has no users.id; its profile is read by admins.id (auth.middleware.js › toRequestUser)
+    const profile = await authService.getProfile(req.user.isFreecomersAdmin ? req.user.adminId : req.user.id, req.user.role, eventId, req.user);
     res.json(profile);
   } catch (error) {
     res.status(404).json({ error: error.message });

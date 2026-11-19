@@ -194,7 +194,9 @@ async function loginWithGoogle(idToken, { remember = false } = {}) {
     return {
       token,
       user: {
-        id: admin.id,
+        id: null, // admins.id is not a users.id (ADR 0007)
+        adminId: admin.id,
+        isFreecomersAdmin: true,
         name: admin.name || googleIdentity.name || 'Administrator',
         email: admin.email,
         role: 'admin',
@@ -395,7 +397,9 @@ async function login(email, password, { remember = false } = {}) {
     return {
       token,
       user: {
-        id: adminRecord.id,
+        id: null, // admins.id is not a users.id (ADR 0007)
+        adminId: adminRecord.id,
+        isFreecomersAdmin: true,
         name: adminRecord.name || 'Administrator',
         email: adminRecord.email,
         role: 'admin',
@@ -596,7 +600,10 @@ async function getProfile(userId, role, editionId, reqUser = null) {
     }
 
     return {
-      id: adminProfile.id,
+      // No users.id: admins.id is a different table (users.id 1 is a real person). ADR 0007.
+      id: null,
+      adminId: adminProfile.id,
+      isFreecomersAdmin: true,
       name: adminProfile.name || 'Administrator',
       email: adminProfile.email,
       status: 1,
@@ -708,11 +715,13 @@ async function getProfile(userId, role, editionId, reqUser = null) {
 
   if (targetEditionId) {
     if (!activeGroup) {
-      const isPlatformAdmin = (allUserIds.includes(1) || eventGroups.some(eg => eg.group_key === 'admin'));
+      // Only the festival's owner is added as its admin here. Freecomers admins use Flow A. This used to also
+      // accept `allUserIds.includes(1)` (users.id 1 became admin of every festival it opened) and "admin of any
+      // festival" (the festival comes from a request header, so any festival admin could join any festival). ADR 0007.
       const ownerRows = await query('SELECT user_id FROM events WHERE event_id = ?', [targetEditionId]);
       const isOwner = ownerRows.length > 0 && allUserIds.includes(ownerRows[0].user_id);
 
-      if (isPlatformAdmin || isOwner) {
+      if (isOwner) {
         await query(
           'INSERT IGNORE INTO user_event_groups (user_id, event_id, group_id) VALUES (?, ?, 1)',
           [userId, targetEditionId]

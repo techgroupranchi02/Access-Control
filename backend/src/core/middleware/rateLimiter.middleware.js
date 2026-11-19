@@ -5,6 +5,9 @@
 
 const rateLimit = require('express-rate-limit');
 
+// Per person: users.id, the Freecomers admin's admins.id (req.user.id is null for them, ADR 0007), else the IP
+const actorKey = (req) => (req.user?.id ? `user:${req.user.id}` : req.user?.adminId ? `admin:${req.user.adminId}` : `ip:${req.ip}`);
+
 /**
  * General API rate limiter — 100 requests per 15 minutes.
  */
@@ -73,7 +76,7 @@ const staffCredentialLimiter = rateLimit({
   requestWasSuccessful: (req, res) => res.statusCode < 400 && !res.locals.credentialMiss,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req.user?.id ? `user:${req.user.id}` : `ip:${req.ip}`),
+  keyGenerator: (req) => actorKey(req),
   message: { error: 'Too many unrecognised badges in a short time. Please wait a few minutes.' },
 });
 
@@ -88,7 +91,7 @@ const lostBadgeLimiter = rateLimit({
   requestWasSuccessful: (req, res) => res.statusCode < 400 && !res.locals.credentialMiss,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `lost:${req.user?.id ? `user:${req.user.id}` : `ip:${req.ip}`}:${req.params.id}`,
+  keyGenerator: (req) => `lost:${actorKey(req)}:${req.params.id}`,
   message: { error: 'Too many wrong attempts for this delegate. Please wait 15 minutes or ask an admin.' },
 });
 

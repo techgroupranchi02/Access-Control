@@ -1378,7 +1378,7 @@ export default function TeamPage() {
 
   // Handle Delete Member
   const handleDelete = async (id, name, email) => {
-    if (user && user.id === id) {
+    if (user && !user.isFreecomersAdmin && user.id && user.id === id) {
       alert('You cannot remove your active logged-in account from the festival team.');
       return;
     }
@@ -1588,7 +1588,8 @@ export default function TeamPage() {
             </thead>
             <tbody>
               {filteredUsers.map((member) => {
-                const isCurrentSessionUser = user && user.id === member.id;
+                // A Freecomers admin has no users.id (ADR 0007), so it is never one of the members
+                const isCurrentSessionUser = Boolean(user && !user.isFreecomersAdmin && user.id && user.id === member.id);
                 const isSameEmail = user && user.email?.toLowerCase() === member.email?.toLowerCase();
                 const isNonDeletable = isCurrentSessionUser || (member.accountType === 'organization' && (member.roleKeys?.includes('admin') || member.role?.toLowerCase().includes('admin')));
                 return (

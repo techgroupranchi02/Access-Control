@@ -35,6 +35,7 @@ _Nothing in progress._
 
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
+| 2026-11-19 | Production: check for auto-added Admin rows of the user whose id equals the Freecomers admin's: ``SELECT ueg.user_id, ueg.event_id, e.name FROM user_event_groups ueg JOIN `groups` g ON g.id = ueg.group_id JOIN events e ON e.event_id = ueg.event_id WHERE g.group_key = 'admin' AND ueg.user_id = (SELECT MIN(id) FROM admins);`` | User | Read-only. Share the result before deleting anything; some rows may be intended. |
 | 2026-11-19 | Production: set KASHISH's edition: `UPDATE events SET edition = 'Edition 1 · 2026' WHERE name = 'KASHISH x BENGALURU 2026' AND is_deleted = 0;` | User | Check the row with a SELECT first; one row only. Not a deploy step. |
 | 2026-11-18 | Production: run the read-only check (`venues` columns; `voting_enabled`, `screening_block_kashish_films`, `data_seed_log`, `kashish_movies` present) and send the output. After the next deploy, check the deploy log for `FAILED` migrations, then press **Import films from Kashish** in Settings › Audience › Screenings if shows are still missing | DevOps / Festival team | Confirms whether migrations 026–028 ran on production. The venue fix works with any `venues` columns. |
 | 2026-11-14 | Production server time zone must be IST (attendance windows use the server's local time) | DevOps | Check `timedatectl` on the production host. |
@@ -53,6 +54,16 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-19: Freecomers admin was treated as SHASHANK (users.id 1); "user 1 is admin" leak** (`deployed` 2026-11-19). [ADR 0007](adr/0007-freecomers-admin-identity.md).
+  - **Root cause:** every Freecomers-admin token (Launch Festival Portal, admins-table login, Google) put `admins.id` (1) in `id`; the app reads `id` as a `users.id`, and users.id 1 is SHASHANK. So Team disabled Delete on him ("your logged-in account") and scans showed "Scanned by SHASHANK"; other admin actions were recorded as him too. Write sites also defaulted to user 1 (`|| 1`, `: 1`).
+  - **Second cause found:** `auth.service.js` › `getProfile` made `users.id 1` (and "admin of any festival", using the festival from a request header) Admin of any festival opened: SHASHANK was Admin of events 1 and 250 on dev.
+  - **What:**
+    - `auth.middleware.js` › `toRequestUser`: admin tokens get `id: null`, `adminId`, `isFreecomersAdmin`. `/auth/me` and login responses likewise; `auth.controller.js` reads the profile by `adminId`.
+    - New `core/utils/actor.js`. All actor writes use it: scans, attendee registration and bulk import, approvals, voids, review moderation, lost badges, print log, Kashish publications, submission logs (19 inserts), tasks. Jury scorecards/ballots and chat sends return 403 for an admin.
+    - Migration 029: nullable `scanned_by_admin_id`, `actor_admin_id`, `printed_by_admin_id`, `published_by_admin_id`; reads show "Freecomers Admin" (scan log and its search, print status, submission activity, published results).
+    - `getProfile`: automatic Admin membership only for the festival owner. `rateLimiter.middleware.js`: per-admin key. `TeamPage.jsx`: the self check ignores Freecomers admins.
+    - Dev data: removed SHASHANK's Admin rows for events 1 and 250 (his KASHISH Jury row stays).
+  - **Checked on dev (festival 40), with a token signed like `generateLaunchToken`:** `/auth/me` id null, adminId 1; Team: SHASHANK's Delete enabled, only the owner org row disabled; an admin scan stored `scanned_by_admin_id = 1`, `scanned_by_user_id = 69` (owner) and shows "Freecomers Admin" (search finds it); SHASHANK opening event 250 got no Admin row. Test scan deleted. Migration 029 run, frontend built, backend restarted.
 - **2026-11-19: Festival card: KASHISH is Edition 1; no made-up edition** (`deployed` 2026-11-19).
   - **Cause:** `events.edition` was added (`migrate_to_freecomers.js`) with DEFAULT `'Edition 4 · 2026'`, so every event (13,379 on dev) shows "Edition 4 · 2026"; the Sidebar and SaaS admin list also fell back to that text.
   - **What:** dev `events.edition` for KASHISH (40) = `Edition 1 · 2026`. `Sidebar.jsx` shows the edition only when set (no fallback text); `saasAdmin.controller.js` returns `e.edition` without the fallback. `edition.service.js` › `getEditionById` (the festival config the sidebar reads) now selects `edition`; it never did, so the sidebar only ever showed the fallback text. The shared column default is left unchanged (shared table: additive changes only).

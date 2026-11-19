@@ -13,6 +13,30 @@ const jwt = require('jsonwebtoken');
 const env = require('../../config/environment');
 
 /**
+ * req.user from a verified token. `id` is always a `users` table id, or null.
+ *
+ * Freecomers admin tokens (Launch Festival Portal and the admins-table logins; the only ones with role 'admin' +
+ * isSuperAdmin) carry the `admins` table id, which is a different table: users.id 1 is a real person
+ * (2026-11-19: the admin was shown as "SHASHANK" and recorded as him). For those, id is null and the admin id
+ * is `adminId`; see docs/adr/0007-freecomers-admin-identity.md and utils/actor.js.
+ */
+function toRequestUser(decoded) {
+  const role = decoded.role || (decoded.isSuperAdmin ? 'admin' : 'user');
+  const isFreecomersAdmin = role === 'admin' && Boolean(decoded.isSuperAdmin);
+  return {
+    id: isFreecomersAdmin ? null : decoded.id,
+    email: decoded.email,
+    name: decoded.name,
+    userIds: isFreecomersAdmin ? [] : (decoded.userIds || [decoded.id]),
+    role,
+    isSuperAdmin: Boolean(decoded.isSuperAdmin),
+    isFreecomersAdmin,
+    adminId: isFreecomersAdmin ? decoded.id : null,
+    targetFestivalId: decoded.targetFestivalId || null,
+  };
+}
+
+/**
  * Middleware that requires a valid JWT in the cookie.
  * On success, attaches req.user = { id, email, name }.
  */
@@ -44,15 +68,7 @@ function authenticate(req, res, next) {
     }
 
     // Attach user info to request
-    req.user = {
-      id: decoded.id,
-      email: decoded.email,
-      name: decoded.name,
-      userIds: decoded.userIds || [decoded.id],
-      role: decoded.role || (decoded.isSuperAdmin ? 'admin' : 'user'),
-      isSuperAdmin: Boolean(decoded.isSuperAdmin),
-      targetFestivalId: decoded.targetFestivalId || null,
-    };
+    req.user = toRequestUser(decoded);
     if (isBearer) {
       req.bearerToken = token;
     }
@@ -83,15 +99,7 @@ function optionalAuth(req, res, next) {
     }
     if (token) {
       const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
-      req.user = {
-        id: decoded.id,
-        email: decoded.email,
-        name: decoded.name,
-        userIds: decoded.userIds || [decoded.id],
-        role: decoded.role || (decoded.isSuperAdmin ? 'admin' : 'user'),
-        isSuperAdmin: Boolean(decoded.isSuperAdmin),
-        targetFestivalId: decoded.targetFestivalId || null,
-      };
+      req.user = toRequestUser(decoded);
       if (isBearer) {
         req.bearerToken = token;
       }
