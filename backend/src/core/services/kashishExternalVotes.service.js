@@ -32,6 +32,7 @@
  */
 
 const { query } = require('../../config/database');
+const env = require('../../config/environment');
 const { fetchAllKashishVotes } = require('./kashish-api.service');
 const showWindows = require('./showWindows.service');
 
@@ -250,9 +251,14 @@ function sameValue(a, b) {
 async function syncExternalVotes(eventId, { apiKey, logId = null, full = false, fetch = true } = {}) {
   const config = await getVotingConfig(eventId);
   const state = await getSyncState(eventId);
-  // A full sync is needed the first time and whenever the Kashish event ID changes. Without fetch
+  // A full sync is needed the first time, whenever the Kashish event ID changes, and every
+  // KASHISH_FULL_SYNC_INTERVAL_MIN minutes (default 60): updatedSince returns new and changed votes but
+  // not deleted ones, so only a full read marks those removed (ADR 0004 Amendment 6). Without fetch
   // (after a schedule change) only the stored votes are re-checked.
-  const isFull = fetch && (full || !state || !state.last_synced_at || (state.kashish_event_id || null) !== config.kashishEventId);
+  const fullEvery = env.kashishFullSyncIntervalMin;
+  const lastFull = state?.last_full_sync_at ? new Date(state.last_full_sync_at).getTime() : 0;
+  const fullDue = fullEvery > 0 && (!lastFull || Date.now() - lastFull >= fullEvery * 60000);
+  const isFull = fetch && (full || fullDue || !state || !state.last_synced_at || (state.kashish_event_id || null) !== config.kashishEventId);
   const fetched = fetch
     ? await fetchAllKashishVotes(apiKey, {
       source: 'scan',

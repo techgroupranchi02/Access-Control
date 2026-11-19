@@ -147,7 +147,7 @@ npm run lint
     - Tables: `kashish_external_votes` and `kashish_results_publications`.
     - A vote counts only from a registered delegate (matched by email, then phone) who was **scanned in during the attendance window of a show of that film, before voting**, inside the voting period (ADR 0004 Amendment 2). Window: `attendance_window_before_min` before the start to `attendance_window_end_before_min` before the end (default 15/15), in `showWindows.service.js`. Films are linked to shows in `screening_block_kashish_films`; votes for films on no show are `unscheduled`.
     - **Films catalog:** `kashish_movies` (migration 028) holds the festival's films from the Kashish Movies API (`fetchKashishMovies`, `KASHISH_MOVIES_API_URL`, default `KASHISH_API_URL` with `/votes` → `/movies`). Screenings › **Import films from Kashish** refreshes it and links each film that is on no show by its screening slot or Kashish show name (`kashishMovies.service.js`, adds links only); full "Sync now" refreshes it too. See ADR 0004 Amendment 4.
-    - Votes are fetched for the festival's **Kashish event ID** (`settings_json.kashish_event_id`, KASHISH = `EF3j920261`), scan votes only. Scheduled runs use `updatedSince` (state in `kashish_sync_state`); "Sync now" is a full sync that marks votes outside the event `removed`. See ADR 0004 Amendment 1.
+    - Votes are fetched for the festival's **Kashish event ID** (`settings_json.kashish_event_id`, KASHISH = `EF3j920261`), scan votes only. Scheduled runs use `updatedSince` (state in `kashish_sync_state`), except one full sync every `KASHISH_FULL_SYNC_INTERVAL_MIN` (default 60) because `updatedSince` doesn't return deleted votes; "Sync now" is a full sync that marks votes outside the event `removed`. See ADR 0004 Amendments 1 and 6.
     - Published results are frozen snapshots.
     - FestiPlus `/vote` is off for these festivals.
   - Votes are pulled from its API by `syncEventVotes()` in `kashish-sync.controller.js`, which runs automatically every `KASHISH_SYNC_INTERVAL_SEC` while a voting window is open (`core/services/kashishSyncScheduler.js`), plus a manual button.
@@ -158,7 +158,7 @@ npm run lint
 - **Jenkins**: pushes to `main` deploy to prod, and any other branch deploys to dev.
   - Steps: `npm ci`, build the frontend, rsync, `npm run migrate || true`, `pm2 reload access-control-backend`, reload nginx.
 - **pm2**: `backend/ecosystem.config.cjs` runs one instance on port 4000.
-- **Backend env keys**: `DB_*`, `APP_PORT`, `NODE_ENV`, `FRONTEND_URL`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL`, `KASHISH_API_KEY`, `KASHISH_API_URL`, `KASHISH_MOVIES_API_URL` (optional), `KASHISH_SYNC_INTERVAL_SEC` (default 120; 0 disables auto-sync), and `FREECOMERS_API_URL`.
+- **Backend env keys**: `DB_*`, `APP_PORT`, `NODE_ENV`, `FRONTEND_URL`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL`, `KASHISH_API_KEY`, `KASHISH_API_URL`, `KASHISH_MOVIES_API_URL` (optional), `KASHISH_SYNC_INTERVAL_SEC` (default 120; 0 disables auto-sync), `KASHISH_FULL_SYNC_INTERVAL_MIN` (default 60; 0 = full sync only on "Sync now"), and `FREECOMERS_API_URL`.
   - `FREECOMERS_API_URL` is this environment's Freecomers Laravel API, used for media/avatar URLs, the login fallback and admin JWT checks.
     - If unset, it follows `FRONTEND_URL`: autovertest gives `api.autovertest.com`, anything else gives `api.freecomers.com`.
     - Never hard-code either host; use `env.freecomersApiUrl` and `utils/media.utils.js`.

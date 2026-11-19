@@ -52,6 +52,10 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-19: Kashish sync: `updatedSince` confirmed; automatic full sync every hour** (`deployed` 2026-11-19). [ADR 0004, Amendment 6](adr/0004-kashish-external-leaderboard.md).
+  - **Analysis:** scheduled syncs already use `updatedSince` (resume point = Kashish's `sync.syncedAt` in `kashish_sync_state`). Kashish honours it: full feed 21 votes, since the last sync 0, since Nov 17 = 5. Gap: deleted votes don't come back incrementally, so they were cleaned up only by Sync now.
+  - **What:** `kashishExternalVotes.service.js`: a scheduled run is full when the last full sync is older than `KASHISH_FULL_SYNC_INTERVAL_MIN` (new optional env in `environment.js`, default 60; 0 = off).
+  - **Checked on dev (festival 40):** with the last full sync set back a day, the next scheduled-style run was full (21 fetched) and updated `last_full_sync_at`; the run after that was incremental (0 fetched). Backend restarted.
 - **2026-11-18: Production Screenings: confirmed cause is the `venues` table** (`deployed` 2026-11-18).
   - **Confirmed from the production log:** `listScreeningBlocks error: Unknown column 'v.venue_name'`. Migration 006 creates `venues` with `CREATE TABLE IF NOT EXISTS`, so production kept its existing (shared) `venues` table, which has no `venue_name`. Dev has ours.
   - **What:** `src/core/services/venues.service.js` (new) reads the venues table's real column names once (id: venue_id/id; name: venue_name/name/title/venue/hall_name; festival: event_id, else festival_id). Every venue read goes through it: `listVenues`, `listScreeningBlocks` (no venues join any more; names attached after, and a venue failure can't break the list), the show save's venue check, the public vote page, and `schedule.controller.js` venues.

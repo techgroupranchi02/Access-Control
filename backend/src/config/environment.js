@@ -117,6 +117,8 @@ const env = {
   kashishApiKey: process.env.KASHISH_API_KEY || '',
   kashishApiUrl: process.env.KASHISH_API_URL || 'https://kashish-admin.vercel.app/api/v1/votes',
   kashishMoviesApiUrl: process.env.KASHISH_MOVIES_API_URL || '',  // default: KASHISH_API_URL with /votes -> /movies
+  // Minutes between automatic full Kashish syncs (the rest use updatedSince); 0 = only on "Sync now"
+  kashishFullSyncIntervalMin: Number.isFinite(parseInt(process.env.KASHISH_FULL_SYNC_INTERVAL_MIN, 10)) ? Math.max(parseInt(process.env.KASHISH_FULL_SYNC_INTERVAL_MIN, 10), 0) : 60,
 };
 
 module.exports = env;

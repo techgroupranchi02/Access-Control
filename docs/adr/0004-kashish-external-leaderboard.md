@@ -139,3 +139,8 @@ Migration: `026_show_attendance_windows.js` (`voting_enabled`, `screening_block_
   - The next deploy applies 015–028 on production even if 014 (or another) still fails; the log names what failed.
   - After the deploy, pressing Import films from Kashish (or saving Voting Rules) loads the 16 shows if they are still missing.
 
+## Amendment 6: Automatic full sync every hour (2026-11-19)
+- **Context:** scheduled syncs pass `updatedSince` (Kashish's previous `sync.syncedAt`), which returns new and changed votes but not deleted ones. A vote deleted in Kashish, or moved to another event, was marked removed only by a full sync, i.e. only when staff pressed Sync now.
+- **Decision:** `syncExternalVotes` also runs a full sync when `kashish_sync_state.last_full_sync_at` is older than `KASHISH_FULL_SYNC_INTERVAL_MIN` minutes (env, default 60; 0 = only Sync now). Every other scheduled run stays incremental.
+- **Consequences:** about one full read per hour per festival during voting (a few pages of 200), well inside Kashish's limit of 50 requests; removed votes clear within the hour without staff action.
+
