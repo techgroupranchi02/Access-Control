@@ -35,6 +35,7 @@ _Nothing in progress._
 
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
+| 2026-11-19 | Production: set KASHISH's edition: `UPDATE events SET edition = 'Edition 1 · 2026' WHERE name = 'KASHISH x BENGALURU 2026' AND is_deleted = 0;` | User | Check the row with a SELECT first; one row only. Not a deploy step. |
 | 2026-11-18 | Production: run the read-only check (`venues` columns; `voting_enabled`, `screening_block_kashish_films`, `data_seed_log`, `kashish_movies` present) and send the output. After the next deploy, check the deploy log for `FAILED` migrations, then press **Import films from Kashish** in Settings › Audience › Screenings if shows are still missing | DevOps / Festival team | Confirms whether migrations 026–028 ran on production. The venue fix works with any `venues` columns. |
 | 2026-11-14 | Production server time zone must be IST (attendance windows use the server's local time) | DevOps | Check `timedatectl` on the production host. |
 | 2026-11-12 | Ask Kashish to rotate the API key printed in their guide, then update `KASHISH_API_KEY` in dev and prod `.env` | Team | The guide's examples show our live key. Their Movies API guide (2026-11-18) prints a key again. |
@@ -52,6 +53,10 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-19: Festival card: KASHISH is Edition 1; no made-up edition** (`deployed` 2026-11-19).
+  - **Cause:** `events.edition` was added (`migrate_to_freecomers.js`) with DEFAULT `'Edition 4 · 2026'`, so every event (13,379 on dev) shows "Edition 4 · 2026"; the Sidebar and SaaS admin list also fell back to that text.
+  - **What:** dev `events.edition` for KASHISH (40) = `Edition 1 · 2026`. `Sidebar.jsx` shows the edition only when set (no fallback text); `saasAdmin.controller.js` returns `e.edition` without the fallback. `edition.service.js` › `getEditionById` (the festival config the sidebar reads) now selects `edition`; it never did, so the sidebar only ever showed the fallback text. The shared column default is left unchanged (shared table: additive changes only).
+  - **Production:** run the one-row UPDATE (see Needs action).
 - **2026-11-19: Settings › Audience: each tab only for users who can change it; new Manage Screenings permission** (`deployed` 2026-11-19). [ADR 0004, Amendment 7](adr/0004-kashish-external-leaderboard.md).
   - **Why:** the Volunteer Manager custom group should see only the Screenings tab in Settings.
   - **What:**

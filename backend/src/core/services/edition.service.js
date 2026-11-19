@@ -116,7 +116,7 @@ async function getEditionBySlug(slug) {
  */
 async function getEditionById(id) {
   const rows = await query(
-    'SELECT event_id as id, event_id, user_id, name, description, event_type, saas_enabled, is_deleted, created_at FROM events WHERE event_id = ? AND is_deleted = 0',
+    'SELECT event_id as id, event_id, user_id, name, edition, description, event_type, saas_enabled, is_deleted, created_at FROM events WHERE event_id = ? AND is_deleted = 0',
     [id]
   );
   return rows[0] || null;

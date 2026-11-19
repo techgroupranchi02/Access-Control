@@ -3,7 +3,7 @@
  * Matches the canonical UI layout from freecomers.pages.dev and screenshot:
  * - Brand: "freecomers" + "FESTIVAL OPERATING SYSTEM"
  * - ACTIVE ROLE box with instant persona switcher (Admin, Judge, Volunteer)
- * - Festival Edition card: "Indie Film Festival Bangalore" (Edition 4 · 2026)
+ * - Festival Edition card: festival name and its edition (events.edition)
  * - Grouped navigation with canonical badges:
  *   - Submissions [23]
  *   - Schedule [1] (conflict indicator)
@@ -299,7 +299,7 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
           }
         }}
         title={effectivelyCollapsed
-          ? `${currentFestival?.name || 'Indie Film Festival Bangalore'} · ${currentFestival?.edition || 'Edition 4 · 2026'}${festivals?.length > 1 ? ' (Click to switch)' : ''}`
+          ? `${[currentFestival?.name, currentFestival?.edition].filter(Boolean).join(' · ')}${festivals?.length > 1 ? ' (Click to switch)' : ''}`
           : (festivals && festivals.length > 1 ? "Click to switch festival" : undefined)}
       >
         {!effectivelyCollapsed ? (
@@ -338,9 +338,10 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
                 </button>
               )}
             </div>
-            <div className="fc-festival-edition">
-              {currentFestival?.edition || 'Edition 4 · 2026'}
-            </div>
+            {/* events.edition; nothing shown when it isn't set (no made-up edition) */}
+            {currentFestival?.edition && (
+              <div className="fc-festival-edition">{currentFestival.edition}</div>
+            )}
             <div className="fc-festival-status">
               <span className="fc-status-dot" style={!isSaasEnabled ? { backgroundColor: 'var(--fc-danger)' } : {}}></span>
               <span>{isSaasEnabled ? 'Live · Accepting submissions' : 'SaaS Inactive · Central Managed'}</span>
@@ -350,7 +351,7 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
           <div className="fc-festival-mini">
             <span className="fc-status-dot" style={!isSaasEnabled ? { backgroundColor: 'var(--fc-danger)' } : {}}></span>
             <span className="fc-festival-mini-tag">
-              {currentFestival?.edition ? currentFestival.edition.replace(/Edition\s*/i, 'Ed. ') : 'Ed. 4'}
+              {currentFestival?.edition ? currentFestival.edition.replace(/Edition\s*/i, 'Ed. ') : ''}
             </span>
           </div>
         )}

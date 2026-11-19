@@ -27,7 +27,7 @@ async function listFestivals(req, res) {
       SELECT 
         e.event_id,
         e.name,
-        COALESCE(e.edition, 'Edition 4 · 2026') as edition,
+        e.edition,
         COALESCE(e.slug, CONCAT('fest-', e.event_id)) as slug,
         e.description,
         e.event_type,
@@ -128,7 +128,7 @@ async function getFestivalArchitecture(req, res) {
       SELECT 
         e.event_id, 
         e.name, 
-        COALESCE(e.edition, 'Edition 4 · 2026') as edition,
+        e.edition,
         COALESCE(e.slug, CONCAT('fest-', e.event_id)) as slug,
         COALESCE(e.is_saas, 0) as is_saas,
         COALESCE(e.saas_enabled, 0) as saas_enabled
