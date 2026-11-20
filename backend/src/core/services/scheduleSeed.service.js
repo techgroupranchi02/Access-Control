@@ -7,6 +7,7 @@
  * - A show (matched by date + start time) is created if missing; an existing one gets the file's type and
  *   Audience Choice voting flag.
  * - Each film with a Kashish movie ID is linked to its show.
+ * - `timezone` (optional, IANA): the festival's time zone for show times, set once if it has none.
  * - Every show and film link is applied once and recorded in data_seed_log, so later edits in
  *   Settings › Audience › Screenings are never undone, while IDs added to the file later are linked.
  *
@@ -44,6 +45,7 @@ function validate(data) {
   if (!data || typeof data.seed_key !== 'string' || !data.seed_key) throw new Error('seed_key is missing');
   if (typeof data.kashish_event_id !== 'string' || !data.kashish_event_id) throw new Error('kashish_event_id is missing');
   if (!Array.isArray(data.shows)) throw new Error('shows is missing');
+  if (data.timezone !== undefined && !require('./showWindows.service').isValidTimeZone(data.timezone)) throw new Error(`unknown timezone ${data.timezone}`);
   data.shows.forEach((s, i) => {
     if (!DATE_RE.test(s.date) || !TIME_RE.test(s.start) || !TIME_RE.test(s.end)) throw new Error(`show ${i + 1}: date/start/end`);
     if (!s.title || !SHOW_TYPES.includes(s.type)) throw new Error(`show ${i + 1}: title/type`);
@@ -91,6 +93,22 @@ async function applySchedule(data, eventId) {
   let changed = 0;
   let pending = 0;
   const created = [];
+
+  // The festival's time zone for show times (showWindows.service.js): set once, only if it has none
+  if (data.timezone && !done.has('setting:timezone')) {
+    const rows = await query('SELECT settings_json FROM audience_settings WHERE event_id = ? LIMIT 1', [eventId]);
+    let settings = rows[0]?.settings_json || {};
+    if (typeof settings === 'string') { try { settings = JSON.parse(settings); } catch { settings = {}; } }
+    if (!settings.timezone) {
+      settings.timezone = data.timezone;
+      await query(`
+        INSERT INTO audience_settings (event_id, settings_json) VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE settings_json = VALUES(settings_json), updated_at = CURRENT_TIMESTAMP
+      `, [eventId, JSON.stringify(settings)]);
+      changed++;
+    }
+    await mark('setting:timezone');
+  }
 
   for (const s of data.shows) {
     const showKey = `show:${s.date} ${s.start}`;

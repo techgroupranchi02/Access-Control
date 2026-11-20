@@ -1440,6 +1440,14 @@ function localInputToIso(value) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** IANA time zones the browser knows, with the saved one first if it is missing from the list. */
+function timeZoneOptions(current) {
+  let list = [];
+  try { list = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []; } catch { list = []; }
+  if (current && !list.includes(current)) list = [current, ...list];
+  return list;
+}
+
 export default function AudienceSettingsPage() {
   const { currentFestival } = useFestivalConfig();
   const { canAny } = usePermissions();
@@ -1670,10 +1678,12 @@ export default function AudienceSettingsPage() {
     e?.preventDefault();
     try {
       setSavingSettings(true);
-      await api.put('/audience/settings/attendance-window', {
+      const res = await api.put('/audience/settings/attendance-window', {
         attendance_window_before_min: settings.attendance_window_before_min ?? 15,
-        attendance_window_end_before_min: settings.attendance_window_end_before_min ?? 15
+        attendance_window_end_before_min: settings.attendance_window_end_before_min ?? 15,
+        timezone: settings.timezone || ''
       });
+      if (res.data?.timezone_effective) setSettings((prev) => ({ ...prev, timezone_effective: res.data.timezone_effective }));
       setWindowVersion((v) => v + 1);
       alert('Attendance window saved.');
     } catch (err) {
@@ -4098,6 +4108,22 @@ export default function AudienceSettingsPage() {
                   A 1:00–2:00 PM show with 15 and 15 takes attendance from 12:45 to 1:45 PM.{settings.voting_source === 'kashish' ? ' A vote counts only when the delegate was scanned in during a window of that film\'s show, before voting.' : ''} Shows and times are set below.
                 </small>
               </div>
+
+              {/* Show times are wall-clock times in this zone (showWindows.service.js); never the server's clock */}
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--fc-text-main)', marginTop: '14px' }}>
+                Festival time zone
+                <select
+                  value={settings.timezone || ''}
+                  onChange={(e) => setSettings({ ...settings, timezone: e.target.value })}
+                  style={{ width: '100%', maxWidth: '420px', padding: '8px 12px', border: '1px solid var(--fc-border)', borderRadius: '6px', background: 'var(--fc-surface)', color: 'var(--fc-text-main)', fontWeight: 400 }}
+                >
+                  <option value="">Not set (using {settings.timezone_effective || 'the server time zone'})</option>
+                  {timeZoneOptions(settings.timezone).map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+                </select>
+              </label>
+              <small style={{ display: 'block', color: 'var(--fc-text-muted)', marginTop: '4px', fontSize: '0.75rem' }}>
+                Show times and attendance windows are read in this time zone. Set it to the festival's city.
+              </small>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
             <button type="submit" className="fc-btn-primary" disabled={savingSettings}>

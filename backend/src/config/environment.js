@@ -118,6 +118,9 @@ const env = {
   kashishApiUrl: process.env.KASHISH_API_URL || 'https://kashish-admin.vercel.app/api/v1/votes',
   kashishMoviesApiUrl: process.env.KASHISH_MOVIES_API_URL || '',  // default: KASHISH_API_URL with /votes -> /movies
   // Minutes between automatic full Kashish syncs (the rest use updatedSince); 0 = only on "Sync now"
+  // Default time zone for festival show times (IANA, e.g. "Asia/Kolkata") when a festival has none set in
+  // Settings › Audience › Screenings. Unset = the server's own zone. showWindows.service.js
+  festivalTimeZone: (process.env.FESTIVAL_TIMEZONE || '').trim() || null,
   kashishFullSyncIntervalMin: Number.isFinite(parseInt(process.env.KASHISH_FULL_SYNC_INTERVAL_MIN, 10)) ? Math.max(parseInt(process.env.KASHISH_FULL_SYNC_INTERVAL_MIN, 10), 0) : 60,
 };
 

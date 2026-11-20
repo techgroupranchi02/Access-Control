@@ -11,6 +11,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import SearchInput from '../components/common/SearchInput';
+import Pagination from '../components/common/Pagination';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
   QrCodeScannerIcon,
@@ -47,6 +48,17 @@ function windowState(show, now) {
   return { state: 'open', text: `Attendance open until ${clock(w.closes)}` };
 }
 
+// The show picked on this tab survives a page refresh (per festival). A new tab starts on the show that is on now.
+const showKey = () => {
+  try { return `fc_attendance_show_${localStorage.getItem('currentEditionId') || localStorage.getItem('currentFestivalId') || ''}`; } catch { return null; }
+};
+const readSavedShow = () => {
+  try { const k = showKey(); return k ? sessionStorage.getItem(k) : null; } catch { return null; }
+};
+const saveShow = (id) => {
+  try { const k = showKey(); if (k && id) sessionStorage.setItem(k, String(id)); } catch { /* storage unavailable */ }
+};
+
 export default function AttendancePage() {
   const [screenings, setScreenings] = useState([]);
   const [selectedScreening, setSelectedScreening] = useState('');
@@ -54,6 +66,12 @@ export default function AttendancePage() {
   const [scanning, setScanning] = useState(false);
   const [lastScanResult, setLastScanResult] = useState(null);
   const [logs, setLogs] = useState([]);
+  // Venue Checkins are paged on the server (newest first): every scan stays reachable
+  const LOG_PAGE_SIZE = 50;
+  const [logPage, setLogPage] = useState(1);
+  const [logTotal, setLogTotal] = useState(0);
+  const [logTotalPages, setLogTotalPages] = useState(1);
+  const logPageRef = useRef(1);
   const [logSearchInput, setLogSearchInput] = useState('');
   const [logSearch, setLogSearch] = useState('');
   const [logsSearching, setLogsSearching] = useState(false);
@@ -114,9 +132,11 @@ export default function AttendancePage() {
       const res = await api.get('/audience/screenings');
       const list = res.data.screenings || [];
       setScreenings(list);
-      // Start on the show whose attendance window is open now (else the next one)
+      // Start on the show picked before a refresh, else the one whose attendance window is open now (else the next one)
       if (list.length > 0 && !selectedScreening) {
-        setSelectedScreening(res.data.current_screening_id || list[0].id);
+        const saved = readSavedShow();
+        const keep = saved && list.find((sc) => String(sc.id) === saved);
+        setSelectedScreening(keep ? keep.id : (res.data.current_screening_id || list[0].id));
       }
     } catch (err) {
       console.error('Failed to load screenings:', err);
@@ -126,15 +146,22 @@ export default function AttendancePage() {
   };
 
   // Only the newest request updates the list, so a slow response can't overwrite a newer search
-  const fetchLogs = async (screeningId, searchText = logSearchRef.current, { silent = false } = {}) => {
+  const fetchLogs = async (screeningId, searchText = logSearchRef.current, { silent = false, page = logPageRef.current } = {}) => {
     const requestId = ++logsRequestIdRef.current;
     try {
       if (!silent) setLogsSearching(true);
       const res = await api.get('/attendance/logs', {
-        params: { screening_id: screeningId || undefined, limit: 50, search: searchText || undefined }
+        params: { screening_id: screeningId || undefined, page, page_size: LOG_PAGE_SIZE, search: searchText || undefined }
       });
       if (requestId !== logsRequestIdRef.current) return;
       setLogs(res.data.logs || []);
+      setLogTotal(Number(res.data.total ?? (res.data.logs || []).length));
+      setLogTotalPages(Number(res.data.total_pages) || 1);
+      // The server keeps the page in range (e.g. a search with fewer results)
+      if (res.data.page && res.data.page !== logPageRef.current) {
+        logPageRef.current = res.data.page;
+        setLogPage(res.data.page);
+      }
     } catch (err) {
       if (requestId === logsRequestIdRef.current) console.error('Failed to fetch attendance logs:', err);
     } finally {
@@ -155,11 +182,20 @@ export default function AttendancePage() {
     fetchScreenings();
   }, []);
 
+  // A new show or search starts again at page 1
   useEffect(() => {
     if (selectedScreening) {
-      fetchLogs(selectedScreening, logSearch);
+      logPageRef.current = 1;
+      setLogPage(1);
+      fetchLogs(selectedScreening, logSearch, { page: 1 });
     }
   }, [selectedScreening, logSearch]);
+
+  const changeLogPage = (p) => {
+    logPageRef.current = p;
+    setLogPage(p);
+    fetchLogs(selectedScreening, logSearchRef.current, { page: p });
+  };
 
   // Keep the check-in list current (scans from other volunteers' devices) without a Refresh button:
   // refresh quietly every 15s while this tab is visible, and right away when the tab comes back.
@@ -434,7 +470,7 @@ export default function AttendancePage() {
                           type="button"
                           role="option"
                           aria-selected={isSelected}
-                          onClick={() => { setSelectedScreening(s.id); setVenueMenuOpen(false); }}
+                          onClick={() => { setSelectedScreening(s.id); saveShow(s.id); setVenueMenuOpen(false); }}
                           style={{
                             width: '100%',
                             display: 'flex',
@@ -663,7 +699,7 @@ export default function AttendancePage() {
             <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--fc-text-main)', marginRight: 'auto' }}>
-                  Venue Checkins ({logs.length}{logSearch ? ' found' : ''})
+                  Venue Checkins ({logTotal}{logSearch ? ' found' : ''})
                 </h2>
                 <SearchInput
                   value={logSearchInput}
@@ -738,6 +774,14 @@ export default function AttendancePage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+              {logTotalPages > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--fc-text-muted)' }}>
+                    Showing {(logPage - 1) * LOG_PAGE_SIZE + 1}–{Math.min(logPage * LOG_PAGE_SIZE, logTotal)} of {logTotal}
+                  </span>
+                  <Pagination page={logPage} totalPages={logTotalPages} onChange={changeLogPage} />
                 </div>
               )}
             </div>

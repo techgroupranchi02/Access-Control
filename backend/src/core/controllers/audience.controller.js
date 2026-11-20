@@ -297,7 +297,10 @@ async function getAudienceSettings(req, res) {
       ...config,
       festival_name: eventRows[0]?.name || '',
       festival_banner_url: festivalImageUrl(fest.film_festival_banner_image_name || fest.film_festival_banner),
-      festival_logo_url: festivalImageUrl(fest.film_festival_logo_image_name || fest.film_festival_logo)
+      festival_logo_url: festivalImageUrl(fest.film_festival_logo_image_name || fest.film_festival_logo),
+      // Show times are read in this zone (the festival's own setting, else FESTIVAL_TIMEZONE, else the server's)
+      timezone_effective: showWindows.resolveTimeZone(config),
+      timezone_server: showWindows.serverTimeZone()
     };
 
     res.json({ success: true, settings: config });
@@ -314,7 +317,12 @@ async function updateAudienceSettings(req, res) {
   try {
     const eventId = getEventId(req);
     // festival_name is derived from events.name on read; don't persist a copy that can go stale
-    const { festival_name: _ignoredName, festival_banner_url: _b, festival_logo_url: _l, ...settings } = req.body || {};
+    const { festival_name: _ignoredName, festival_banner_url: _b, festival_logo_url: _l, timezone_effective: _te, timezone_server: _ts, ...settings } = req.body || {};
+    if (settings.timezone !== undefined) {
+      const tz = typeof settings.timezone === 'string' ? settings.timezone.trim() : '';
+      if (tz && !showWindows.isValidTimeZone(tz)) return res.status(400).json({ error: `Unknown time zone "${tz}".` });
+      if (tz) settings.timezone = tz; else delete settings.timezone;
+    }
 
     // Without a voting permission the Voting Rules stay as stored, whatever the request carries
     if (!(await hasAnyPermission(req, VOTING_PERMISSIONS))) {
@@ -389,17 +397,25 @@ async function updateAttendanceWindow(req, res) {
       }
       patch[key] = n;
     }
+    // Optional: the festival's time zone (IANA, e.g. "Asia/Kolkata"); '' clears it (FESTIVAL_TIMEZONE / server zone)
+    let clearZone = false;
+    if (req.body?.timezone !== undefined) {
+      const tz = typeof req.body.timezone === 'string' ? req.body.timezone.trim() : '';
+      if (tz && !showWindows.isValidTimeZone(tz)) return res.status(400).json({ error: `Unknown time zone "${tz}".` });
+      if (tz) patch.timezone = tz; else clearZone = true;
+    }
     const rows = await query('SELECT settings_json FROM audience_settings WHERE event_id = ? LIMIT 1', [eventId]);
     let settings = rows[0]?.settings_json || {};
     if (typeof settings === 'string') { try { settings = JSON.parse(settings); } catch { settings = {}; } }
     Object.assign(settings, patch);
+    if (clearZone) delete settings.timezone;
     await query(`
       INSERT INTO audience_settings (event_id, settings_json)
       VALUES (?, ?)
       ON DUPLICATE KEY UPDATE settings_json = VALUES(settings_json), updated_at = CURRENT_TIMESTAMP
     `, [eventId, JSON.stringify(settings)]);
-    recheckVotesSoon(eventId); // windows decide which stored Kashish votes count
-    res.json({ success: true, message: 'Attendance window saved.', ...patch });
+    recheckVotesSoon(eventId); // windows decide scan status and which stored Kashish votes count
+    res.json({ success: true, message: 'Attendance window saved.', ...patch, timezone_effective: showWindows.resolveTimeZone(settings) });
   } catch (error) {
     console.error('[AudienceController] updateAttendanceWindow error:', error.message);
     res.status(500).json({ error: 'Failed to save the attendance window.' });
@@ -579,7 +595,12 @@ function applySchedulesSoon(eventId) {
 function recheckVotesSoon(eventId) {
   // Required here: kashish-sync.controller requires this controller
   const { recheckStoredExternalVotes } = require('./kashish-sync.controller');
-  recheckStoredExternalVotes(eventId).catch((err) => console.error('[Schedule] vote re-check failed:', err.message));
+  // Stored scans are re-marked valid / outside_window against the windows as they are now (show times,
+  // window minutes, time zone), then the stored Kashish votes are re-checked
+  showWindows.recomputeScanStatus(eventId)
+    .then((r) => { if (r.changed) console.log(`[Schedule] festival ${eventId}: ${r.changed} of ${r.checked} scan(s) re-marked.`); })
+    .catch((err) => console.error('[Schedule] scan status re-check failed:', err.message))
+    .finally(() => recheckStoredExternalVotes(eventId).catch((err) => console.error('[Schedule] vote re-check failed:', err.message)));
 }
 
 /**
@@ -796,7 +817,8 @@ async function closeVotingWindow(req, res) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 const SCAN_BOUNCE_SECONDS = 30;
-const clockLabel = (d) => d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+// Times in messages are in the festival's time zone (showWindows.getWindowSettings), never the server's
+const clockLabel = (d, timeZone) => showWindows.clockLabel(d, timeZone);
 
 /**
  * POST /api/attendance/scan
@@ -869,6 +891,8 @@ async function performScreeningCheckin(req, res) {
       // 2. Every scan is kept (re-entry, delays, people asked to come back): ADR 0004 Amendment 2.
       //    Only a repeat of the same badge at the same show within a few seconds is scanner bounce.
       const now = new Date();
+      const settings = await showWindows.getWindowSettings(eventId);
+      const tz = settings.timeZone;
       const recent = await query(`
         SELECT id, scanned_at FROM screening_checkins
         WHERE screening_block_id = ? AND attendee_id = ? AND event_id = ? AND scanned_at >= (NOW() - INTERVAL ? SECOND)
@@ -878,22 +902,21 @@ async function performScreeningCheckin(req, res) {
         return res.json({
           success: true,
           is_duplicate: true,
-          message: `Just scanned at ${clockLabel(new Date(recent[0].scanned_at))}. Already recorded.`,
+          message: `Just scanned at ${clockLabel(new Date(recent[0].scanned_at), tz)}. Already recorded.`,
           attendee: attendeeRecord
         });
       }
 
       // 3. Is this scan inside the show's attendance window?
-      const settings = await showWindows.getWindowSettings(eventId);
       const win = showWindows.windowOf(block, settings);
       const inWindow = !win || showWindows.inWindow(win, now);
       let message;
       if (inWindow) {
         message = `Entry recorded. Counts for ${block.title}.`;
       } else if (now < win.opens) {
-        message = `Recorded, but it's before the attendance window for ${block.title} (opens ${clockLabel(win.opens)}). For their vote to count, scan them again between ${clockLabel(win.opens)} and ${clockLabel(win.closes)}.`;
+        message = `Recorded, but it's before the attendance window for ${block.title} (opens ${clockLabel(win.opens, tz)}). For their vote to count, scan them again between ${clockLabel(win.opens, tz)} and ${clockLabel(win.closes, tz)}.`;
       } else {
-        message = `Recorded, but the attendance window for ${block.title} closed at ${clockLabel(win.closes)}. This scan doesn't count for voting on this show.`;
+        message = `Recorded, but the attendance window for ${block.title} closed at ${clockLabel(win.closes, tz)}. This scan doesn't count for voting on this show.`;
       }
       // A scan counts by its time: say so when it falls in another show's window (wrong show picked)
       if (!inWindow) {
@@ -932,7 +955,9 @@ async function listAttendance(req, res) {
     try {
       const eventId = getEventId(req);
       const screeningId = req.query.screening_id;
-      const limit = parseInt(req.query.limit, 10) || 50;
+      // Pages: ?page=1&page_size=50 (page_size up to 200); older callers' ?limit= is the page size
+      const pageSize = Math.min(Math.max(parseInt(req.query.page_size || req.query.limit, 10) || 50, 1), 200);
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
 
       let sql = `
       SELECT 
@@ -986,8 +1011,13 @@ async function listAttendance(req, res) {
         params.push(like, like, like, like, like, FREECOMERS_ADMIN_LABEL, like, phoneDigits, `%${phoneDigits}%`, badgeSerial, badgeSerial);
       }
 
-      sql += ' ORDER BY sc.scanned_at DESC LIMIT ?';
-      params.push(limit);
+      // Total for the same show + search, so the list can page through every scan
+      const totalRows = await query(`SELECT COUNT(*) AS total FROM (${sql}) matched`, params);
+      const total = Number(totalRows[0]?.total) || 0;
+      const lastPage = Math.max(Math.ceil(total / pageSize), 1);
+      const currentPage = Math.min(page, lastPage);
+
+      sql += ` ORDER BY sc.scanned_at DESC, sc.id DESC LIMIT ${pageSize} OFFSET ${(currentPage - 1) * pageSize}`;
 
       const logs = await query(sql, params);
 
@@ -998,6 +1028,10 @@ async function listAttendance(req, res) {
       res.json({
         success: true,
         count: logs.length,
+        total,
+        page: currentPage,
+        page_size: pageSize,
+        total_pages: lastPage,
         metrics: {
           totalCheckins: totalScans[0].total,
           uniqueAttendeesCheckedIn: uniqueAttendees[0].unique_count

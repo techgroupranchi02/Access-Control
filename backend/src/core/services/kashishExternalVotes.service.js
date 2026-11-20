@@ -163,11 +163,10 @@ async function matchKashishUserToAttendee(eventId, user, cache) {
 
 // ── Sync ────────────────────────────────────────────────────────────────────
 
-const timeLabel = (d) => d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
-/** "TINY TAILS (20 Nov, 10:45 am–11:41 am)": a show and its attendance window, for reasons. */
+/** "TINY TAILS (20 Nov, 10:45 am–11:41 am)": a show and its attendance window, in the festival's time zone. */
 function showLabel(sh) {
   const w = sh.window;
-  return `${sh.title} (${w.opens.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}, ${timeLabel(w.opens)}–${timeLabel(w.closes)})`;
+  return `${sh.title} (${showWindows.dayLabel(w.opens, w.timeZone)}, ${showWindows.clockLabel(w.opens, w.timeZone)}–${showWindows.clockLabel(w.closes, w.timeZone)})`;
 }
 
 // MySQL DATETIME rounds fractional seconds; drop them so stored and incoming values compare equal

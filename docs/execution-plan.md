@@ -35,6 +35,7 @@ _Nothing in progress._
 
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
+| 2026-11-20 | Production: after the next deploy, check the migrate log for `[Migration 027] … 1 change(s)` (time zone set) and `[Migration 030] ✓ festival …: N of M scan(s) re-marked`; then Attendance shows today's scans as valid inside their windows. | User | The "server time zone must be IST" item below is no longer required once this is deployed. |
 | 2026-11-19 | Production: optional wider check for auto-added Admin rows, for every admins id: ``SELECT ueg.user_id, ueg.event_id, e.name FROM user_event_groups ueg JOIN `groups` g ON g.id = ueg.group_id JOIN events e ON e.event_id = ueg.event_id WHERE g.group_key = 'admin' AND ueg.user_id IN (SELECT id FROM admins);`` | User | 2026-11-19: the check for the first admins id returned no rows on production. Only needed if production has more than one admin. |
 | 2026-11-19 | Production: set KASHISH's edition: `UPDATE events SET edition = 'Edition 1 · 2026' WHERE name = 'KASHISH x BENGALURU 2026' AND is_deleted = 0;` | User | Check the row with a SELECT first; one row only. Not a deploy step. |
 | 2026-11-18 | Production: run the read-only check (`venues` columns; `voting_enabled`, `screening_block_kashish_films`, `data_seed_log`, `kashish_movies` present) and send the output. After the next deploy, check the deploy log for `FAILED` migrations, then press **Import films from Kashish** in Settings › Audience › Screenings if shows are still missing | DevOps / Festival team | Confirms whether migrations 026–028 ran on production. The venue fix works with any `venues` columns. |
@@ -54,6 +55,19 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-20: Production attendance "not open yet" and every scan "Outside window"; Venue Checkins paging** (`deployed` 2026-11-20). [ADR 0004, Amendment 8](adr/0004-kashish-external-leaderboard.md).
+  - **Root cause:** `showWindows.service.js` › `localDate` built show times with `new Date('YYYY-MM-DDTHH:MM')`, i.e. in the server's time zone. Production runs on UTC (dev on IST), so TINY TAILS 11:00 IST became 11:00 UTC = 4:30 PM IST: the window (10:45–12:37) opened at 4:15 PM IST. The scanner compares `opens_at` with now ("not open yet"), every scan was stored `outside_window`, and the Kashish vote check would refuse those votes. The label text looked right because it used the same server hours.
+  - **Pagination:** the page asked for `limit: 50` and showed only the first 50 scans; there was no paging.
+  - **What:**
+    - `showWindows.service.js`: festival time zone (`settings_json.timezone`, else `FESTIVAL_TIMEZONE`, else server); zone-aware `localDate` / `windowOf` / `windowJson`; `clockLabel`, `dayLabel`; `recomputeScanStatus`.
+    - `audience.controller.js`: scan messages in the festival's zone; `GET /audience/settings` returns `timezone_effective`; the attendance-window save also takes `timezone`; `recheckVotesSoon` re-marks stored scans first; `GET /attendance/logs` paged (`page`, `page_size`, `total`, `total_pages`).
+    - `kashishExternalVotes.service.js`: vote reasons show window times in the festival's zone.
+    - `scheduleSeed.service.js` + `migrations/data/kashish-bengaluru-2026-schedule.json`: `timezone: Asia/Kolkata`, set once if the festival has none.
+    - `migrations/030_recompute_scan_status.js` (new, in the runner): re-marks stored scans and re-checks Kashish votes on deploy.
+    - `environment.js`: optional `FESTIVAL_TIMEZONE`.
+    - `AudienceSettingsPage.jsx`: Festival time zone picker on the Screenings card. `AttendancePage.jsx`: Venue Checkins total + shared `Pagination` (50 per page).
+    - `AttendancePage.jsx`: the picked show is kept after a page refresh (sessionStorage per festival, this tab only); a new tab starts on the show on now. On production the refresh also jumped to TINY TAILS because the server's "current show" used the same wrong windows (its window "opened" at 4:15 PM IST, so it stayed the next show).
+  - **Checked on dev:** with Node forced to UTC and no zone set, the TINY TAILS window opened at 10:45 UTC (the production bug); with the zone from the schedule file it opens at 05:15 UTC = 10:45 IST on a UTC and on an IST server. Migration 030: 0 of 5 dev scans changed; a deliberately wrong status was restored. Paging with 120 temporary scans: 125 → 3 pages (50/50/25), no overlap, out-of-range page clamped; temporary scans deleted. Show kept on refresh (Puppeteer): picked FACE2FACE, reloaded → FACE2FACE; new tab → the current show. Frontend built, backend restarted.
 - **2026-11-19: Freecomers admin was treated as SHASHANK (users.id 1); "user 1 is admin" leak** (`deployed` 2026-11-19). [ADR 0007](adr/0007-freecomers-admin-identity.md).
   - **Root cause:** every Freecomers-admin token (Launch Festival Portal, admins-table login, Google) put `admins.id` (1) in `id`; the app reads `id` as a `users.id`, and users.id 1 is SHASHANK. So Team disabled Delete on him ("your logged-in account") and scans showed "Scanned by SHASHANK"; other admin actions were recorded as him too. Write sites also defaulted to user 1 (`|| 1`, `: 1`).
   - **Second cause found:** `auth.service.js` › `getProfile` made `users.id 1` (and "admin of any festival", using the festival from a request header) Admin of any festival opened: SHASHANK was Admin of events 1 and 250 on dev.

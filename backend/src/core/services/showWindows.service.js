@@ -7,12 +7,15 @@
  * Example: a 1:00–2:00 PM show with 15 / 15 → 12:45–1:45 PM. When a show is delayed, staff edit its
  * times and the window moves with it.
  *
- * Times are the festival's local wall-clock times (DATE + TIME columns), read in the server's time
- * zone, which must be the festival's (IST for KASHISH). Scan times (TIMESTAMP) and vote times
- * (DATETIME written from JS Dates) come back as real instants, so all three compare directly.
+ * Times are the festival's local wall-clock times (DATE + TIME columns) in the FESTIVAL'S time zone:
+ * settings_json.timezone (Settings › Audience › Screenings), else FESTIVAL_TIMEZONE, else the server's zone.
+ * They used to be read in the server's zone only; production runs on UTC, so on 2026-11-20 every KASHISH
+ * window was 5h30 late ("not open yet" during the show, every scan "Outside window"). Scan times (TIMESTAMP)
+ * and vote times (DATETIME written from JS Dates) come back as real instants, so all three compare directly.
  */
 
 const { query } = require('../../config/database');
+const env = require('../../config/environment');
 
 const DEFAULT_BEFORE_MIN = 15;
 const DEFAULT_END_BEFORE_MIN = 15;
@@ -29,23 +32,79 @@ function offset(value, fallback) {
   return Number.isInteger(n) && n >= 0 && n <= MAX_OFFSET_MIN ? n : fallback;
 }
 
-/** The festival's window offsets in minutes: { before, endBefore }. */
+/** True for an IANA time zone this server knows (e.g. "Asia/Kolkata"). */
+function isValidTimeZone(tz) {
+  if (typeof tz !== 'string' || !tz.trim()) return false;
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz.trim() }); return true; } catch { return false; }
+}
+
+const serverTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+/** The festival's time zone: its own setting, else FESTIVAL_TIMEZONE, else the server's. */
+function resolveTimeZone(settingsJson) {
+  const s = parseJson(settingsJson);
+  if (isValidTimeZone(s.timezone)) return s.timezone.trim();
+  if (isValidTimeZone(env.festivalTimeZone)) return env.festivalTimeZone;
+  return serverTimeZone();
+}
+
+/** The festival's window offsets in minutes and its time zone: { before, endBefore, timeZone }. */
 async function getWindowSettings(eventId) {
   const rows = await query('SELECT settings_json FROM audience_settings WHERE event_id = ? LIMIT 1', [eventId]);
   const s = parseJson(rows[0]?.settings_json);
   return {
     before: offset(s.attendance_window_before_min, DEFAULT_BEFORE_MIN),
-    endBefore: offset(s.attendance_window_end_before_min, DEFAULT_END_BEFORE_MIN)
+    endBefore: offset(s.attendance_window_end_before_min, DEFAULT_END_BEFORE_MIN),
+    timeZone: resolveTimeZone(s)
   };
 }
 
-/** 'YYYY-MM-DD' + 'HH:MM[:SS]' as a local Date, or null. */
-function localDate(date, time) {
+/** Wall-clock parts of an instant in a time zone. */
+function zonedParts(at, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+  }).formatToParts(at);
+  const get = (type) => Number(parts.find((p) => p.type === type)?.value);
+  return { y: get('year'), m: get('month'), d: get('day'), h: get('hour') % 24, mi: get('minute'), s: get('second') };
+}
+
+/** How far the zone's wall clock is ahead of UTC at an instant, in ms. */
+function zoneOffsetMs(ts, timeZone) {
+  const p = zonedParts(new Date(ts), timeZone);
+  return Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - Math.floor(ts / 1000) * 1000;
+}
+
+/**
+ * 'YYYY-MM-DD' + 'HH:MM[:SS]' wall-clock time in `timeZone` as a Date (a real instant), or null.
+ * Without a zone: the server's zone.
+ */
+function localDate(date, time, timeZone = null) {
   if (!date || !time) return null;
   const d = typeof date === 'string' ? date.slice(0, 10) : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const t = String(time).slice(0, 8);
-  const parsed = new Date(`${d}T${t.length === 5 ? `${t}:00` : t}`);
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  const tm = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(t);
+  if (!dm || !tm) return null;
+  if (!timeZone) {
+    const parsed = new Date(`${d}T${t.length === 5 ? `${t}:00` : t}`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const wall = Date.UTC(+dm[1], +dm[2] - 1, +dm[3], +tm[1], +tm[2], +(tm[3] || 0));
+  let utc = wall - zoneOffsetMs(wall, timeZone);
+  const second = wall - zoneOffsetMs(utc, timeZone); // corrects across a DST change
+  if (second !== utc) utc = second;
+  const parsed = new Date(utc);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** "10:45 am" for an instant, in the festival's time zone. */
+function clockLabel(at, timeZone) {
+  return new Date(at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', ...(timeZone ? { timeZone } : {}) });
+}
+
+/** "20 Nov" for an instant, in the festival's time zone. */
+function dayLabel(at, timeZone) {
+  return new Date(at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', ...(timeZone ? { timeZone } : {}) });
 }
 
 /**
@@ -53,14 +112,15 @@ function localDate(date, time) {
  * An end at or before the start is taken as running past midnight.
  */
 function windowOf(block, settings) {
-  const start = localDate(block.screening_date, block.start_time);
-  let end = localDate(block.screening_date, block.end_time);
+  const timeZone = settings.timeZone || null;
+  const start = localDate(block.screening_date, block.start_time, timeZone);
+  let end = localDate(block.screening_date, block.end_time, timeZone);
   if (!start || !end) return null;
   if (end <= start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000);
   const opens = new Date(start.getTime() - settings.before * 60000);
   let closes = new Date(end.getTime() - settings.endBefore * 60000);
   if (closes <= opens) closes = new Date(opens.getTime() + 60000); // very short show: keep a minimum window
-  return { start, end, opens, closes };
+  return { start, end, opens, closes, timeZone };
 }
 
 const inWindow = (w, at) => Boolean(w && at && at >= w.opens && at <= w.closes);
@@ -107,11 +167,45 @@ function currentShow(shows, at = new Date()) {
     || null;
 }
 
-/** Window as JSON for the API: ISO instants plus local HH:MM labels. */
+/** Window as JSON for the API: ISO instants plus HH:MM labels in the festival's time zone. */
 function windowJson(w) {
   if (!w) return null;
-  const hm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  return { opens_at: w.opens.toISOString(), closes_at: w.closes.toISOString(), opens: hm(w.opens), closes: hm(w.closes) };
+  const hm = (d) => {
+    if (!w.timeZone) return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const p = zonedParts(d, w.timeZone);
+    return `${String(p.h).padStart(2, '0')}:${String(p.mi).padStart(2, '0')}`;
+  };
+  return { opens_at: w.opens.toISOString(), closes_at: w.closes.toISOString(), opens: hm(w.opens), closes: hm(w.closes), time_zone: w.timeZone || null };
 }
 
-module.exports = { getWindowSettings, windowOf, inWindow, listShows, currentShow, windowJson, localDate, DEFAULT_BEFORE_MIN, DEFAULT_END_BEFORE_MIN, MAX_OFFSET_MIN };
+/**
+ * Re-mark every stored scan of the festival valid / outside_window against its show's window as it stands now
+ * (after a time zone, window or show-time change). Scans of a show without times are left alone.
+ * @returns {Promise<{ checked: number, changed: number }>}
+ */
+async function recomputeScanStatus(eventId) {
+  const { shows } = await listShows(eventId);
+  const windows = new Map(shows.filter((sh) => sh.window).map((sh) => [Number(sh.id), sh.window]));
+  const rows = await query('SELECT id, screening_block_id, scanned_at, scan_status FROM screening_checkins WHERE event_id = ?', [eventId]);
+  const toValid = [];
+  const toOutside = [];
+  for (const r of rows) {
+    const w = windows.get(Number(r.screening_block_id));
+    if (!w) continue;
+    const want = inWindow(w, new Date(r.scanned_at)) ? 'valid' : 'outside_window';
+    if (want !== r.scan_status) (want === 'valid' ? toValid : toOutside).push(r.id);
+  }
+  for (const [status, ids] of [['valid', toValid], ['outside_window', toOutside]]) {
+    for (let i = 0; i < ids.length; i += 500) {
+      const part = ids.slice(i, i + 500);
+      await query(`UPDATE screening_checkins SET scan_status = ? WHERE event_id = ? AND id IN (${part.map(() => '?').join(',')})`, [status, eventId, ...part]);
+    }
+  }
+  return { checked: rows.length, changed: toValid.length + toOutside.length };
+}
+
+module.exports = {
+  getWindowSettings, windowOf, inWindow, listShows, currentShow, windowJson, localDate, recomputeScanStatus,
+  isValidTimeZone, resolveTimeZone, serverTimeZone, clockLabel, dayLabel,
+  DEFAULT_BEFORE_MIN, DEFAULT_END_BEFORE_MIN, MAX_OFFSET_MIN
+};
