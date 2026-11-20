@@ -68,7 +68,7 @@ export default function AttendeeEditPage() {
     gender_identity: 'Male',
     pass_type: 'Full-Festival Pass',
     pass_days: [],
-    delegate_category: 'bangalore_general',
+    delegate_category: '',
     community_identity: '',
     attended_mumbai: 'No',
     signature_name: '',
@@ -134,7 +134,7 @@ export default function AttendeeEditPage() {
           gender_identity: cd.gender_identity || 'Male',
           pass_type: att.pass_type || cd.pass_type || 'Full-Festival Pass',
           pass_days: passDays,
-          delegate_category: att.delegate_category || (loadedCats.length > 0 ? loadedCats[0].code : 'bangalore_general'),
+          delegate_category: att.delegate_category || (loadedCats.length > 0 ? loadedCats[0].code : ''),
           community_identity: cd.community_identity || '',
           attended_mumbai: cd.attended_mumbai || 'No',
           signature_name: cd.signature_name || att.name || '',
@@ -281,7 +281,7 @@ export default function AttendeeEditPage() {
         name: intakeForm.name.trim(),
         email: intakeForm.email ? intakeForm.email.trim() : null,
         phone: intakeForm.phone ? intakeForm.phone.trim() : null,
-        delegate_category: intakeForm.delegate_category || 'bangalore_general',
+        delegate_category: intakeForm.delegate_category || '',
         status: intakeForm.status,
         dob: intakeForm.dob,
         gender_identity: intakeForm.gender_identity,
@@ -832,7 +832,7 @@ export default function AttendeeEditPage() {
                         <option key={c.id} value={c.code}>{c.name} ({c.badge_ribbon_text || c.code})</option>
                       ))}
                       {categories.length === 0 && (
-                        <option value="bangalore_general">Festival Delegate (DELEGATE)</option>
+                        <option value="">Festival's default category</option>
                       )}
                     </select>
                   </div>

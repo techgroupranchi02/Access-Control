@@ -32,6 +32,28 @@ const VOTING_RULE_KEYS = ['voting_source', 'kashish_voting_from', 'kashish_votin
 
 const KASHISH_VOTING_MESSAGE = 'Audience voting for this festival happens in the Kashish Pride app.';
 
+/**
+ * Resolves a delegate category to one of the festival's own categories (audience_categories.code).
+ * Matches code or name, any case; empty or unknown → the festival's first category. Never a made-up value:
+ * a hard-coded 'bangalore_general' fallback used to be saved when the desk form's category list hadn't loaded,
+ * which showed as "BANGALORE_GENERAL" (2026-11-20). A festival with no categories keeps what was sent (or NULL).
+ * @returns {Promise<(requested: string) => string|null>}
+ */
+async function categoryResolver(eventId) {
+  const cats = await query('SELECT code, name FROM audience_categories WHERE event_id = ? ORDER BY id ASC', [eventId]);
+  return (requested) => {
+    const raw = typeof requested === 'string' ? requested.trim() : '';
+    const want = raw.toLowerCase();
+    const hit = want && cats.find((c) => String(c.code || '').toLowerCase() === want || String(c.name || '').toLowerCase() === want);
+    if (hit) return hit.code;
+    if (cats.length) {
+      if (want) console.warn(`[AudienceController] festival ${eventId}: unknown delegate category "${raw}", saved as "${cats[0].code}".`);
+      return cats[0].code;
+    }
+    return raw || null;
+  };
+}
+
 async function getApproverName(userId) {
   if (!userId) return 'Festival Administration';
   try {
@@ -1095,7 +1117,7 @@ async function listAttendance(req, res) {
       const issueQrNow = Boolean(req.body.issue_qr_now);
       let qrToken = null;
       let badgeSerial = null;
-      const category = delegate_category || 'bangalore_general';
+      const category = (await categoryResolver(eventId))(delegate_category);
       const regType = registration_type || 'spot';
       const initialStatus = issueQrNow ? 'badge_issued' : 'registered';
 
@@ -1291,7 +1313,8 @@ async function listAttendance(req, res) {
         updatedCustomData.serial_no = 'KB26-' + String(attendeeId).padStart(4, '0');
       }
 
-      const updatedCategory = delegate_category || existing.delegate_category || 'bangalore_general';
+      // A sent category is checked against the festival's own; none sent keeps the stored one
+      const updatedCategory = delegate_category ? (await categoryResolver(eventId))(delegate_category) : existing.delegate_category;
       const updatedStatus = status || existing.status;
 
       const updateSql = `
@@ -2113,11 +2136,12 @@ async function listAttendance(req, res) {
       let createdCount = 0;
       let updatedCount = 0;
 
+      const resolveCategory = await categoryResolver(eventId);
       for (const d of delegates) {
         if (!d.name) continue;
         const email = d.email ? d.email.trim() : null;
         const phone = d.phone || d.mobile ? String(d.phone || d.mobile).trim() : null;
-        const category = d.category || 'delegate';
+        const category = resolveCategory(d.category);
 
         // Check if existing
         const existing = await query(`

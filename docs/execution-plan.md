@@ -35,6 +35,7 @@ _Nothing in progress._
 
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
+| 2026-11-20 | Production: set delegates whose category is not one of the festival's (e.g. Sarang Bhakra, BANGALORE_GENERAL) to the festival's category: preview + UPDATE query given in chat on 2026-11-20. | User | Data only; the code fix stops new ones after deploy. |
 | 2026-11-20 | Production: after the next deploy, check the migrate log for `[Migration 027] … 1 change(s)` (time zone set) and `[Migration 030] ✓ festival …: N of M scan(s) re-marked`; then Attendance shows today's scans as valid inside their windows. | User | The "server time zone must be IST" item below is no longer required once this is deployed. |
 | 2026-11-19 | Production: optional wider check for auto-added Admin rows, for every admins id: ``SELECT ueg.user_id, ueg.event_id, e.name FROM user_event_groups ueg JOIN `groups` g ON g.id = ueg.group_id JOIN events e ON e.event_id = ueg.event_id WHERE g.group_key = 'admin' AND ueg.user_id IN (SELECT id FROM admins);`` | User | 2026-11-19: the check for the first admins id returned no rows on production. Only needed if production has more than one admin. |
 | 2026-11-19 | Production: set KASHISH's edition: `UPDATE events SET edition = 'Edition 1 · 2026' WHERE name = 'KASHISH x BENGALURU 2026' AND is_deleted = 0;` | User | Check the row with a SELECT first; one row only. Not a deploy step. |
@@ -55,6 +56,11 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-20: Delegates shown as "BANGALORE_GENERAL" (a category that doesn't exist)** (`deployed` 2026-11-20).
+  - **Root cause:** a hard-coded default `bangalore_general` in FestiPlus: the desk form (`AttendeeCreatePage.jsx`) started with it and sent it when empty; a fake dropdown option "Festival Delegate (DELEGATE)" carried it when the category list hadn't loaded (`AttendeeCreatePage.jsx`, `AttendeeEditPage.jsx`); the list request's failure was swallowed; and `registerAttendee` / `updateAttendee` saved it unchecked (`delegate_category || 'bangalore_general'`). The list shows an unmatched category in capitals, hence BANGALORE_GENERAL. Bulk import had `'delegate'` hard-coded.
+  - **What:** `audience.controller.js` › `categoryResolver(eventId)`: register, edit and bulk import save only the festival's own category codes (code or name match, else the first category). Frontend: every `bangalore_general` default and the fake option removed (`AttendeeCreatePage.jsx`, `AttendeeEditPage.jsx`, `RegistrationPage.jsx`); an empty choice reads "Festival's default category".
+  - **Checked on dev:** desk registration with `bangalore_general` → saved `delegate`; with none → `delegate`; with the name "Festival Delegate" → `delegate`; editing a row stored as `bangalore_general` → `delegate`. Test delegates deleted. Frontend built, backend restarted.
+  - **Not FestiPlus:** the Laravel registration (`Freecomers_backend` › `FilmFestivalController.php` ~8218) also falls back to a fixed "Bangalore Attendee" when no category is sent.
 - **2026-11-20: No scanning after a show's attendance window closes** (`deployed` 2026-11-20). [ADR 0004, Amendment 8](adr/0004-kashish-external-leaderboard.md).
   - **What:** `audience.controller.js` › `performScreeningCheckin` refuses a scan for a closed window (409 `window_closed`, nothing recorded, names the show whose window is open). `AttendancePage.jsx`: for a closed show the camera closes, the camera button is replaced by "Attendance for … closed at …", and the badge box and Verify are disabled. Before the window opens scans are still recorded.
   - **Checked on dev:** scan for TINY TAILS (closed 12:15 PM) at 1:51 PM → 409 "… closed at 12:15 pm. Not recorded. FACE2FACE's window is open now …", 0 rows; page screenshot shows the closed message and disabled controls. Show-time edit re-marks stored scans: TINY TAILS 11:00–11:30 turned an 11:56 scan `outside_window`, restoring 11:00–12:30 turned it `valid` again.

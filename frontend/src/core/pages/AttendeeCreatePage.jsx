@@ -53,7 +53,7 @@ export default function AttendeeCreatePage() {
     gender_identity: '',
     pass_type: 'Full-Festival Pass',
     pass_days: [],
-    delegate_category: 'bangalore_general',
+    delegate_category: '', // the festival's first category once loaded; the server falls back to it too
     community_identity: '',
     attended_mumbai: '',
     signature_name: '',
@@ -287,7 +287,7 @@ export default function AttendeeCreatePage() {
         name: intakeForm.name.trim(),
         email: intakeForm.email ? intakeForm.email.trim() : null,
         phone: intakeForm.phone ? intakeForm.phone.trim() : null,
-        delegate_category: intakeForm.delegate_category || 'bangalore_general',
+        delegate_category: intakeForm.delegate_category || '',
         registration_type: 'desk',
         dob: intakeForm.dob,
         gender_identity: intakeForm.gender_identity,
@@ -793,7 +793,7 @@ export default function AttendeeCreatePage() {
                       <option key={c.id} value={c.code}>{c.name} ({c.badge_ribbon_text || c.code})</option>
                     ))}
                     {categories.length === 0 && (
-                      <option value="bangalore_general">Festival Delegate (DELEGATE)</option>
+                      <option value="">Festival's default category</option>
                     )}
                   </select>
                 </div>

@@ -212,7 +212,7 @@ export default function RegistrationPage() {
     gender_identity: 'Male',
     pass_type: 'Full-Festival Pass',
     pass_days: [],
-    delegate_category: 'bangalore_general',
+    delegate_category: '',
     community_identity: 'A Proud LGBTQ+ person',
     attended_mumbai: 'No',
     signature_name: '',
@@ -331,7 +331,7 @@ export default function RegistrationPage() {
           setIntakeForm(prev => ({
             ...prev,
             pass_type: prev.pass_type || passField.options[0],
-            delegate_category: prev.delegate_category || (loadedCats.length > 0 ? loadedCats[0].code : 'bangalore_general')
+            delegate_category: prev.delegate_category || (loadedCats.length > 0 ? loadedCats[0].code : '')
           }));
         }
       } else if (loadedCats.length > 0) {
@@ -399,7 +399,7 @@ const resetIntakeForm = () => {
     gender_identity: 'Male',
     pass_type: passField?.options?.[0] || 'Full-Festival Pass',
     pass_days: [],
-    delegate_category: categories[0]?.code || 'bangalore_general',
+    delegate_category: categories[0]?.code || '',
     community_identity: 'A Proud LGBTQ+ person',
     attended_mumbai: 'No',
     signature_name: '',
@@ -425,7 +425,7 @@ const handleIntakeSubmit = async (e) => {
       name: intakeForm.name.trim(),
       email: intakeForm.email ? intakeForm.email.trim() : null,
       phone: intakeForm.phone ? intakeForm.phone.trim() : null,
-      delegate_category: intakeForm.delegate_category || 'bangalore_general',
+      delegate_category: intakeForm.delegate_category || '',
       registration_type: 'desk',
       dob: intakeForm.dob,
       gender_identity: intakeForm.gender_identity,
