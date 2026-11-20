@@ -56,6 +56,19 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-20: Venue Checkins: rows per page, scroll box, still pages** (`deployed` 2026-11-20).
+  - **Why:** 50 rows (~2,150px) pushed the pager below the fold, and FACE2FACE's 43 scans showed as one long page with no pager. 15 rows would mean 10–20 pages for a busy show. The 15s refresh also pushed rows down on page 2+.
+  - **Change:** `AttendancePage.jsx`:
+    - 25 / 50 / 100 rows per page (default 25, saved in `localStorage` `fc_attendance_page_size`);
+    - the table scrolls inside `.fc-ct-scroll` (capped to the screen, sticky header; none on phones);
+    - the footer (count, rows per page, pager) shows whenever there are rows;
+    - pages 2+ send `max_id` (newest id seen on page 1), so rows stay still, and a "N new scans · Show latest" button appears.
+  - `listAttendance` takes an optional `max_id` and returns `new_since_anchor`. Shared `.fc-pg-size` / `.fc-pg-bar-left` CSS (aliases of the BulkQr classes).
+  - **Test:** dev API, festival 40: `max_id` = 3rd-newest leaves out the 2 newest and returns `new_since_anchor` 2; an invalid `max_id` is ignored. Puppeteer with a mocked 60-scan list at 1400×900: 25 rows, pager in view with no window scroll, header stays put while the box scrolls; on page 2 a new scan leaves the rows still and shows "1 new scan · Show latest", which goes back to page 1; 50 persists after reload; at 390px there is no inner scroll and no sideways scroll.
+- **2026-11-20: Collapsed sidebar: the edition badge ran past its card** (`deployed` 2026-11-20).
+  - **Cause:** the 68px rail showed `events.edition` as one unbroken line ("Ed. 1 · 2026", ~60px) inside a ~44px card.
+  - **Fix:** `Sidebar.jsx` splits the edition on its separators (`·`, `|`, `,`, `•`, dashes) into one line per part, each cut with an ellipsis if still too wide; the full edition is the tooltip. Nothing is shown when the edition isn't set. CSS: `.fc-festival-mini` / `.fc-festival-mini-tag` in `index.css`.
+  - **Test:** dev, festival 40, collapsed: the badge reads "Ed. 1" / "2026" inside the card (tag 21–46px, card 8–59px).
 - **2026-11-20: Delegates shown as "BANGALORE_GENERAL" (a category that doesn't exist)** (`deployed` 2026-11-20).
   - **Root cause:** a hard-coded default `bangalore_general` in FestiPlus: the desk form (`AttendeeCreatePage.jsx`) started with it and sent it when empty; a fake dropdown option "Festival Delegate (DELEGATE)" carried it when the category list hadn't loaded (`AttendeeCreatePage.jsx`, `AttendeeEditPage.jsx`); the list request's failure was swallowed; and `registerAttendee` / `updateAttendee` saved it unchecked (`delegate_category || 'bangalore_general'`). The list shows an unmatched category in capitals, hence BANGALORE_GENERAL. Bulk import had `'delegate'` hard-coded.
   - **What:** `audience.controller.js` › `categoryResolver(eventId)`: register, edit and bulk import save only the festival's own category codes (code or name match, else the first category). Frontend: every `bangalore_general` default and the fake option removed (`AttendeeCreatePage.jsx`, `AttendeeEditPage.jsx`, `RegistrationPage.jsx`); an empty choice reads "Festival's default category".

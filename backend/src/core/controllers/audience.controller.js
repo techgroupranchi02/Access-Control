@@ -1044,6 +1044,17 @@ async function listAttendance(req, res) {
         params.push(like, like, like, like, like, FREECOMERS_ADMIN_LABEL, like, phoneDigits, `%${phoneDigits}%`, badgeSerial, badgeSerial);
       }
 
+      // ?max_id= keeps pages 2+ still while scans arrive: only scans up to that id are listed, and
+      // new_since_anchor counts the newer ones so the page can offer "N new scans · Show latest"
+      const maxId = /^\d+$/.test(String(req.query.max_id || '')) ? parseInt(req.query.max_id, 10) : null;
+      let newSinceAnchor = null;
+      if (maxId) {
+        const newer = await query(`SELECT COUNT(*) AS n FROM (${sql}) matched WHERE matched.id > ?`, [...params, maxId]);
+        newSinceAnchor = Number(newer[0]?.n) || 0;
+        sql += ' AND sc.id <= ?';
+        params.push(maxId);
+      }
+
       // Total for the same show + search, so the list can page through every scan
       const totalRows = await query(`SELECT COUNT(*) AS total FROM (${sql}) matched`, params);
       const total = Number(totalRows[0]?.total) || 0;
@@ -1065,6 +1076,7 @@ async function listAttendance(req, res) {
         page: currentPage,
         page_size: pageSize,
         total_pages: lastPage,
+        ...(maxId ? { max_id: maxId, new_since_anchor: newSinceAnchor } : {}),
         metrics: {
           totalCheckins: totalScans[0].total,
           uniqueAttendeesCheckedIn: uniqueAttendees[0].unique_count

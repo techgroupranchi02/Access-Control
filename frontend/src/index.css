@@ -3058,13 +3058,26 @@ body.dark-theme .fc-collapse-btn:hover,
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .fc-festival-mini-tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
   font-size: 0.65rem;
   font-weight: 700;
+  line-height: 1.25;
   color: var(--fc-text-muted);
+}
+
+.fc-festival-mini-tag > span {
+  max-width: 100%;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fc-sidebar.is-collapsed .fc-section-header {
@@ -16354,9 +16367,9 @@ body.dark-theme .fc-pay-bank-dialog .fc-modal-footer {
 .fc-bq-action.is-primary { background: var(--fc-brand-tint); border-color: var(--fc-brand-border); color: var(--fc-brand-text); }
 .fc-bq-action.is-primary:hover { background: var(--fc-brand-active-bg); }
 .fc-bq-icon-btn:focus-visible, .fc-bq-action:focus-visible { outline: 2px solid var(--fc-brand); outline-offset: 2px; }
-.fc-bq-pager-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.fc-bq-pagesize { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--fc-text-muted); }
-.fc-bq-pagesize select {
+.fc-pg-bar-left, .fc-bq-pager-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.fc-pg-size, .fc-bq-pagesize { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--fc-text-muted); }
+.fc-pg-size select, .fc-bq-pagesize select {
   height: 32px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--fc-border);
   background: var(--fc-surface-card); color: var(--fc-text-main); font: inherit; font-size: 0.82rem;
 }
@@ -16396,7 +16409,7 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
   .fc-bq-c-actions .fc-bq-action { flex: 1; height: 40px; }
   .fc-bq-c-actions .fc-bq-icon-btn { width: 40px; height: 40px; flex-shrink: 0; }
   .fc-bq-legacy { max-width: 100%; }
-  .fc-bq-pager-left { flex-direction: column; align-items: center; gap: 8px; }
+  .fc-bq-pager-left, .fc-pg-bar-left { flex-direction: column; align-items: center; gap: 8px; }
   .fc-bq-qr-body { padding: 16px; }
   .fc-bq-qr-footer > button { flex: 1 1 120px; height: 42px; }
 }
@@ -16936,3 +16949,38 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
 .fc-att-window { display: inline-flex; align-items: center; margin-top: 6px; padding: 2px 8px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; border: 1px solid var(--fc-border); background: var(--fc-surface-card); color: var(--fc-text-secondary); }
 .fc-att-window.is-open { background: var(--fc-success-bg); border-color: var(--fc-success-border); color: var(--fc-success-text); }
 .fc-att-window.is-soon { background: var(--fc-warning-bg); border-color: var(--fc-warning-border); color: var(--fc-warning-text); }
+
+/* ══ Attendance › Venue Checkins: rows scroll inside the card so the count, search and pager stay in view ══ */
+.fc-ct-scroll {
+  overflow: auto;
+  max-height: max(360px, calc(100vh - 330px));
+  border-radius: 8px;
+}
+.fc-ct-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--fc-surface);
+  box-shadow: inset 0 -1px 0 var(--fc-border);
+}
+.fc-ct-pager { margin-top: 12px; padding-top: 12px; }
+.fc-ct-new {
+  display: block;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--fc-info-border, var(--fc-border));
+  background: var(--fc-info-bg, var(--fc-surface));
+  color: var(--fc-info-text, var(--fc-text-main));
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fc-ct-new:hover { filter: brightness(0.97); }
+.fc-ct-new:focus-visible { outline: 2px solid var(--fc-brand); outline-offset: 2px; }
+@media (max-width: 640px) {
+  /* Phones: no inner scroll box, the page scrolls */
+  .fc-ct-scroll { max-height: none; overflow: visible; }
+}

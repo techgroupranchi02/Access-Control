@@ -63,6 +63,16 @@ const saveShow = (id) => {
 /** True once the show's attendance window has closed: scanning for it is off (the server refuses it too). */
 const windowClosed = (show, at) => windowState(show, at)?.state === 'closed';
 
+/** Venue Checkins rows per page; the choice is remembered in this browser. */
+const LOG_PAGE_SIZES = [25, 50, 100];
+const LOG_PAGE_SIZE_KEY = 'fc_attendance_page_size';
+const readLogPageSize = () => {
+  try {
+    const n = Number(localStorage.getItem(LOG_PAGE_SIZE_KEY));
+    return LOG_PAGE_SIZES.includes(n) ? n : LOG_PAGE_SIZES[0];
+  } catch { return LOG_PAGE_SIZES[0]; }
+};
+
 export default function AttendancePage() {
   const [screenings, setScreenings] = useState([]);
   const [selectedScreening, setSelectedScreening] = useState('');
@@ -71,8 +81,14 @@ export default function AttendancePage() {
   const [lastScanResult, setLastScanResult] = useState(null);
   const [logs, setLogs] = useState([]);
   // Venue Checkins are paged on the server (newest first): every scan stays reachable
-  const LOG_PAGE_SIZE = 50;
+  const [logPageSize, setLogPageSize] = useState(readLogPageSize);
+  const logPageSizeRef = useRef(logPageSize);
   const [logPage, setLogPage] = useState(1);
+  // Pages 2+ stay still while scans arrive: they list scans up to the newest id seen on page 1 (max_id),
+  // and newer scans are counted for a "N new scans · Show latest" button
+  const logAnchorRef = useRef(null);
+  const [logNewSince, setLogNewSince] = useState(0);
+  const logBoxRef = useRef(null);
   const [logTotal, setLogTotal] = useState(0);
   const [logTotalPages, setLogTotalPages] = useState(1);
   const logPageRef = useRef(1);
@@ -159,11 +175,25 @@ export default function AttendancePage() {
     const requestId = ++logsRequestIdRef.current;
     try {
       if (!silent) setLogsSearching(true);
+      const anchor = page > 1 ? logAnchorRef.current : null;
       const res = await api.get('/attendance/logs', {
-        params: { screening_id: screeningId || undefined, page, page_size: LOG_PAGE_SIZE, search: searchText || undefined }
+        params: {
+          screening_id: screeningId || undefined,
+          page,
+          page_size: logPageSizeRef.current,
+          search: searchText || undefined,
+          max_id: anchor || undefined
+        }
       });
       if (requestId !== logsRequestIdRef.current) return;
-      setLogs(res.data.logs || []);
+      const rows = res.data.logs || [];
+      setLogs(rows);
+      if (anchor) {
+        setLogNewSince(Number(res.data.new_since_anchor) || 0);
+      } else {
+        setLogNewSince(0);
+        if ((res.data.page || page) === 1) logAnchorRef.current = rows.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0) || null;
+      }
       setLogTotal(Number(res.data.total ?? (res.data.logs || []).length));
       setLogTotalPages(Number(res.data.total_pages) || 1);
       // The server keeps the page in range (e.g. a search with fewer results)
@@ -203,7 +233,15 @@ export default function AttendancePage() {
   const changeLogPage = (p) => {
     logPageRef.current = p;
     setLogPage(p);
+    logBoxRef.current?.scrollTo({ top: 0 });
     fetchLogs(selectedScreening, logSearchRef.current, { page: p });
+  };
+
+  const changeLogPageSize = (n) => {
+    logPageSizeRef.current = n;
+    setLogPageSize(n);
+    try { localStorage.setItem(LOG_PAGE_SIZE_KEY, String(n)); } catch { /* storage unavailable */ }
+    changeLogPage(1);
   };
 
   // Keep the check-in list current (scans from other volunteers' devices) without a Refresh button:
@@ -729,7 +767,7 @@ export default function AttendancePage() {
             <div className="fc-card" style={{ background: 'var(--fc-surface-card)', borderRadius: '12px', border: '1px solid var(--fc-border)', padding: '20px', boxShadow: 'var(--shadow-sm)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
                 <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--fc-text-main)', marginRight: 'auto' }}>
-                  Venue Checkins ({logTotal}{logSearch ? ' found' : ''})
+                  Venue Checkins ({logTotal + logNewSince}{logSearch ? ' found' : ''})
                 </h2>
                 <SearchInput
                   value={logSearchInput}
@@ -740,6 +778,12 @@ export default function AttendancePage() {
                   style={{ flex: '1 1 220px' }}
                 />
               </div>
+
+              {logNewSince > 0 && logPage > 1 && (
+                <button type="button" className="fc-ct-new" onClick={() => changeLogPage(1)}>
+                  {logNewSince} new scan{logNewSince === 1 ? '' : 's'} · Show latest
+                </button>
+              )}
 
               {logs.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: 'var(--fc-text-muted)' }}>
@@ -757,7 +801,7 @@ export default function AttendancePage() {
                   ) : 'No check-ins recorded yet for this venue. Scan attendee badges to begin intake.'}
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
+                <div className="fc-ct-scroll" ref={logBoxRef}>
                   <table className="fc-checkin-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                     <thead>
                       <tr style={{ background: 'var(--fc-surface)', borderBottom: '1px solid var(--fc-border)', textAlign: 'left', color: 'var(--fc-text-muted)' }}>
@@ -806,11 +850,19 @@ export default function AttendancePage() {
                   </table>
                 </div>
               )}
-              {logTotalPages > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginTop: '14px' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--fc-text-muted)' }}>
-                    Showing {(logPage - 1) * LOG_PAGE_SIZE + 1}–{Math.min(logPage * LOG_PAGE_SIZE, logTotal)} of {logTotal}
-                  </span>
+              {logs.length > 0 && (
+                <div className="fc-pg-bar fc-ct-pager">
+                  <div className="fc-pg-bar-left">
+                    <span className="fc-pg-summary">
+                      Showing <strong>{(logPage - 1) * logPageSize + 1}</strong>–<strong>{Math.min(logPage * logPageSize, logTotal)}</strong> of <strong>{logTotal}</strong>
+                    </span>
+                    <label className="fc-pg-size">
+                      Rows per page
+                      <select value={logPageSize} onChange={(e) => changeLogPageSize(Number(e.target.value))}>
+                        {LOG_PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </label>
+                  </div>
                   <Pagination page={logPage} totalPages={logTotalPages} onChange={changeLogPage} />
                 </div>
               )}

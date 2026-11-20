@@ -350,9 +350,16 @@ export default function Sidebar({ isMobileOpen = false, onCloseMobile }) {
         ) : (
           <div className="fc-festival-mini">
             <span className="fc-status-dot" style={!isSaasEnabled ? { backgroundColor: 'var(--fc-danger)' } : {}}></span>
-            <span className="fc-festival-mini-tag">
-              {currentFestival?.edition ? currentFestival.edition.replace(/Edition\s*/i, 'Ed. ') : ''}
-            </span>
+            {/* events.edition is free text ("Edition 1 · 2026"): one short line per part so it fits the 68px rail */}
+            {currentFestival?.edition && (
+              <span className="fc-festival-mini-tag" title={currentFestival.edition}>
+                {currentFestival.edition
+                  .replace(/Edition\s*/i, 'Ed. ')
+                  .split(/\s*[·|,•–—]\s*/)
+                  .filter(Boolean)
+                  .map((part, i) => <span key={i}>{part}</span>)}
+              </span>
+            )}
           </div>
         )}
       </div>
