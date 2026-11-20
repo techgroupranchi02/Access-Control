@@ -909,6 +909,17 @@ async function performScreeningCheckin(req, res) {
 
       // 3. Is this scan inside the show's attendance window?
       const win = showWindows.windowOf(block, settings);
+      // A closed window takes no more scans (2026-11-20): they can never count for this show. Before the window
+      // opens a scan is still recorded (the delegate is let in and scanned again once it opens).
+      if (win && now > win.closes) {
+        const { shows } = await showWindows.listShows(eventId);
+        const open = shows.find((sh) => sh.id !== block.id && showWindows.inWindow(sh.window, now));
+        return res.status(409).json({
+          error: `Attendance for ${block.title} closed at ${clockLabel(win.closes, tz)}. Not recorded.${open ? ` ${open.title}'s window is open now: pick it and scan again.` : ' Pick the show that is on now.'}`,
+          window_closed: true,
+          open_show_id: open ? open.id : null
+        });
+      }
       const inWindow = !win || showWindows.inWindow(win, now);
       let message;
       if (inWindow) {

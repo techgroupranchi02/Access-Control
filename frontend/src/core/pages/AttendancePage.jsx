@@ -22,7 +22,8 @@ import {
   CameraAltIcon,
   CloseIcon,
   CheckIcon,
-  ExpandMoreIcon
+  ExpandMoreIcon,
+  LockIcon
 } from '../components/common/Icons';
 import { attendeeLabel } from '../utils/attendeeDisplay';
 
@@ -59,6 +60,9 @@ const saveShow = (id) => {
   try { const k = showKey(); if (k && id) sessionStorage.setItem(k, String(id)); } catch { /* storage unavailable */ }
 };
 
+/** True once the show's attendance window has closed: scanning for it is off (the server refuses it too). */
+const windowClosed = (show, at) => windowState(show, at)?.state === 'closed';
+
 export default function AttendancePage() {
   const [screenings, setScreenings] = useState([]);
   const [selectedScreening, setSelectedScreening] = useState('');
@@ -86,6 +90,11 @@ export default function AttendancePage() {
     const t = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(t);
   }, []);
+  // The selected show's window has closed: close the camera
+  useEffect(() => {
+    const show = screenings.find((s) => String(s.id) === String(selectedScreening));
+    if (windowClosed(show, now)) setIsCameraActive(false); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [now, screenings, selectedScreening]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!venueMenuOpen) return undefined;
@@ -215,6 +224,16 @@ export default function AttendancePage() {
   const executeCheckin = async (rawInput, isFromCamera = false) => {
     let clean = (rawInput || '').trim();
     if (!clean || !selectedScreening) return;
+    const showNow = screenings.find((s) => String(s.id) === String(selectedScreening));
+    if (windowClosed(showNow, new Date())) {
+      setLastScanResult({
+        success: false,
+        message: `Attendance for ${showNow.title} closed at ${clock(showNow.attendance_window.closes)}. Pick the show that's on now.`,
+        timestamp: new Date().toLocaleTimeString()
+      });
+      playBeep(false);
+      return;
+    }
 
     // If scanned text is a full URL, extract the token / badge ID from the last path segment
     if (clean.includes('/')) {
@@ -363,6 +382,7 @@ export default function AttendancePage() {
     }, [isCameraActive, selectedScreening]);
 
     const currentScreeningObj = screenings.find(s => String(s.id) === String(selectedScreening));
+    const scanningClosed = windowClosed(currentScreeningObj, now);
 
     return (
       <div className="fc-attendance-page">
@@ -518,7 +538,14 @@ export default function AttendancePage() {
 
               {/* 1. Live Camera QR Scanner Section */}
               <div style={{ marginBottom: '18px' }}>
-                {!isCameraActive ? (
+                {scanningClosed ? (
+                  <div className="fc-kv-hint" role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <LockIcon size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <span>
+                      Attendance for <strong>{currentScreeningObj.title}</strong> closed at {clock(currentScreeningObj.attendance_window.closes)}. Scanning is off for this show. Pick the show that's on now above.
+                    </span>
+                  </div>
+                ) : !isCameraActive ? (
                   <button
                     type="button"
                     onClick={() => setIsCameraActive(true)}
@@ -608,11 +635,14 @@ export default function AttendancePage() {
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <input
                         type="text"
-                        placeholder="Badge no. or scan QR"
+                        key={scanningClosed ? 'scan-closed' : 'scan-open'}
+                        placeholder={scanningClosed ? 'Scanning closed' : 'Badge no. or scan QR'}
+                        disabled={scanningClosed}
                         value={scanInput}
                         onChange={(e) => setScanInput(e.target.value)}
-                        autoFocus={!isCameraActive}
+                        autoFocus={!isCameraActive && !scanningClosed}
                         style={{
+                          ...(scanningClosed ? { opacity: 0.6, cursor: 'not-allowed' } : {}),
                           flex: 1,
                           minWidth: 0,
                           padding: '11px 13px',
@@ -630,7 +660,7 @@ export default function AttendancePage() {
                       />
                       <button
                         type="submit"
-                        disabled={scanning}
+                        disabled={scanning || scanningClosed}
                         style={{
                           background: 'var(--fc-surface-card)',
                           color: 'var(--fc-text-main)',
@@ -638,8 +668,8 @@ export default function AttendancePage() {
                           padding: '0 20px',
                           borderRadius: '8px',
                           fontWeight: 700,
-                          cursor: scanning ? 'not-allowed' : 'pointer',
-                          opacity: scanning ? 0.55 : 1,
+                          cursor: scanning || scanningClosed ? 'not-allowed' : 'pointer',
+                          opacity: scanning || scanningClosed ? 0.55 : 1,
                           transition: 'background 0.15s ease, border-color 0.15s ease'
                         }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--fc-surface-hover)'; e.currentTarget.style.borderColor = 'var(--fc-border-hover, var(--fc-border))'; }}

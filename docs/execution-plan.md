@@ -55,6 +55,9 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-20: No scanning after a show's attendance window closes** (`deployed` 2026-11-20). [ADR 0004, Amendment 8](adr/0004-kashish-external-leaderboard.md).
+  - **What:** `audience.controller.js` › `performScreeningCheckin` refuses a scan for a closed window (409 `window_closed`, nothing recorded, names the show whose window is open). `AttendancePage.jsx`: for a closed show the camera closes, the camera button is replaced by "Attendance for … closed at …", and the badge box and Verify are disabled. Before the window opens scans are still recorded.
+  - **Checked on dev:** scan for TINY TAILS (closed 12:15 PM) at 1:51 PM → 409 "… closed at 12:15 pm. Not recorded. FACE2FACE's window is open now …", 0 rows; page screenshot shows the closed message and disabled controls. Show-time edit re-marks stored scans: TINY TAILS 11:00–11:30 turned an 11:56 scan `outside_window`, restoring 11:00–12:30 turned it `valid` again.
 - **2026-11-20: Production attendance "not open yet" and every scan "Outside window"; Venue Checkins paging** (`deployed` 2026-11-20). [ADR 0004, Amendment 8](adr/0004-kashish-external-leaderboard.md).
   - **Root cause:** `showWindows.service.js` › `localDate` built show times with `new Date('YYYY-MM-DDTHH:MM')`, i.e. in the server's time zone. Production runs on UTC (dev on IST), so TINY TAILS 11:00 IST became 11:00 UTC = 4:30 PM IST: the window (10:45–12:37) opened at 4:15 PM IST. The scanner compares `opens_at` with now ("not open yet"), every scan was stored `outside_window`, and the Kashish vote check would refuse those votes. The label text looked right because it used the same server hours.
   - **Pagination:** the page asked for `limit: 50` and showed only the first 50 scans; there was no paging.

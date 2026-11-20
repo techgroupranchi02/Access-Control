@@ -158,4 +158,5 @@ Migration: `026_show_attendance_windows.js` (`voting_enabled`, `screening_block_
   - A schedule file can carry `timezone` (KASHISH: Asia/Kolkata); `scheduleSeed` sets it once if the festival has none.
   - `recomputeScanStatus(eventId)` re-marks stored scans against the current windows. It runs before every vote re-check (show edits, window or zone saves) and in migration 030 on deploy.
 - **Consequences:** windows no longer depend on the server clock setting. The deploy that carries this fixes production's stored scans and re-checks the stored Kashish votes without manual steps (027 sets the zone, then 030 re-marks).
+- **Follow-up (2026-11-20): no scans once a window has closed.** `POST /attendance/scan` refuses a scan for a show whose attendance window has closed (409, `window_closed`, nothing recorded, the open show named if there is one); the Attendance page turns the camera, badge box and Verify off for that show and says so. Before a window opens, scans are still recorded (`outside_window`, scan again once it opens). Editing a show's times re-marks its stored scans (the same `recomputeScanStatus`), so a reopened window takes scans again.
 
