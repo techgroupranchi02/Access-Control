@@ -56,6 +56,17 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-22: Voting › Leaderboard: export as CSV and PDF** (`deployed` 2026-11-22).
+  - **Change:**
+    - `audience.controller.js` › `exportVotingLeaderboard` and route `GET /api/voting/leaderboard/export?format=csv|pdf` (`voting.view_results`, Kashish-app festivals). It uses the same `computeExternalStandings` as the tab, so the file matches the screen.
+    - CSV: rank (blank for films with no votes), film, Kashish film ID, votes, average, score; formula guard; BOM for Excel.
+    - PDF: A4 with the festival name, draft/published status (and a note when votes changed since publishing), last sync, export time and time zone, scoring method, voting period, top 3 highlighted, page numbers.
+    - File names say draft/published/current and the date.
+    - `cardPdf.service.js` › `htmlToPdf()` (shared browser, no scripts, no network).
+    - `KashishVotingBoard.jsx`: CSV and PDF buttons next to Refresh. CSS `.fc-kv-head-actions`.
+    - Export responses (also the Sync status voter CSV) send `Cache-Control: no-store`.
+  - **Test (dev, festival 40):** CSV and PDF return 200 with the right file names; bad format → 400; volunteer → 403. The PDF was rendered to images: dev data (all 0 votes) and sample standings in memory (ranked rows, top-3 highlight, "Published … by …"). Puppeteer in dark and light: both buttons download; at 390px the three buttons share one row with no sideways scroll.
+
 - **2026-11-22: Voting › Sync status: see the voters behind each count** (`deployed` 2026-11-22).
   - **Why:** staff could see how many votes didn't count (not a registered delegate, not scanned in, not in the vote) but not whose they were.
   - **Change:**

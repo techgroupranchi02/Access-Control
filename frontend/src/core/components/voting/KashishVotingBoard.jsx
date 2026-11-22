@@ -19,7 +19,8 @@ import {
   CheckCircleIcon,
   WarningIcon,
   InfoIcon,
-  OpenInNewIcon
+  OpenInNewIcon,
+  FileDownloadIcon
 } from '../common/Icons';
 
 const OUTCOME_TILES = [
@@ -52,6 +53,7 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
   const [publishing, setPublishing] = useState(false);
   const [notice, setNotice] = useState(null); // { tone: 'success' | 'error', text }
   const [voteList, setVoteList] = useState(null); // the Sync status tile whose votes are open
+  const [exporting, setExporting] = useState(null); // 'csv' | 'pdf' while a download runs
   // Voter names, emails and mobiles: the same permission as the vote audit (server checks it too)
   const { hasPermission, isSuperAdmin, currentUserGroup } = useFestivalConfig();
   const canSeeVoters = Boolean(isSuperAdmin || currentUserGroup === 'admin'
@@ -96,6 +98,28 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
       setNotice({ tone: 'error', text: errorText(err, 'Sync failed. Please try again.') });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // The standings as shown (live), built by the server so the file matches the scoring exactly
+  const exportStandings = async (format) => {
+    setExporting(format);
+    setNotice(null);
+    try {
+      const res = await api.get('/voting/leaderboard/export', { params: { format }, responseType: 'blob' });
+      const name = /filename="([^"]+)"/.exec(res.headers?.['content-disposition'] || '')?.[1] || `audience-choice-standings.${format}`;
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setNotice({ tone: 'error', text: `Could not export the standings as ${format.toUpperCase()}. Please try again.` });
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -187,9 +211,17 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
               </p>
               <p>Ranked by Bayesian score (m = {data?.adjustment_number ?? 10}). Ties: more votes, then higher average.</p>
             </div>
-            <button type="button" className="fc-kv-btn" onClick={loadLeaderboard}>
-              <SyncIcon size={13} /> Refresh
-            </button>
+            <div className="fc-kv-head-actions">
+              <button type="button" className="fc-kv-btn" onClick={loadLeaderboard}>
+                <SyncIcon size={13} /> Refresh
+              </button>
+              <button type="button" className="fc-kv-btn" onClick={() => exportStandings('csv')} disabled={!rows.length || exporting !== null} title="Download these standings as a spreadsheet (CSV)">
+                <FileDownloadIcon size={13} /> {exporting === 'csv' ? 'Exporting…' : 'CSV'}
+              </button>
+              <button type="button" className="fc-kv-btn" onClick={() => exportStandings('pdf')} disabled={!rows.length || exporting !== null} title="Download these standings as a PDF">
+                <FileDownloadIcon size={13} /> {exporting === 'pdf' ? 'Exporting…' : 'PDF'}
+              </button>
+            </div>
           </div>
 
           {!periodText && (

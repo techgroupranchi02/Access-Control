@@ -60,6 +60,7 @@ votingRouter.use(authenticate);
 votingRouter.use(requireModule('audience'));
 
 votingRouter.get('/leaderboard', requirePermission('voting.view_results'), audienceController.getVotingLeaderboard);
+votingRouter.get('/leaderboard/export', requirePermission('voting.view_results'), audienceController.exportVotingLeaderboard);
 votingRouter.get('/flagged', requirePermission('voting.audit_fraud'), audienceController.listFlaggedVotes);
 votingRouter.post('/void-vote', requirePermission('voting.audit_fraud'), audienceController.voidVote);
 votingRouter.post('/approve-results', requirePermission('voting.control_window'), audienceController.approveResults);

@@ -264,4 +264,24 @@ async function renderJob(job, res, zipName, eventId) {
   }
 }
 
-module.exports = { streamCardPdfZip, CardPdfError, MAX_CARDS, IMAGE_BASE, safeFileName };
+/**
+ * One self-contained HTML document (no scripts, no network: inline styles and data: images only) to a
+ * PDF buffer, on the same shared browser as the card PDFs. pdfOptions go to page.pdf (format, margin,
+ * header/footer templates).
+ */
+async function htmlToPdf(html, pdfOptions = {}) {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    page.on('request', (r) => (r.url().startsWith('data:') ? r.continue() : r.abort()));
+    await page.setContent(html, { waitUntil: 'load', timeout: 30000 });
+    return Buffer.from(await page.pdf({ printBackground: true, timeout: 30000, ...pdfOptions }));
+  } finally {
+    try { await page.close(); } catch { /* browser gone */ }
+    scheduleClose();
+  }
+}
+
+module.exports = { streamCardPdfZip, htmlToPdf, CardPdfError, MAX_CARDS, IMAGE_BASE, safeFileName };

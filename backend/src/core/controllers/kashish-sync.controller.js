@@ -579,6 +579,7 @@ async function listExternalVotes(req, res) {
       v.scans.map((s) => `${s.show} ${when(s.scanned_at)} (${s.status === 'valid' ? 'in window' : 'outside window'})`).join('; ')
     ].map(csvCell).join(','));
     const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="kashish-votes-${group.replace(/_/g, '-')}-${stamp}.csv"`);
     return res.send('\uFEFF' + [header.map(csvCell).join(','), ...lines].join('\r\n'));

@@ -2596,6 +2596,123 @@ async function listAttendance(req, res) {
   }
 
   /**
+   * GET /api/voting/leaderboard/export?format=csv|pdf
+   * The Audience Choice standings exactly as the Leaderboard tab shows them (live, Kashish-app festivals),
+   * as a CSV table or an A4 PDF with the festival, publish status, last sync and scoring method.
+   * Times are in the festival's time zone.
+   */
+  async function exportVotingLeaderboard(req, res) {
+    try {
+      const eventId = parseInt(req.headers['x-event-id'] || req.headers['x-edition-id'] || req.query.eventId, 10);
+      if (!eventId) return res.status(400).json({ error: 'Festival (event) id is required.' });
+      const format = req.query.format === 'pdf' ? 'pdf' : req.query.format === 'csv' ? 'csv' : null;
+      if (!format) return res.status(400).json({ error: 'Pick CSV or PDF.' });
+      const config = await kashishExternal.getVotingConfig(eventId);
+      if (config.source !== 'kashish') return res.status(400).json({ error: 'Export is available for festivals whose votes come from the Kashish Pride app.' });
+
+      const [{ standings, adjustment_number, festival_mean }, publication, lastSync, eventRows, windowSettings] = await Promise.all([
+        kashishExternal.computeExternalStandings(eventId, config),
+        kashishExternal.getLatestPublication(eventId),
+        query("SELECT completed_at FROM kashish_sync_logs WHERE event_id = ? AND status = 'completed' ORDER BY completed_at DESC LIMIT 1", [eventId]),
+        query('SELECT name FROM events WHERE event_id = ? LIMIT 1', [eventId]),
+        showWindows.getWindowSettings(eventId)
+      ]);
+      const festival = eventRows[0]?.name || `Festival ${eventId}`;
+      const tz = windowSettings.timeZone;
+      const fmt = new Intl.DateTimeFormat('en-IN', { timeZone: tz, day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+      const when = (d) => (d ? fmt.format(new Date(d)) : '');
+      const now = new Date();
+      const rows = standings.map((r) => {
+        const votes = Number(r.total_votes) || 0;
+        return {
+          rank: votes > 0 ? String(r.standing_rank) : '',
+          film: r.film_title || '',
+          filmId: r.film_id || '',
+          votes,
+          avg: votes > 0 ? Number(r.raw_average).toFixed(2) : '',
+          score: votes > 0 ? Number(r.bayesian_score).toFixed(3) : ''
+        };
+      });
+      const status = publication
+        ? `Published ${when(publication.published_at)} by ${publication.published_by_admin_id ? FREECOMERS_ADMIN_LABEL : await getApproverName(publication.published_by_user_id)}`
+          + (kashishExternal.standingsChanged(publication.standings, standings) ? '. Votes have changed since then: these are the current standings, not the published ones.' : '')
+        : 'Draft standings, not published yet';
+      const stateWord = !publication ? 'draft' : (kashishExternal.standingsChanged(publication.standings, standings) ? 'current' : 'published');
+      const slug = festival.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || `festival-${eventId}`;
+      const fileBase = `${slug}-audience-choice-${stateWord}-${now.toISOString().slice(0, 10)}`;
+
+      if (format === 'csv') {
+        const cell = (value) => {
+          let v = value === null || value === undefined ? '' : String(value);
+          if (/^[=@\t\r]/.test(v) || /^[+-](?![\d\s])/.test(v)) v = `'${v}`;
+          return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+        };
+        const lines = [['Rank', 'Film', 'Kashish film ID', 'Votes', 'Avg rating', 'Score'], ...rows.map((r) => [r.rank, r.film, r.filmId, r.votes, r.avg, r.score])];
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileBase}.csv"`);
+        return res.send('﻿' + lines.map((l) => l.map(cell).join(',')).join('\r\n'));
+      }
+
+      const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const period = config.from || config.to
+        ? `Voting period: ${config.from ? when(config.from) : 'any time'} to ${config.to ? when(config.to) : 'no end date'}`
+        : 'No voting period is set, so votes from any date count.';
+      const countedTotal = rows.reduce((t, r) => t + r.votes, 0);
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(festival)}: Audience Choice standings</title><style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #1f1f1f; font-size: 10.5pt; }
+        .festival { font-size: 10pt; color: #6b6b6b; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+        h1 { margin: 4px 0 10px; font-size: 20pt; }
+        .status { display: inline-block; padding: 5px 10px; border-radius: 6px; font-weight: 700; font-size: 9.5pt; margin-bottom: 10px; }
+        .status.draft { background: #fff4d6; color: #8a5a00; border: 1px solid #f0d089; }
+        .status.published { background: #e3f6e8; color: #1e6b37; border: 1px solid #a9dbb7; }
+        .meta { margin: 2px 0; color: #4d4d4d; font-size: 9pt; line-height: 1.45; }
+        table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+        thead { display: table-header-group; }
+        th { text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.05em; color: #5f5f5f; background: #f2f2f2; padding: 7px 8px; border-bottom: 1px solid #cfcfcf; }
+        td { padding: 7px 8px; border-bottom: 1px solid #e3e3e3; vertical-align: top; }
+        tr { page-break-inside: avoid; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rank { font-weight: 700; white-space: nowrap; }
+        .film { font-weight: 700; }
+        .podium td { background: #faf6ec; }
+        .none td { color: #8a8a8a; }
+        .total { margin-top: 10px; font-size: 9pt; color: #4d4d4d; }
+      </style></head><body>
+        <div class="festival">${esc(festival)}</div>
+        <h1>Audience Choice standings</h1>
+        <div class="status ${publication && stateWord === 'published' ? 'published' : 'draft'}">${esc(status)}</div>
+        <p class="meta">Votes from the Kashish Pride app · Last synced ${esc(when(lastSync[0]?.completed_at) || 'never')} · Exported ${esc(when(now))} (${esc(tz)})</p>
+        <p class="meta">Ranked by Bayesian score (m = ${esc(adjustment_number)}, festival average ${esc(Number(festival_mean).toFixed(2))}). Ties: more votes, then higher average.</p>
+        <p class="meta">${esc(period)}</p>
+        <table>
+          <thead><tr><th>Rank</th><th>Film</th><th class="num">Votes</th><th class="num">Avg rating</th><th class="num">Score</th></tr></thead>
+          <tbody>${rows.map((r) => `<tr class="${!r.votes ? 'none' : Number(r.rank) <= 3 ? 'podium' : ''}">
+            <td class="rank">${r.rank ? `#${esc(r.rank)}` : '-'}</td><td class="film">${esc(r.film)}</td>
+            <td class="num">${r.votes}</td><td class="num">${r.avg ? `${esc(r.avg)} / 5` : '-'}</td><td class="num">${r.score ? esc(r.score) : '-'}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <p class="total">${rows.length} film(s) · ${countedTotal} counted vote(s)</p>
+      </body></html>`;
+      const pdf = await cardPdf.htmlToPdf(html, {
+        format: 'A4',
+        margin: { top: '16mm', bottom: '18mm', left: '14mm', right: '14mm' },
+        displayHeaderFooter: true,
+        headerTemplate: '<span></span>',
+        footerTemplate: `<div style="width:100%;font-family:Arial,sans-serif;font-size:8px;color:#7a7a7a;padding:0 14mm;display:flex;justify-content:space-between;"><span>${esc(festival)} · Audience Choice standings · ${esc(stateWord)}</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>`
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileBase}.pdf"`);
+      return res.send(pdf);
+    } catch (error) {
+      console.error('[AudienceController] exportVotingLeaderboard error:', error.message);
+      res.status(500).json({ error: 'Could not export the standings.' });
+    }
+  }
+
+  /**
    * GET /api/voting/flagged
    */
   async function listFlaggedVotes(req, res) {
@@ -3531,6 +3648,7 @@ async function listAttendance(req, res) {
     listAttendees,
     bulkImportAttendees,
     getVotingLeaderboard,
+    exportVotingLeaderboard,
     listFlaggedVotes,
     voidVote,
     getPublicScreeningVoteData,

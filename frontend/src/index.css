@@ -17020,3 +17020,10 @@ body.dark-theme .fc-bq-qr-dialog .fc-modal-footer {
   .fc-kvl-table tbody tr { grid-template-columns: 1fr; }
   .fc-kvl-reason { min-width: 0; }
 }
+
+/* Voting › Leaderboard: Refresh + CSV / PDF export */
+.fc-kv-head-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .fc-kv-head-actions { width: 100%; }
+  .fc-kv-head-actions > .fc-kv-btn { flex: 1 1 0; justify-content: center; }
+}
