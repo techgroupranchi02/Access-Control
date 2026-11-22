@@ -25,5 +25,7 @@ kashishSyncRouter.get('/user-mappings', requirePermission('audience.view'), kash
 kashishSyncRouter.get('/external-summary', requirePermission('audience.view'), kashishSyncController.getExternalSummary);
 kashishSyncRouter.get('/sync-logs', requirePermission('audience.view'), kashishSyncController.getSyncLogs);
 kashishSyncRouter.get('/receipts', requirePermission('voting.audit_fraud'), kashishSyncController.listVoteReceipts);
+// Voters behind each Sync status count (names, emails, mobiles): same permission as the vote audit
+kashishSyncRouter.get('/external-votes', requirePermission('voting.audit_fraud'), kashishSyncController.listExternalVotes);
 
 module.exports = { kashishSyncRouter };

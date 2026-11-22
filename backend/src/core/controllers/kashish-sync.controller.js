@@ -8,6 +8,7 @@ const { query } = require('../../config/database');
 const { fetchAllKashishVotes } = require('../services/kashish-api.service');
 const { recalculateScores } = require('./audience.controller');
 const kashishExternal = require('../services/kashishExternalVotes.service');
+const showWindows = require('../services/showWindows.service');
 
 function getEventId(req) {
   return req.headers['x-event-id'] ||
@@ -534,6 +535,61 @@ async function getExternalSummary(req, res) {
 }
 
 /**
+ * GET /api/kashish-sync/external-votes?group=unregistered&search=&page=1&page_size=50[&format=csv]
+ * The votes behind one Sync status count, with the voter's Kashish name, email and mobile, the
+ * delegate they matched and that delegate's scans. format=csv returns every matching vote as a file,
+ * with times in the festival's time zone. Needs an explicit event id.
+ */
+const VOTE_GROUP_LABELS = {
+  counted: 'Counted', unregistered: 'Not a registered delegate', not_checked_in: 'Not scanned in for the show',
+  voted_before_checkin: 'Voted before the scan', unscheduled: 'Not in the vote / not on the schedule',
+  outside_period: 'Outside voting period', other: 'Other', removed: 'Not in this event'
+};
+
+// A cell a spreadsheet would run as a formula (=, @, or + / - not followed by a digit) is kept as text
+function csvCell(value) {
+  let v = value === null || value === undefined ? '' : String(value);
+  if (/^[=@\t\r]/.test(v) || /^[+-](?![\d\s])/.test(v)) v = `'${v}`;
+  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
+async function listExternalVotes(req, res) {
+  try {
+    const eventId = parseInt(req.headers['x-event-id'] || req.headers['x-edition-id'] || req.query.eventId, 10);
+    if (!eventId) return res.status(400).json({ error: 'Festival (event) id is required.' });
+    const group = String(req.query.group || '');
+    if (!kashishExternal.VOTE_LIST_OUTCOMES[group]) return res.status(400).json({ error: 'Pick which votes to list.' });
+    const csv = req.query.format === 'csv';
+    const result = await kashishExternal.listExternalVotes(eventId, {
+      group,
+      search: typeof req.query.search === 'string' ? req.query.search : '',
+      page: req.query.page,
+      pageSize: csv ? null : req.query.page_size
+    });
+    if (!csv) return res.json({ success: true, ...result });
+
+    const { timeZone } = await showWindows.getWindowSettings(eventId);
+    const fmt = new Intl.DateTimeFormat('en-IN', { timeZone, day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+    const when = (d) => (d ? fmt.format(new Date(d)) : '');
+    const header = ['Why not counted', 'Reason', 'Voter name', 'Voter email', 'Voter mobile', 'Film', 'Stars', `Voted at (${timeZone})`,
+      'Matched delegate', 'Delegate email', 'Delegate mobile', 'Scans (show, time, status)'];
+    const lines = result.votes.map((v) => [
+      VOTE_GROUP_LABELS[group], v.reason, v.voter.name, v.voter.email, v.voter.mobile, v.film.title, v.stars, when(v.voted_at),
+      v.delegate?.name, v.delegate?.email, v.delegate?.phone,
+      v.scans.map((s) => `${s.show} ${when(s.scanned_at)} (${s.status === 'valid' ? 'in window' : 'outside window'})`).join('; ')
+    ].map(csvCell).join(','));
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="kashish-votes-${group.replace(/_/g, '-')}-${stamp}.csv"`);
+    return res.send('\uFEFF' + [header.map(csvCell).join(','), ...lines].join('\r\n'));
+  } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message });
+    console.error('[KashishSync] listExternalVotes error:', error.message);
+    res.status(500).json({ error: 'Failed to list the votes.' });
+  }
+}
+
+/**
  * Re-check the stored Kashish votes of a Kashish-source festival without calling Kashish, under the
  * same per-event lock as a sync. Used after the schedule (shows, times, films) changes, so the
  * per-show attendance rule (ADR 0004 Amendment 2) applies at once. Returns null when not applicable
@@ -553,6 +609,7 @@ async function recheckStoredExternalVotes(eventId) {
 module.exports = {
   recheckStoredExternalVotes,
   getExternalSummary,
+  listExternalVotes,
   listVoteReceipts,
   syncEventVotes,
   syncKashishVotes,

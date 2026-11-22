@@ -659,7 +659,96 @@ async function listKnownMovies(eventId) {
   return [...byId.values()].sort((a, b) => String(a.title).localeCompare(String(b.title)));
 }
 
+// ── Voters behind each Sync status count ────────────────────────────────────
+
+/** Sync status tiles → stored outcomes ('other' groups the rarely seen ones). */
+const VOTE_LIST_OUTCOMES = {
+  counted: ['counted'],
+  unregistered: ['unregistered'],
+  not_checked_in: ['not_checked_in'],
+  voted_before_checkin: ['voted_before_checkin'],
+  unscheduled: ['unscheduled'],
+  outside_period: ['outside_period'],
+  other: ['not_verified', 'invalid', 'duplicate'],
+  removed: ['removed']
+};
+
+/**
+ * Votes of one Sync status group with the voter's Kashish details, the delegate they matched (if any)
+ * and that delegate's scans, so staff can see who a skipped vote belongs to and why.
+ * opts: { group, search, page, pageSize } with pageSize null for every row (CSV export).
+ */
+async function listExternalVotes(eventId, { group, search = '', page = 1, pageSize = 50 } = {}) {
+  const outcomes = VOTE_LIST_OUTCOMES[group];
+  if (!outcomes) {
+    const err = new Error(`Unknown vote group "${group}".`);
+    err.status = 400;
+    throw err;
+  }
+  const params = [eventId, ...outcomes];
+  let where = `v.event_id = ? AND v.outcome IN (${outcomes.map(() => '?').join(', ')})`;
+  const term = String(search || '').trim().slice(0, 100);
+  if (term) {
+    const like = `%${term}%`;
+    where += ` AND (v.kashish_user_name LIKE ? OR v.kashish_user_email LIKE ? OR v.kashish_user_mobile LIKE ?
+                 OR v.kashish_movie_title LIKE ? OR sa.name LIKE ? OR sa.phone LIKE ? OR sa.email LIKE ?)`;
+    params.push(like, like, like, like, like, like, like);
+  }
+  const from = `FROM kashish_external_votes v LEFT JOIN saas_attendees sa ON sa.attendee_id = v.attendee_id WHERE ${where}`;
+  const total = Number((await query(`SELECT COUNT(*) AS n ${from}`, params))[0]?.n) || 0;
+  const size = pageSize ? Math.min(Math.max(parseInt(pageSize, 10) || 50, 1), 200) : null;
+  const lastPage = size ? Math.max(Math.ceil(total / size), 1) : 1;
+  const current = size ? Math.min(Math.max(parseInt(page, 10) || 1, 1), lastPage) : 1;
+  const limit = size ? ` LIMIT ${size} OFFSET ${(current - 1) * size}` : '';
+
+  const rows = await query(`
+    SELECT v.id, v.outcome, v.reason, v.kashish_user_name AS voter_name, v.kashish_user_email AS voter_email,
+           v.kashish_user_mobile AS voter_mobile, v.kashish_movie_id AS film_id, v.kashish_movie_title AS film_title,
+           v.stars, v.voted_at, v.attendee_id,
+           COALESCE(NULLIF(TRIM(sa.name), ''), sa.phone) AS delegate_name, sa.email AS delegate_email, sa.phone AS delegate_phone
+    ${from}
+    ORDER BY v.voted_at DESC, v.id DESC${limit}
+  `, params);
+
+  // Scans of the matched delegates on this page: which show, when, in or outside its window
+  const ids = [...new Set(rows.map((r) => r.attendee_id).filter(Boolean))];
+  const scansBy = new Map();
+  if (ids.length) {
+    const scans = await query(`
+      SELECT sc.attendee_id, sc.scanned_at, sc.scan_status, sb.title AS show_title
+      FROM screening_checkins sc JOIN screening_blocks sb ON sb.id = sc.screening_block_id
+      WHERE sc.event_id = ? AND sc.attendee_id IN (${ids.map(() => '?').join(', ')})
+      ORDER BY sc.scanned_at ASC
+    `, [eventId, ...ids]);
+    for (const s of scans) {
+      if (!scansBy.has(s.attendee_id)) scansBy.set(s.attendee_id, []);
+      scansBy.get(s.attendee_id).push({ show: s.show_title, scanned_at: s.scanned_at, status: s.scan_status });
+    }
+  }
+
+  return {
+    group,
+    total,
+    page: current,
+    page_size: size,
+    total_pages: lastPage,
+    votes: rows.map((r) => ({
+      id: r.id,
+      outcome: r.outcome,
+      reason: r.reason || OUTCOME_REASON[r.outcome] || '',
+      voter: { name: r.voter_name || null, email: r.voter_email || null, mobile: r.voter_mobile || null },
+      film: { id: r.film_id, title: r.film_title },
+      stars: r.stars === null ? null : Number(r.stars),
+      voted_at: r.voted_at,
+      delegate: r.attendee_id ? { id: r.attendee_id, name: r.delegate_name, email: r.delegate_email || null, phone: r.delegate_phone || null } : null,
+      scans: r.attendee_id ? (scansBy.get(r.attendee_id) || []) : []
+    }))
+  };
+}
+
 module.exports = {
+  VOTE_LIST_OUTCOMES,
+  listExternalVotes,
   listKnownMovies,
   getVotingConfig,
   isKashishSource,

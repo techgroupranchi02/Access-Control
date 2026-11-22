@@ -56,6 +56,26 @@ _Nothing in progress._
 
 ## Done
 
+- **2026-11-22: Voting › Sync status: see the voters behind each count** (`deployed` 2026-11-22).
+  - **Why:** staff could see how many votes didn't count (not a registered delegate, not scanned in, not in the vote) but not whose they were.
+  - **Change:**
+    - `kashishExternalVotes.service.js` › `listExternalVotes` and `VOTE_LIST_OUTCOMES`; `kashish-sync.controller.js` › `listExternalVotes` (JSON or `format=csv`, times in the festival's time zone, spreadsheet-formula guard); route `GET /api/kashish-sync/external-votes` (`voting.audit_fraud`).
+    - `KashishVoteListDialog.jsx` (new): voter name / email / mobile, film and rating, voted time, matched delegate with every scan (show, time, in/outside window), reason; search, 25 per page, Export CSV, Esc closes.
+    - `KashishVotingBoard.jsx`: tiles with votes become buttons ("See voters") for users with the permission. CSS `.fc-kvl-*`, `.fc-kv-tile.is-clickable` in `index.css`.
+  - **Test (dev, festival 40):** API totals match the tiles (84 / 1 / 1 / 16); search; unknown group → 400; CSV of all 84 rows with the right file name; a volunteer gets 403. Puppeteer in light and dark mode: only tiles with votes are clickable, 25 rows and paging, CSV download, Esc closes, the scan group shows the matched delegate ("Never scanned"); at 390px rows become cards with no sideways scroll.
+
+- **2026-11-21: API and database reference with review** (document only, no code change).
+  - `/var/www/Access-Control API and Database Reference.docx`. It covers all 213 endpoints (permission, handler, tables read and written, frontend caller), the tables each endpoint uses, ER diagrams (6 areas), class diagrams (6 groups) and the schema of the 89 tables Access-Control uses or owns. Built from the code and the dev schema (read-only); generator scripts are in the session scratchpad.
+  - Findings, not yet fixed:
+    - A1: 21 endpoints have no permission check (reviews decision/assign/complete-stage, settings flags and review stages, guests check-in, sponsors, payouts). The festival comes from a header, so any signed-in user can call them for any festival.
+    - A2: when the header is missing, 60 places fall back to festival 1 and 5 to festival 40.
+    - A3: `GET /api/admin/permission-groups` always returns 500 (it calls a missing function).
+    - A4: placeholder news, analytics and plugin endpoints.
+    - D1: 8 unused tables.
+    - D2: `delegate_reviews` and `event_module_settings` have no migration.
+    - D3: old migration 004 drops the Freecomers `roles` table if run by hand.
+    - D4–D8: unused columns, missing and redundant indexes, missing foreign keys, log retention.
+
 - **2026-11-20: Venue Checkins: rows per page, scroll box, still pages** (`deployed` 2026-11-20).
   - **Why:** 50 rows (~2,150px) pushed the pager below the fold, and FACE2FACE's 43 scans showed as one long page with no pager. 15 rows would mean 10–20 pages for a busy show. The 15s refresh also pushed rows down on page 2+.
   - **Change:** `AttendancePage.jsx`:

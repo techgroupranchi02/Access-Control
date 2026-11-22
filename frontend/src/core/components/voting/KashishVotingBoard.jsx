@@ -11,6 +11,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { useFestivalConfig } from '../../hooks/useFestivalConfig';
+import KashishVoteListDialog from './KashishVoteListDialog';
 import {
   TrophyIcon,
   SyncIcon,
@@ -49,6 +51,11 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
   const [syncing, setSyncing] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [notice, setNotice] = useState(null); // { tone: 'success' | 'error', text }
+  const [voteList, setVoteList] = useState(null); // the Sync status tile whose votes are open
+  // Voter names, emails and mobiles: the same permission as the vote audit (server checks it too)
+  const { hasPermission, isSuperAdmin, currentUserGroup } = useFestivalConfig();
+  const canSeeVoters = Boolean(isSuperAdmin || currentUserGroup === 'admin'
+    || (hasPermission && (hasPermission('voting.audit_fraud') || hasPermission('voting:audit_fraud'))));
 
   const loadLeaderboard = useCallback(async () => {
     try {
@@ -286,12 +293,20 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
                 {OUTCOME_TILES.map(t => {
                   const o = summary.outcomes || {};
                   const value = t.key === 'other' ? (o.not_verified || 0) + (o.invalid || 0) + (o.duplicate || 0) : (o[t.key] || 0);
-                  return (
-                    <div key={t.key} className={`fc-kv-tile is-${t.tone}`}>
+                  const body = (
+                    <>
                       <div className="fc-kv-tile-value">{value}</div>
                       <div className="fc-kv-tile-label">{t.label}</div>
                       <div className="fc-kv-tile-hint">{t.hint}</div>
-                    </div>
+                    </>
+                  );
+                  return canSeeVoters && value > 0 ? (
+                    <button key={t.key} type="button" className={`fc-kv-tile is-${t.tone} is-clickable`} onClick={() => setVoteList(t)} aria-label={`${t.label}: ${value}. See the voters`}>
+                      {body}
+                      <span className="fc-kv-tile-more">See voters</span>
+                    </button>
+                  ) : (
+                    <div key={t.key} className={`fc-kv-tile is-${t.tone}`}>{body}</div>
                   );
                 })}
               </div>
@@ -369,6 +384,10 @@ export default function KashishVotingBoard({ initialData, festivalId }) {
             </>
           )}
         </section>
+      )}
+
+      {voteList && (
+        <KashishVoteListDialog group={voteList.key} label={voteList.label} hint={voteList.hint} onClose={() => setVoteList(null)} />
       )}
     </div>
   );
