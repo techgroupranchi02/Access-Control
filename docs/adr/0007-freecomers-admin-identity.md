@@ -41,3 +41,14 @@
 - **Old data:** existing rows written before this change (e.g. older scans "by SHASHANK") cannot be told apart and are unchanged.
 - **Production:** `admins.id` may collide with a different user there. Check `user_event_groups` for Admin rows of `users.id = (SELECT MIN(id) FROM admins)` (execution plan › Needs action).
 - **The Freecomers admin's own lists:** "my tasks", "my chats" and "my assignments" are empty for an admin.
+
+## Amendment 1 (2026-11-23): no admin access from a users id, and inactive accounts are signed out
+- **What was still open:**
+  - `getProfile` fell back from a `users` id to the `admins` row with the same id, so a deactivated or unverified account (`users.status` 0/3) whose id matched an admin's id loaded as a Freecomers admin.
+  - A role-'admin' token with no admins row got a made-up "Platform Administrator" profile.
+  - An admin accepted by the Laravel admin API with no admins row, and Launch Festival Portal with no admins rows, signed in as admin id 1.
+- **Decision:**
+  - `getProfile` never switches tables. A user who can't sign in, or an admin id with no admins row, gets 401. `/auth/me` passes the 401 through, so the browser signs out.
+  - Admin login and the launch token refuse (403) when there is no admins row. They never use a fixed id.
+  - `authenticate` checks, on every request, that the account behind the token can still sign in: `users.status` in `SIGN_IN_STATUSES` (1, 2; [ADR 0008](0008-team-invitations.md)), or the admins row exists. The answer is cached for 60 seconds per account. A deactivated account loses access within a minute instead of when its token expires (up to 30 days).
+

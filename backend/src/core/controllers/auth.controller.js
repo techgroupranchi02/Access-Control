@@ -110,7 +110,8 @@ async function me(req, res) {
     const profile = await authService.getProfile(req.user.isFreecomersAdmin ? req.user.adminId : req.user.id, req.user.role, eventId, req.user);
     res.json(profile);
   } catch (error) {
-    res.status(404).json({ error: error.message });
+    // 401 signs the browser out (api.js); other failures stay 404
+    res.status(error.statusCode === 401 ? 401 : 404).json({ error: error.message });
   }
 }
 

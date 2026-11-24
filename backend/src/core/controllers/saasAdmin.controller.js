@@ -461,7 +461,11 @@ async function generateLaunchToken(req, res) {
     if (adminRows.length === 0) {
       adminRows = await query('SELECT id, name, email FROM admins ORDER BY id ASC LIMIT 1');
     }
-    const adminUser = adminRows.length > 0 ? adminRows[0] : { id: 1, name: 'Freecomers Administrator', email: 'freecomersfilmworks@gmail.com' };
+    if (adminRows.length === 0) {
+      // Never sign as a made-up admin (fixed id and email; ADR 0007): the token must name a real admins row
+      return res.status(403).json({ error: 'No Freecomers admin account found to sign in as.' });
+    }
+    const adminUser = adminRows[0];
 
     // Sign launch JWT with role: admin, isSuperAdmin: true, targetFestivalId: eventId
     const token = jwt.sign(

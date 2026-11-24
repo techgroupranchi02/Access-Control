@@ -10,6 +10,7 @@
  */
 
 const { query } = require('../../config/database');
+const { canSignInSql } = require('../utils/userStatus');
 const { resolveHighestScope } = require('../services/scoping.service');
 
 /**
@@ -38,7 +39,7 @@ function requirePermission(permissionKey) {
       // Check if user is the OWNER of this event (across any of their linked user IDs)
       let allUserIds = req.user.userIds || [req.user.id];
       if (req.user.email) {
-        const linkedUsers = await query('SELECT id FROM users WHERE email = ? AND status = 1', [req.user.email]);
+        const linkedUsers = await query(`SELECT id FROM users WHERE email = ? AND ${canSignInSql()}`, [req.user.email]);
         if (linkedUsers.length > 0) {
           allUserIds = linkedUsers.map(u => u.id);
         }
@@ -88,6 +89,7 @@ function requirePermission(permissionKey) {
       const customRows = await query(
         `SELECT p.permission_key, ecgp.scope_key
          FROM user_event_custom_groups uecg
+         JOIN event_custom_groups ecg_own ON ecg_own.id = uecg.custom_group_id AND ecg_own.event_id = uecg.event_id
          JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
          JOIN permissions p ON p.id = ecgp.permission_id
          WHERE uecg.user_id IN (${userPlaceholders}) AND uecg.event_id = ? AND p.permission_key IN (${placeholders})`,

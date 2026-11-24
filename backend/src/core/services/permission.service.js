@@ -5,6 +5,7 @@
  */
 
 const { query, getConnection } = require('../../config/database');
+const { canSignInSql } = require('../utils/userStatus');
 
 /**
  * Get all permissions.
@@ -228,7 +229,8 @@ async function getUserPermissions(userId, editionId) {
   const customRows = await query(
     `SELECT DISTINCT p.permission_key
      FROM user_event_custom_groups uecg
-     JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
+     JOIN event_custom_groups ecg_own ON ecg_own.id = uecg.custom_group_id AND ecg_own.event_id = uecg.event_id
+         JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
      JOIN permissions p ON p.id = ecgp.permission_id
      WHERE uecg.user_id = ? AND uecg.event_id = ?`,
     [userId, editionId]
@@ -268,7 +270,7 @@ async function getAllUsersWithGroups() {
       COALESCE(i.name, o.name, u.email) as name, 
       u.email, 
       u.status,
-      (u.status = 1) as is_active, 
+      (${canSignInSql('u')}) as is_active, 
       u.created_at 
     FROM users u
     LEFT JOIN individuals i ON i.user_id = u.id

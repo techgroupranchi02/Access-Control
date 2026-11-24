@@ -35,6 +35,7 @@ _Nothing in progress._
 
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
+| 2026-11-23 | Optional: pre-fill the email on Freecomers signup from the invite link (`/signup?email=…`) | Freecomers web team | `freecomers_frontend_next` (separate repo). FestiPlus would then add the email to the link. |
 | 2026-11-20 | Production: set delegates whose category is not one of the festival's (e.g. Sarang Bhakra, BANGALORE_GENERAL) to the festival's category: preview + UPDATE query given in chat on 2026-11-20. | User | Data only; the code fix stops new ones after deploy. |
 | 2026-11-20 | Production: after the next deploy, check the migrate log for `[Migration 027] … 1 change(s)` (time zone set) and `[Migration 030] ✓ festival …: N of M scan(s) re-marked`; then Attendance shows today's scans as valid inside their windows. | User | The "server time zone must be IST" item below is no longer required once this is deployed. |
 | 2026-11-19 | Production: optional wider check for auto-added Admin rows, for every admins id: ``SELECT ueg.user_id, ueg.event_id, e.name FROM user_event_groups ueg JOIN `groups` g ON g.id = ueg.group_id JOIN events e ON e.event_id = ueg.event_id WHERE g.group_key = 'admin' AND ueg.user_id IN (SELECT id FROM admins);`` | User | 2026-11-19: the check for the first admins id returned no rows on production. Only needed if production has more than one admin. |
@@ -55,6 +56,84 @@ _Nothing in progress._
 | — | Deploy the pending Laravel and Next.js fixes to production | DevOps | Production deploy only; they are not in this repo. |
 
 ## Done
+
+- **2026-11-23: Team › Group Config** (`uncommitted`). [ADR 0009](adr/0009-team-group-config.md).
+  - **Why:** custom groups could only be created (no edit or delete), and the default groups' permissions weren't shown anywhere.
+  - **Change:**
+    - "Group Config" replaces "Add Custom Group" on the Team page.
+      - `/team/groups`: default groups (read-only) and this festival's custom groups, with members, invites, last change, View / Edit / Delete.
+      - `/team/groups/view/:key`: read-only permissions and members; Duplicate as custom group.
+      - `/team/groups/new` and `/team/groups/:id`: create / edit with "Start from", a changes summary and the members affected.
+      - The permission list marks Sensitive and Module off.
+    - `teamGroups.service.js` (new): validation, transactions, 409 on a stale save, delete usage (members keep their default groups; invites updated), `isFestivalAdmin`, `assertCanGrant`.
+    - `team.controller.js` / `team.routes.js`: `GET /team/groups`, `GET|PUT /custom-groups/:id`, `GET /custom-groups/:id/usage`; the group handlers need the festival header (no fallback to festival 1).
+    - **Escalation fix:** only festival Admins can give the Admin group or a group with team / settings management (member add/edit, invite edit).
+    - **Festival isolation:** permission checks and profiles require the group's festival to match the membership's (`permission.middleware.js`, `permission.service.js`, `auth.service.js`, `team.controller.js`).
+    - Migration `032_custom_group_audit.js` (`updated_at`, `updated_by_user_id`, `updated_by_admin_id`).
+    - Frontend: `components/team/GroupConfig.jsx` (new), `TeamPage.jsx`; CSS `.fc-gc-*`, `.fc-perm-flag`.
+  - **Test (dev, festival 40):**
+    - API: 30 checks pass:
+      - overview; reads refused without `team:view`;
+      - validation (short / reserved / hidden-style / duplicate name, no permissions, unknown key, bad scope, raw id, no festival header);
+      - create with scopes; another festival can't get, update, delete or see it;
+      - stale save → 409; case-only rename;
+      - a non-admin with `team:manage` can't give Admin or a sensitive group, but can give a normal one; a non-admin can't edit groups;
+      - a cross-festival membership grants nothing;
+      - usage; delete updates the invite to Volunteer and the member keeps a default group;
+      - "Volunteer Manager" unchanged.
+    - Puppeteer, light, dark and 390px: overview; Admin view (read-only note, flags); Duplicate Volunteer → create; edit with the changes summary; stale-save notice and Reload; delete dialog (unused and in use, Delete disabled until confirmed); not-found page; no sideways scroll. Test groups removed.
+
+- **2026-11-23: Signed-in accounts that are deactivated, or not Freecomers admins, no longer get admin access** (`uncommitted`). [ADR 0007](adr/0007-freecomers-admin-identity.md), Amendment 1.
+  - **Problem:** `getProfile` fell back from a `users` id to the `admins` table with the same id. A token for an account that was later deactivated or never verified, whose id matched an admin's id, loaded as a Freecomers admin. Also:
+    - role 'admin' with no admins row got a made-up "Platform Administrator" profile;
+    - an admin accepted by the Laravel admin API with no admins row signed in as admin id 1;
+    - Launch Festival Portal fell back to admin id 1 with a hard-coded email;
+    - tokens (up to 30 days) kept working after an account was deactivated.
+  - **Change:**
+    - `auth.service.js`:
+      - `getProfile` throws 401 instead of the admins fallback or the made-up admin profile;
+      - admin login refuses (403) when there's no admins row.
+    - `auth.controller.js` › `me` returns 401 for those, so the browser signs out.
+    - `saasAdmin.controller.js` › `generateLaunchToken` refuses (403) when no admin exists.
+    - `auth.middleware.js` › `authenticate` checks every request that the account can still sign in: `users.status` 1/2, or the admins row exists. The result is cached 60 s per account, and a DB error gives 503.
+  - **Test (dev):**
+    - Active user: `/auth/me` and `/team` 200.
+    - Unverified (status 0): 401 on both.
+    - Onboarding (status 2): `/auth/me` 200, `/team` 403 (not in the team).
+    - Real admin: 200. Removed admin id: 401. Token without an id: 401.
+    - `getProfile` for an inactive user and for a missing admin: 401.
+    - Invite tests re-run: 21 pass.
+
+- **2026-11-23: Team: invite people who don't have a Freecomers account** (`uncommitted`). [ADR 0008](adr/0008-team-invitations.md).
+  - **Why:** Add Team Member could only add existing Freecomers accounts, and its hint linked a hard-coded dev site.
+  - **Change:**
+    - Migration `031_team_invitations.js` (new FestiPlus table, added to the runner).
+    - `teamInvites.service.js` (new): create / resend (5-min gap, renews expired) / edit groups / cancel; `claimInvitations` at login; invite and "added" emails; seat usage (members + pending invites, limit from `event_user_limits`, default 25); `assignUserToGroups` moved here.
+    - `team.controller.js` / `team.routes.js`:
+      - `create` invites when there's no usable account, and emails existing accounts that are added;
+      - `list` returns invitations, seats and links;
+      - `search` returns each account's state and whether the email can be invited (unverified duplicates hidden);
+      - new `/team/invitations` routes.
+      - **Security fix:** `update` no longer writes `users.email` / `individuals.name`, and `update` / `remove` refuse people outside the festival. The changed endpoints no longer fall back to festival 1.
+    - `auth.service.js`:
+      - claims invites in password and Google login;
+      - verified accounts (status 2) can sign in;
+      - clear messages for invited people who haven't created or verified their account.
+    - `core/utils/userStatus.js` (new). It is used in `edition.service.js`, `permission.middleware.js`, `permission.service.js` and `review.controller.js`.
+    - Frontend:
+      - `TeamPage.jsx`: "Invite <email>" in search, invite card, "Send invite", result notice, seats in the header and summary, no hard-coded domain.
+      - `components/team/PendingInvitations.jsx` (new): Resend / Copy invite / Groups / Cancel.
+      - CSS `.fc-tinv-*`, `.fc-team-notice`.
+  - **Test (dev, festival 40, email stubbed so nothing was sent):**
+    - Service: 21 checks pass:
+      - email normalised; unknown groups dropped; seat held, and freed when the invite expires;
+      - refusals: duplicate, resend too soon, empty groups, another festival, Freecomers admin email, bad email, existing account;
+      - resend renews; unverified variant; revoke;
+      - two parallel logins claim once; membership created; "added" email.
+    - API: search states (none / unverified / onboarding / active); refusals; `PUT /team/:id` with an email leaves `users.email` unchanged; non-members → 404; volunteer → 403; login message for an invited email without an account; a status-2 profile loads.
+    - Puppeteer, light, dark and 390px: pending list, Groups dialog, Cancel, invite option, Send invite, already-invited and no-match states; no sideways scroll.
+    - Both emails rendered to images.
+    - **Real end-to-end on dev (2026-11-23):** invite emailed to a new address at 10:45. The Freecomers account was created and verified at 10:46:12; at the first FestiPlus sign-in (10:46:46) the invite was accepted and the person joined festival 40 as Volunteer.
 
 - **2026-11-22: Voting › Leaderboard: export as CSV and PDF** (`deployed` 2026-11-22).
   - **Change:**

@@ -22,6 +22,8 @@ const { query } = require('../../config/database');
 const env = require('../../config/environment');
 const { verifyGoogleToken } = require('./googleAuth.service');
 const { formatThumbnailUrl } = require('../utils/media.utils');
+const { canSignInSql, USER_STATUS } = require('../utils/userStatus');
+const teamInvites = require('./teamInvites.service');
 
 const BCRYPT_ROUNDS = 12;
 const MIN_PASSWORD_LENGTH = 8;
@@ -109,6 +111,23 @@ async function checkFestivalRoles(userIds) {
   );
 
   return roles;
+}
+
+/**
+ * Login message for an email with a pending festival team invite but no account that can sign in yet
+ * (docs/adr/0008-team-invitations.md), or null. Says what to do on Freecomers without naming the festival.
+ */
+async function inviteSignInHint(email) {
+  if (!(await teamInvites.pendingInviteFestival(email))) return null;
+  const rows = await query('SELECT status FROM users WHERE email = ?', [email]);
+  const { signupUrl, signinUrl } = teamInvites.accountLinks();
+  if (rows.some((r) => Number(r.status) === USER_STATUS.UNVERIFIED)) {
+    return `You've been invited to a festival team, but your Freecomers account isn't verified yet. Sign in at ${signinUrl} and enter the code Freecomers emails you, then sign in here with the same email.`;
+  }
+  if (!rows.length) {
+    return `You've been invited to a festival team. Create your Freecomers account with this email first at ${signupUrl}, then sign in here with the same email and password.`;
+  }
+  return null;
 }
 
 /**
@@ -216,19 +235,23 @@ async function loginWithGoogle(idToken, { remember = false } = {}) {
      FROM users u
      LEFT JOIN individuals i ON i.user_id = u.id
      LEFT JOIN organizations o ON o.user_id = u.id
-     WHERE u.email = ? AND u.status = 1
+     WHERE u.email = ? AND ${canSignInSql('u')}
      ORDER BY (u.account_type = 'organization') DESC, u.id ASC`,
     [normalizedEmail]
   );
 
   if (users.length === 0) {
-    const err = new Error('No Freecomers account found with this Google email. Please create an account on https://freecomers.com/ first.');
+    const hint = await inviteSignInHint(normalizedEmail);
+    const err = new Error(hint || `No Freecomers account found with this Google email. Please create an account on ${env.freecomersSiteUrl} first.`);
     err.statusCode = 401;
     throw err;
   }
 
   const allUserIds = users.map(u => u.id);
   const localUser = users[0];
+
+  // Pending team invites for this email become team access now (docs/adr/0008-team-invitations.md)
+  await teamInvites.claimInvitations(normalizedEmail, localUser.id, allUserIds);
 
   // ── Step 3: Strict Role Gate (Festival Admin, Jury, Volunteer) ──
   const roles = await checkFestivalRoles(allUserIds);
@@ -368,7 +391,11 @@ async function login(email, password, { remember = false } = {}) {
       if (adminRows.length > 0) {
         adminRecord = adminRows[0];
       } else {
-        adminRecord = { id: 1, email: normalizedEmail, name: 'Administrator' };
+        // Never sign in as a fixed admin id (ADR 0007): the Freecomers admin must exist in the admins table
+        console.warn(`[Auth Service] Admin API accepted ${normalizedEmail}, but there is no admins row for it`);
+        const err = new Error('This Freecomers admin account was not found. Contact Freecomers support.');
+        err.statusCode = 403;
+        throw err;
       }
     }
 
@@ -423,7 +450,7 @@ async function login(email, password, { remember = false } = {}) {
      FROM users u
      LEFT JOIN individuals i ON i.user_id = u.id
      LEFT JOIN organizations o ON o.user_id = u.id
-     WHERE u.email = ? AND u.status = 1
+     WHERE u.email = ? AND ${canSignInSql('u')}
      ORDER BY (u.account_type = 'organization') DESC, u.id ASC`,
     [normalizedEmail]
   );
@@ -453,12 +480,16 @@ async function login(email, password, { remember = false } = {}) {
     }
 
     if (!localUser) {
-      const err = new Error('User account not found or deactivated.');
+      const hint = await inviteSignInHint(normalizedEmail);
+      const err = new Error(hint || 'Your Freecomers account is not verified or has been deactivated. Finish signing up on Freecomers, or contact Freecomers support.');
       err.statusCode = 401;
       throw err;
     }
 
     const allUserIds = users.length > 0 ? users.map(u => u.id) : [localUser.id];
+
+    // Pending team invites for this email become team access now (docs/adr/0008-team-invitations.md)
+    await teamInvites.claimInvitations(normalizedEmail, localUser.id, allUserIds);
 
     // ── Step 3: Strict Role Gate (Festival Admin, Jury, Volunteer) ──
     const roles = await checkFestivalRoles(allUserIds);
@@ -502,8 +533,9 @@ async function login(email, password, { remember = false } = {}) {
     };
   }
 
-  // If neither matches, deny with generic message
-  const err = new Error('Invalid email or password.');
+  // If neither matches, deny with generic message (or the sign-up step an invited person still has to do)
+  const hint = users.length === 0 ? await inviteSignInHint(normalizedEmail) : null;
+  const err = new Error(hint || 'Invalid email or password.');
   err.statusCode = 401;
   throw err;
 }
@@ -530,7 +562,10 @@ async function getProfile(userId, role, editionId, reqUser = null) {
     if (adminRows.length > 0) {
       adminProfile = adminRows[0];
     } else {
-      adminProfile = { id: userId, name: 'Platform Administrator', email: 'admin@freecomers.com' };
+      // An admin token whose admins row is gone: no made-up admin profile
+      const err = new Error('This Freecomers admin account no longer exists. Please sign in again.');
+      err.statusCode = 401;
+      throw err;
     }
   }
 
@@ -623,32 +658,28 @@ async function getProfile(userId, role, editionId, reqUser = null) {
        COALESCE(i.name, o.name, u.email) as name, 
        u.email, 
        u.status,
-       (u.status = 1) as is_active, 
+       (${canSignInSql('u')}) as is_active, 
        u.created_at,
        COALESCE(i.thumbnail_pic, o.thumbnail_pic, i.profile_pic, o.profile_pic) as thumbnail_pic
      FROM users u
      LEFT JOIN individuals i ON i.user_id = u.id
      LEFT JOIN organizations o ON o.user_id = u.id
-     WHERE u.id = ? AND u.status = 1`,
+     WHERE u.id = ? AND ${canSignInSql('u')}`,
     [userId]
   );
 
   if (users.length === 0) {
-    // Check if user is in admins table as fallback
-    const fallbackAdmins = await query(
-      'SELECT id, name, email FROM admins WHERE id = ? LIMIT 1',
-      [userId]
-    );
-    if (fallbackAdmins.length > 0) {
-      return getProfile(userId, 'admin', editionId, reqUser);
-    }
-    throw new Error('User not found or deactivated.');
+    // Never fall back to the admins table: admins.id and users.id are different tables (ADR 0007), so a
+    // deactivated or unverified account whose id matched an admin's id used to load as a Freecomers admin.
+    const err = new Error('Your Freecomers account is not active. Please sign in again.');
+    err.statusCode = 401;
+    throw err;
   }
 
   const user = users[0];
 
   // Resolve all linked user IDs for this email to support both individual & organization festival ownership
-  const linkedUsers = await query('SELECT id FROM users WHERE email = ? AND status = 1', [user.email]);
+  const linkedUsers = await query(`SELECT id FROM users WHERE email = ? AND ${canSignInSql()}`, [user.email]);
   const allUserIds = linkedUsers.length > 0 ? linkedUsers.map(u => u.id) : [userId];
   const userPlaceholders = allUserIds.map(() => '?').join(',');
 
@@ -738,7 +769,8 @@ async function getProfile(userId, role, editionId, reqUser = null) {
     let rows = await query(
       `SELECT DISTINCT p.id, p.permission_key, p.label, p.actions_match, p.actions_unmatch, ecgp.scope_key
        FROM user_event_custom_groups uecg
-       JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
+       JOIN event_custom_groups ecg_own ON ecg_own.id = uecg.custom_group_id AND ecg_own.event_id = uecg.event_id
+         JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
        JOIN permissions p ON p.id = ecgp.permission_id
        WHERE uecg.user_id IN (${userPlaceholders}) AND uecg.event_id = ?`,
       [...allUserIds, targetEditionId]
@@ -746,7 +778,7 @@ async function getProfile(userId, role, editionId, reqUser = null) {
 
     if (rows.length === 0) {
       const hasCustomConfig = await query(
-        `SELECT 1 FROM user_event_custom_groups WHERE user_id IN (${userPlaceholders}) AND event_id = ? LIMIT 1`,
+        `SELECT 1 FROM user_event_custom_groups uecg JOIN event_custom_groups ecg_own ON ecg_own.id = uecg.custom_group_id AND ecg_own.event_id = uecg.event_id WHERE uecg.user_id IN (${userPlaceholders}) AND uecg.event_id = ? LIMIT 1`,
         [...allUserIds, targetEditionId]
       );
       if (hasCustomConfig.length === 0) {

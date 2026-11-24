@@ -38,6 +38,8 @@ const MIGRATION_SCRIPTS = [
   path.resolve(__dirname, '028_kashish_movies_catalog.js'),
   path.resolve(__dirname, '029_freecomers_admin_actor.js'),
   path.resolve(__dirname, '030_recompute_scan_status.js'),
+  path.resolve(__dirname, '031_team_invitations.js'),
+  path.resolve(__dirname, '032_custom_group_audit.js'),
   path.resolve(__dirname, '../src/scripts/sync_specs_to_database.js'),
 ];
 

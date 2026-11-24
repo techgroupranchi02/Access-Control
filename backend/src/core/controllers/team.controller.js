@@ -7,6 +7,37 @@ const { query } = require('../../config/database');
 const bcrypt = require('bcrypt');
 const { resolveHighestScope } = require('../services/scoping.service');
 const { formatThumbnailUrl } = require('../utils/media.utils');
+const { accountState } = require('../utils/userStatus');
+const teamInvites = require('../services/teamInvites.service');
+const { assignUserToGroups, InviteError } = teamInvites;
+const teamGroups = require('../services/teamGroups.service');
+const { GroupError } = teamGroups;
+
+/** The festival from the request headers, or null. New team endpoints never fall back to a fixed festival. */
+function eventIdOf(req) {
+  const raw = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId;
+  const n = parseInt(raw, 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function sendInviteError(res, err, tag) {
+  if (err instanceof InviteError || err instanceof GroupError) {
+    const { status, message, code, invitationId } = err;
+    return res.status(status).json({ error: message, ...(code ? { code } : {}), ...(invitationId ? { invitationId } : {}) });
+  }
+  console.error(`[TeamController] ${tag} error:`, err);
+  return res.status(500).json({ error: 'Something went wrong. Try again.' });
+}
+
+/** Is this user (any account with the same email) a member of the festival team? */
+async function isTeamMember(userId, eventId) {
+  const rows = await query(
+    `SELECT 1 FROM user_event_groups WHERE user_id = ? AND event_id = ?
+     UNION SELECT 1 FROM user_event_custom_groups WHERE user_id = ? AND event_id = ? LIMIT 1`,
+    [userId, eventId, userId, eventId]
+  );
+  return rows.length > 0;
+}
 
 const GROUP_PERMISSIONS = {
   admin: [
@@ -84,7 +115,7 @@ async function getMemberPermissions(userId, eventId) {
   const customGroups = await query(`
     SELECT ecg.id, ecg.name, ecg.description
     FROM user_event_custom_groups uecg
-    JOIN event_custom_groups ecg ON ecg.id = uecg.custom_group_id
+    JOIN event_custom_groups ecg ON ecg.id = uecg.custom_group_id AND ecg.event_id = uecg.event_id
     WHERE uecg.user_id = ? AND uecg.event_id = ?
     ORDER BY ecg.name ASC
   `, [userId, eventId]);
@@ -105,7 +136,8 @@ async function getMemberPermissions(userId, eventId) {
   const customPerms = await query(`
     SELECT DISTINCT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order, ecgp.scope_key as scopeKey
     FROM user_event_custom_groups uecg
-    JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
+    JOIN event_custom_groups ecg_own ON ecg_own.id = uecg.custom_group_id AND ecg_own.event_id = uecg.event_id
+         JOIN event_custom_group_permissions ecgp ON ecgp.custom_group_id = uecg.custom_group_id
     JOIN permissions p ON p.id = ecgp.permission_id
     JOIN modules m ON m.id = p.module_id
     WHERE uecg.user_id = ? AND uecg.event_id = ?
@@ -244,7 +276,7 @@ async function list(req, res) {
         ecg.created_at,
         COUNT(DISTINCT uecg.user_id) as member_count
       FROM event_custom_groups ecg
-      LEFT JOIN user_event_custom_groups uecg ON uecg.custom_group_id = ecg.id
+      LEFT JOIN user_event_custom_groups uecg ON uecg.custom_group_id = ecg.id AND uecg.event_id = ecg.event_id
       WHERE ecg.event_id = ? AND ecg.name NOT LIKE 'user_%_custom'
       GROUP BY ecg.id, ecg.name, ecg.description, ecg.created_at
       ORDER BY ecg.name ASC
@@ -271,15 +303,23 @@ async function list(req, res) {
       };
     }));
 
+    const [invitations, seats] = await Promise.all([
+      teamInvites.listPending(eventId),
+      teamInvites.seatUsage(eventId)
+    ]);
+
     res.json({
       users,
+      invitations,
       catalog,
       groupDefaults,
       groupScopeDefaults,
       customGroups,
       totalCount: users.length,
-      seatsAllocated: users.length,
-      seatLimit: 25
+      // Seats count members and pending invites (an invite holds a seat until it is accepted or cancelled)
+      seatsAllocated: seats.used,
+      seatLimit: seats.limit,
+      links: teamInvites.accountLinks()
     });
   } catch (error) {
     console.error('[TeamController] list error:', error);
@@ -353,65 +393,98 @@ async function getById(req, res) {
  */
 async function searchIndividuals(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = eventIdOf(req);
+    if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
     const q = (req.query.q || '').trim();
+    const links = teamInvites.accountLinks();
 
     if (!q || q.length < 2) {
-      return res.json({ users: [] });
+      return res.json({ users: [], links });
     }
 
     const pattern = `%${q}%`;
     const prefix = `${q}%`;
 
+    // Every account except deleted ones: unverified, onboarding and deactivated accounts are shown with their
+    // state so staff know why one can't be added (docs/adr/0008-team-invitations.md)
     const rows = await query(`
       SELECT 
         u.id as user_id,
         u.email,
+        u.status,
         u.account_type,
         COALESCE(i.name, o.name, u.email) as name,
         COALESCE(i.username, o.username, '') as username,
         COALESCE(i.image_name, o.image_name, '') as image_name,
         COALESCE(i.thumbnail_pic, o.thumbnail_pic, i.profile_pic, o.profile_pic) as thumbnail_pic,
         EXISTS(
-          SELECT 1 FROM user_event_groups ueg 
-          WHERE ueg.user_id = u.id AND ueg.event_id = ?
+          SELECT 1 FROM user_event_groups ueg WHERE ueg.user_id = u.id AND ueg.event_id = ?
+          UNION SELECT 1 FROM user_event_custom_groups uecg WHERE uecg.user_id = u.id AND uecg.event_id = ?
         ) as is_already_member
       FROM users u
       LEFT JOIN individuals i ON i.user_id = u.id
       LEFT JOIN organizations o ON o.user_id = u.id
       WHERE 
-        (u.status = 1 OR u.status IS NULL)
-        AND (
+        (
           COALESCE(i.name, o.name) LIKE ? 
           OR u.email LIKE ? 
           OR COALESCE(i.username, o.username) LIKE ?
         )
       ORDER BY 
         CASE 
+          WHEN u.email = ? THEN 0
           WHEN COALESCE(i.name, o.name) LIKE ? THEN 1
           WHEN u.email LIKE ? THEN 2
           ELSE 3 
         END,
+        (u.status = 1 OR u.status IS NULL) DESC,
         (u.account_type = 'organization') DESC,
         u.id ASC
       LIMIT 30
-    `, [eventId, pattern, pattern, pattern, prefix, prefix]);
+    `, [eventId, eventId, pattern, pattern, pattern, q.toLowerCase(), prefix, prefix]);
 
-    const users = rows.map(r => ({
-      userId: r.user_id,
-      name: r.name || 'Unnamed User',
-      email: r.email,
-      username: r.username,
-      imageName: r.image_name,
-      accountType: r.account_type || 'individual',
-      accountTypeLabel: r.account_type === 'organization' ? 'Organization Account' : 'Individual Account',
-      isAlreadyMember: Boolean(r.is_already_member),
-      thumbnail: formatThumbnailUrl(r.thumbnail_pic),
-      thumbnailPic: formatThumbnailUrl(r.thumbnail_pic),
-      thumbnail_pic: formatThumbnailUrl(r.thumbnail_pic)
-    }));
+    const users = rows.map(r => {
+      const state = accountState(r.status);
+      return {
+        userId: r.user_id,
+        name: r.name || 'Unnamed User',
+        email: r.email,
+        username: r.username,
+        imageName: r.image_name,
+        accountType: r.account_type || 'individual',
+        accountTypeLabel: r.account_type === 'organization' ? 'Organization Account' : 'Individual Account',
+        // active / onboarding can sign in now; unverified gets an invite; deactivated can't be added
+        accountState: state,
+        isAlreadyMember: Boolean(r.is_already_member),
+        thumbnail: formatThumbnailUrl(r.thumbnail_pic),
+        thumbnailPic: formatThumbnailUrl(r.thumbnail_pic),
+        thumbnail_pic: formatThumbnailUrl(r.thumbnail_pic)
+      };
+    });
 
-    res.json({ users });
+    // An unverified duplicate of an email that already has a working account can't be invited: hide it
+    const usableEmails = new Set(users.filter(u => u.accountState === 'active' || u.accountState === 'onboarding').map(u => (u.email || '').toLowerCase()));
+    for (let i = users.length - 1; i >= 0; i--) {
+      if (users[i].accountState === 'unverified' && usableEmails.has((users[i].email || '').toLowerCase())) users.splice(i, 1);
+    }
+
+    // When the query is an email, say whether it can be invited
+    const email = teamInvites.normalizeEmail(q);
+    let invite = null;
+    if (teamInvites.isValidEmail(email)) {
+      const [pending] = await query("SELECT id FROM team_invitations WHERE event_id = ? AND email = ? AND status = 'pending' LIMIT 1", [eventId, email]);
+      const exact = users.filter(u => (u.email || '').toLowerCase() === email);
+      const state = exact.length ? await teamInvites.accountStateForEmail(email) : 'none';
+      invite = {
+        email,
+        accountState: state,
+        alreadyInvited: Boolean(pending),
+        invitationId: pending?.id || null,
+        canInvite: !pending && (state === 'none' || state === 'unverified')
+      };
+    }
+
+    res.json({ users, links, invite });
   } catch (error) {
     console.error('[TeamController] searchIndividuals error:', error);
     res.status(500).json({ error: 'Failed to search users.' });
@@ -528,28 +601,46 @@ async function syncUserCustomPermissions(userId, eventId, permissions, targetRol
 
 /**
  * POST /api/team
- * Adds an existing user (individual filmmaker or organization) to the festival edition's team.
+ * Adds an existing Freecomers account to the festival team and emails them, or, for an email with no usable
+ * account, creates a pending invitation and emails sign-up steps (docs/adr/0008-team-invitations.md).
  */
 async function create(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
-    const { userId, email, role, group, permissions, accountType } = req.body;
+    const eventId = eventIdOf(req);
+    if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
+    const { userId, email, accountType } = req.body;
+    const rawGroups = req.body.groups || req.body.group || req.body.role || 'volunteer';
+    // Only festival Admins may give the Admin group or a group that can manage the team / settings
+    try {
+      await teamGroups.assertCanGrant(req, eventId, await teamInvites.normalizeGroups(eventId, rawGroups));
+    } catch (err) {
+      return sendInviteError(res, err, 'create');
+    }
 
     let targetUserId = userId;
 
     // If userId was not passed, attempt lookup by email in users table
     if (!targetUserId && email) {
-      const lookupParams = [email.toLowerCase().trim()];
-      let sql = 'SELECT u.id, u.account_type FROM users u WHERE u.email = ?';
+      const lookupParams = [teamInvites.normalizeEmail(email)];
+      let sql = 'SELECT u.id, u.account_type, u.status FROM users u WHERE u.email = ?';
       if (accountType) {
         sql += ' AND u.account_type = ?';
         lookupParams.push(accountType);
       }
-      sql += ' ORDER BY (u.account_type = "organization") DESC LIMIT 1';
+      sql += ' ORDER BY (u.status = 1) DESC, (u.status = 2) DESC, (u.account_type = "organization") DESC LIMIT 1';
       const lookup = await query(sql, lookupParams);
 
-      if (lookup.length > 0) {
+      // Only an account that can sign in is added directly; anything else becomes an invitation
+      const state = lookup.length ? accountState(lookup[0].status) : 'none';
+      if (state === 'active' || state === 'onboarding') {
         targetUserId = lookup[0].id;
+      } else if (req.body.invite) {
+        try {
+          const result = await teamInvites.createInvitation({ eventId, email, groups: rawGroups, req });
+          return res.status(201).json({ message: 'Invitation saved.', ...result });
+        } catch (err) {
+          return sendInviteError(res, err, 'invite');
+        }
       }
     }
 
@@ -561,7 +652,7 @@ async function create(req, res) {
 
     // Verify user exists in users table (either individual or organization)
     const userRows = await query(`
-      SELECT u.id, u.email, u.account_type,
+      SELECT u.id, u.email, u.account_type, u.status,
              COALESCE(i.name, o.name, u.email) as name,
              COALESCE(i.username, o.username, '') as username,
              COALESCE(i.image_name, o.image_name, '') as image_name
@@ -579,37 +670,48 @@ async function create(req, res) {
     }
 
     const targetUser = userRows[0];
+    const state = accountState(targetUser.status);
+    if (state === 'deactivated') {
+      return res.status(400).json({ error: 'This Freecomers account is deactivated. Ask Freecomers support to reactivate it first.' });
+    }
+    if (state === 'unverified') {
+      // Can't sign in until the email is verified: invite instead, claimed at their first login
+      try {
+        const result = await teamInvites.createInvitation({ eventId, email: targetUser.email, groups: rawGroups, req });
+        return res.status(201).json({ message: 'Invitation saved.', ...result });
+      } catch (err) {
+        return sendInviteError(res, err, 'invite');
+      }
+    }
 
     // Check if user is already assigned to this festival edition
-    const existingMember = await query(
-      'SELECT id FROM user_event_groups WHERE user_id = ? AND event_id = ? LIMIT 1',
-      [targetUserId, eventId]
-    );
-    if (existingMember.length > 0) {
+    if (await isTeamMember(targetUserId, eventId)) {
       const typeLabel = targetUser.account_type === 'organization' ? 'Organization Account' : 'Individual Account';
       return res.status(400).json({ 
         error: `${targetUser.name || targetUser.email} (${typeLabel}) is already a member of this festival edition team.` 
       });
     }
 
-    // Check seat limit
-    const currentCountRes = await query(
-      'SELECT count(*) as count FROM user_event_groups WHERE event_id = ?',
-      [eventId]
-    );
-    const currentCount = currentCountRes[0].count;
-    if (currentCount >= 25) {
-      return res.status(403).json({ error: 'Seat allocation limit reached (25 seats max).' });
+    // Seat limit (members + pending invites; set per festival in the SaaS console)
+    const usage = await teamInvites.seatUsage(eventId);
+    const ownInvite = await query("SELECT id FROM team_invitations WHERE event_id = ? AND email = ? AND status = 'pending' AND expires_at > NOW() LIMIT 1", [eventId, teamInvites.normalizeEmail(targetUser.email)]);
+    // A pending invite for this same email already holds the seat
+    if (usage.used - (ownInvite.length ? 1 : 0) >= usage.limit) {
+      return res.status(403).json({ error: `All ${usage.limit} team seats are in use (pending invites count too). Remove a member or cancel an invite first.` });
     }
 
     // Assign user to multiple groups (standard and/or custom)
-    const rawGroups = req.body.groups || req.body.group || req.body.role || 'volunteer';
-    await assignUserToGroups(targetUserId, eventId, rawGroups);
+    const assigned = await assignUserToGroups(targetUserId, eventId, rawGroups);
+    await teamInvites.markAcceptedForEmail(eventId, targetUser.email, targetUserId);
 
     const permData = await getMemberPermissions(targetUserId, eventId);
+    const emailResult = req.body.notify === false
+      ? { sent: false, reason: 'Not requested.' }
+      : await teamInvites.sendAddedEmail({ eventId, email: targetUser.email, groups: assigned, req });
 
     res.status(201).json({
       message: 'Team member added successfully.',
+      email: emailResult,
       member: {
         id: targetUserId,
         name: targetUser.name || targetUser.email,
@@ -622,84 +724,14 @@ async function create(req, res) {
         role: permData.groupDisplay,
         group: permData.groupDisplay,
         roleKey: permData.primaryRoleKey,
-        groupId: permData.groups[0]?.id || 2,
+        groupId: permData.groups[0]?.id || null,
         permissions: permData.permissions,
         hasCustomPermissions: permData.hasCustomPermissions
       }
     });
   } catch (error) {
     console.error('[TeamController] create error:', error);
-    res.status(500).json({ error: error.message || 'Failed to add team member.' });
-  }
-}
-
-/**
- * Helper: Assign a user to one or more groups (standard and/or custom) for an event
- */
-async function assignUserToGroups(userId, eventId, rawGroups) {
-  const selectedGroupKeys = Array.isArray(rawGroups) && rawGroups.length > 0
-    ? rawGroups
-    : (rawGroups ? [rawGroups] : ['volunteer']);
-
-  const standardKeys = [];
-  const customIds = [];
-
-  for (const gk of selectedGroupKeys) {
-    if (typeof gk === 'string' && gk.startsWith('custom_')) {
-      const cid = parseInt(gk.replace('custom_', ''), 10);
-      if (!isNaN(cid)) customIds.push(cid);
-    } else if (typeof gk === 'number') {
-      customIds.push(gk);
-    } else if (typeof gk === 'string') {
-      const k = gk.toLowerCase().trim();
-      if (k === 'admin' || k.includes('admin')) {
-        if (!standardKeys.includes('admin')) standardKeys.push('admin');
-      } else if (k === 'jury' || k === 'judge' || k.includes('jury') || k.includes('judge')) {
-        if (!standardKeys.includes('jury')) standardKeys.push('jury');
-      } else if (k === 'volunteer' || k.includes('volunteer')) {
-        if (!standardKeys.includes('volunteer')) standardKeys.push('volunteer');
-      }
-    }
-  }
-
-  // Ensure at least one standard group is present for base event membership
-  if (standardKeys.length === 0 && customIds.length === 0) {
-    standardKeys.push('volunteer');
-  }
-
-  // Remove previous assignments
-  await query('DELETE FROM user_event_groups WHERE user_id = ? AND event_id = ?', [userId, eventId]);
-  await query('DELETE FROM user_event_custom_groups WHERE user_id = ? AND event_id = ?', [userId, eventId]);
-
-  // Insert standard groups
-  if (standardKeys.length > 0) {
-    const stdGroupRows = await query(
-      `SELECT id, group_key FROM \`groups\` WHERE group_key IN (${standardKeys.map(() => '?').join(',')})`,
-      standardKeys
-    );
-    for (const sg of stdGroupRows) {
-      await query('INSERT INTO user_event_groups (user_id, event_id, group_id) VALUES (?, ?, ?)', [userId, eventId, sg.id]);
-    }
-  } else {
-    await query('INSERT INTO user_event_groups (user_id, event_id, group_id) VALUES (?, ?, 2)', [userId, eventId]);
-  }
-
-  // Insert custom groups
-  if (customIds.length > 0) {
-    const validCgs = await query(
-      `SELECT id FROM event_custom_groups WHERE event_id = ? AND id IN (${customIds.map(() => '?').join(',')})`,
-      [eventId, ...customIds]
-    );
-    for (const cg of validCgs) {
-      await query('INSERT INTO user_event_custom_groups (user_id, event_id, custom_group_id) VALUES (?, ?, ?)', [userId, eventId, cg.id]);
-    }
-  }
-
-  // Clean up any old ad-hoc override group
-  const adHocCg = await query('SELECT id FROM event_custom_groups WHERE event_id = ? AND name = ? LIMIT 1', [eventId, `user_${userId}_custom`]);
-  if (adHocCg.length > 0) {
-    await query('DELETE FROM event_custom_group_permissions WHERE custom_group_id = ?', [adHocCg[0].id]);
-    await query('DELETE FROM event_custom_groups WHERE id = ?', [adHocCg[0].id]);
+    res.status(500).json({ error: 'Failed to add team member.' });
   }
 }
 
@@ -710,28 +742,22 @@ async function assignUserToGroups(userId, eventId, rawGroups) {
 async function update(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
-    const { name, email, role, group, groups } = req.body;
-
-    if (email) {
-      await query('UPDATE users SET email = ? WHERE id = ?', [email.toLowerCase().trim(), id]);
+    const eventId = eventIdOf(req);
+    if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
+    if (!Number.isInteger(id) || !(await isTeamMember(id, eventId))) {
+      return res.status(404).json({ error: 'Team member not found in this festival.' });
     }
-    if (name) {
-      const ind = await query('SELECT id FROM individuals WHERE user_id = ?', [id]);
-      if (ind.length > 0) {
-        await query('UPDATE individuals SET name = ? WHERE user_id = ?', [name.trim(), id]);
-      } else {
-        const org = await query('SELECT id FROM organizations WHERE user_id = ?', [id]);
-        if (org.length > 0) {
-          await query('UPDATE organizations SET name = ? WHERE user_id = ?', [name.trim(), id]);
-        } else {
-          await query('INSERT INTO individuals (user_id, name) VALUES (?, ?)', [id, name.trim()]);
-        }
-      }
-    }
+    // Name and email belong to the person's Freecomers account (shared users table): FestiPlus only changes
+    // their festival groups here.
+    const { role, group, groups } = req.body;
 
     const rawGroups = groups !== undefined ? groups : (group || role);
     if (rawGroups !== undefined) {
+      try {
+        await teamGroups.assertCanGrant(req, eventId, await teamInvites.normalizeGroups(eventId, rawGroups));
+      } catch (err) {
+        return sendInviteError(res, err, 'update');
+      }
       await assignUserToGroups(id, eventId, rawGroups);
     }
 
@@ -748,7 +774,11 @@ async function update(req, res) {
 async function remove(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = eventIdOf(req);
+    if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
+    if (!Number.isInteger(id) || !(await isTeamMember(id, eventId))) {
+      return res.status(404).json({ error: 'Team member not found in this festival.' });
+    }
 
     // Protection 1: Prevent user from removing their active logged-in account
     if (req.user && req.user.id === id) {
@@ -785,213 +815,128 @@ async function remove(req, res) {
   }
 }
 
-/**
- * GET /api/team/custom-groups
- * Returns all custom groups created for current festival event.
- */
-async function listCustomGroups(req, res) {
+// ── Group Config (docs/adr/0009-team-group-config.md) ───────────────────────
+// Custom groups belong to one festival: every handler is scoped by the festival header and never falls back.
+
+function withFestival(handler, tag) {
+  return async (req, res) => {
+    try {
+      const eventId = eventIdOf(req);
+      if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
+      await handler(req, res, eventId);
+    } catch (err) {
+      sendInviteError(res, err, tag);
+    }
+  };
+}
+
+/** GET /api/team/groups: default groups (read-only) and this festival's custom groups */
+const groupsOverview = withFestival(async (req, res, eventId) => {
+  res.json(await teamGroups.overview(req, eventId));
+}, 'groupsOverview');
+
+/** GET /api/team/custom-groups (kept for older callers) */
+const listCustomGroups = withFestival(async (req, res, eventId) => {
+  res.json({ customGroups: await teamGroups.listCustomGroups(eventId) });
+}, 'listCustomGroups');
+
+/** GET /api/team/custom-groups/:id */
+const getCustomGroup = withFestival(async (req, res, eventId) => {
+  res.json({ group: await teamGroups.getCustomGroup(eventId, req.params.id) });
+}, 'getCustomGroup');
+
+/** POST /api/team/custom-groups  { name, description, permissions: [{ key, scopeKey }] } (festival Admins) */
+const createCustomGroup = withFestival(async (req, res, eventId) => {
+  const group = await teamGroups.createGroup(req, eventId, req.body);
+  res.status(201).json({ message: `Custom group "${group.name}" created.`, group });
+}, 'createCustomGroup');
+
+/** PUT /api/team/custom-groups/:id  { name, description, permissions, expectedUpdatedAt } (festival Admins) */
+const updateCustomGroup = withFestival(async (req, res, eventId) => {
+  const group = await teamGroups.updateGroup(req, eventId, req.params.id, req.body);
+  res.json({ message: `Custom group "${group.name}" saved.`, group });
+}, 'updateCustomGroup');
+
+/** GET /api/team/custom-groups/:id/usage: members and pending invites a delete would affect */
+const customGroupUsage = withFestival(async (req, res, eventId) => {
+  res.json(await teamGroups.groupUsage(eventId, req.params.id));
+}, 'customGroupUsage');
+
+/** DELETE /api/team/custom-groups/:id (festival Admins). Members keep their default groups. */
+const deleteCustomGroup = withFestival(async (req, res, eventId) => {
+  const usage = await teamGroups.deleteGroup(req, eventId, req.params.id);
+  res.json({ message: `Custom group "${usage.name}" deleted.`, ...usage });
+}, 'deleteCustomGroup');
+
+// ── Invitations (docs/adr/0008-team-invitations.md) ─────────────────────────
+
+/** GET /api/team/invitations */
+async function listInvitations(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
-
-    const rows = await query(`
-      SELECT 
-        ecg.id,
-        ecg.name,
-        ecg.description,
-        ecg.created_at,
-        COUNT(DISTINCT uecg.user_id) as member_count
-      FROM event_custom_groups ecg
-      LEFT JOIN user_event_custom_groups uecg ON uecg.custom_group_id = ecg.id
-      WHERE ecg.event_id = ? AND ecg.name NOT LIKE 'user_%_custom'
-      GROUP BY ecg.id, ecg.name, ecg.description, ecg.created_at
-      ORDER BY ecg.name ASC
-    `, [eventId]);
-
-    const customGroups = await Promise.all(rows.map(async cg => {
-      const perms = await query(`
-        SELECT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order, ecgp.scope_key as scopeKey
-        FROM event_custom_group_permissions ecgp
-        JOIN permissions p ON p.id = ecgp.permission_id
-        JOIN modules m ON m.id = p.module_id
-        WHERE ecgp.custom_group_id = ?
-        ORDER BY m.display_order ASC, p.id ASC
-      `, [cg.id]);
-
-      return {
-        id: cg.id,
-        name: cg.name,
-        description: cg.description || '',
-        memberCount: parseInt(cg.member_count || 0, 10),
-        permissions: perms.map(p => p.key),
-        permissionDetails: perms,
-        createdAt: cg.created_at
-      };
-    }));
-
-    res.json({ customGroups });
-  } catch (error) {
-    console.error('[TeamController] listCustomGroups error:', error);
-    res.status(500).json({ error: 'Failed to retrieve custom groups.' });
+    const eventId = eventIdOf(req);
+    if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
+    res.json({ invitations: await teamInvites.listPending(eventId), seats: await teamInvites.seatUsage(eventId) });
+  } catch (err) {
+    sendInviteError(res, err, 'listInvitations');
   }
 }
 
-/**
- * POST /api/team/custom-groups
- * Creates a new custom group with modular permissions.
- * Allowed ONLY for Festival Administrator.
- */
-async function createCustomGroup(req, res) {
+/** POST /api/team/invitations/:id/resend */
+async function resendInvitation(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
-    const { name, description, permissions } = req.body;
-
-    // Security check: ONLY Festival Admin can create custom groups
-    const isDirectAdmin = req.user && (
-      req.user.isSuperAdmin ||
-      req.user.role === 'Admin' ||
-      req.user.current_group === 'admin'
-    );
-    if (!isDirectAdmin) {
-      const adminRows = await query(
-        'SELECT 1 FROM user_event_groups ueg JOIN `groups` g ON g.id = ueg.group_id WHERE ueg.user_id = ? AND ueg.event_id = ? AND g.group_key = "admin" LIMIT 1',
-        [req.user ? req.user.id : 0, eventId]
-      );
-      if (adminRows.length === 0) {
-        return res.status(403).json({ error: 'Only Festival Administrators can create custom groups.' });
-      }
-    }
-
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Group name is required.' });
-    }
-
-    const trimmedName = name.trim();
-
-    // Prevent using reserved group names
-    if (['admin', 'jury', 'judge', 'volunteer', 'all'].includes(trimmedName.toLowerCase())) {
-      return res.status(400).json({ error: `"${trimmedName}" is a reserved group name. Please choose another name.` });
-    }
-
-    // Check duplicate name for this event
-    const existing = await query(
-      'SELECT id FROM event_custom_groups WHERE event_id = ? AND LOWER(name) = ? LIMIT 1',
-      [eventId, trimmedName.toLowerCase()]
-    );
-    if (existing.length > 0) {
-      return res.status(400).json({ error: `A group named "${trimmedName}" already exists for this festival.` });
-    }
-
-    // Insert into event_custom_groups
-    const insRes = await query(
-      'INSERT INTO event_custom_groups (event_id, name, description) VALUES (?, ?, ?)',
-      [eventId, trimmedName, description ? description.trim() : null]
-    );
-    const customGroupId = insRes.insertId;
-
-    // Associate modular permissions
-    if (Array.isArray(permissions) && permissions.length > 0) {
-      for (const item of permissions) {
-        let pId = null;
-        let scopeKey = 'all';
-        if (typeof item === 'number') {
-          pId = item;
-        } else if (typeof item === 'string') {
-          const pRows = await query('SELECT id FROM permissions WHERE permission_key = ? LIMIT 1', [item]);
-          if (pRows.length > 0) pId = pRows[0].id;
-        } else if (typeof item === 'object' && item !== null) {
-          if (item.id) pId = item.id;
-          else if (item.key) {
-            const pRows = await query('SELECT id FROM permissions WHERE permission_key = ? LIMIT 1', [item.key]);
-            if (pRows.length > 0) pId = pRows[0].id;
-          }
-          if (item.scopeKey || item.scope_key) {
-            scopeKey = item.scopeKey || item.scope_key;
-          }
-        }
-        if (pId) {
-          await query(
-            'INSERT INTO event_custom_group_permissions (custom_group_id, permission_id, scope_key) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE scope_key = VALUES(scope_key)',
-            [customGroupId, pId, scopeKey]
-          );
-        }
-      }
-    }
-
-    // Fetch created group with full details
-    const perms = await query(`
-      SELECT p.id, p.permission_key as \`key\`, p.label, p.description, p.module_id as moduleId, m.label as module, m.display_order, ecgp.scope_key as scopeKey
-      FROM event_custom_group_permissions ecgp
-      JOIN permissions p ON p.id = ecgp.permission_id
-      JOIN modules m ON m.id = p.module_id
-      WHERE ecgp.custom_group_id = ?
-      ORDER BY m.display_order ASC, p.id ASC
-    `, [customGroupId]);
-
-    res.status(201).json({
-      message: `Custom group "${trimmedName}" created successfully.`,
-      group: {
-        id: customGroupId,
-        name: trimmedName,
-        description: description ? description.trim() : '',
-        memberCount: 0,
-        permissions: perms.map(p => p.key),
-        permissionDetails: perms,
-        createdAt: new Date().toISOString()
-      }
-    });
-  } catch (error) {
-    console.error('[TeamController] createCustomGroup error:', error);
-    res.status(500).json({ error: 'Failed to create custom group.' });
+    const eventId = eventIdOf(req);
+    if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
+    res.json(await teamInvites.resendInvitation({ eventId, id: parseInt(req.params.id, 10), req }));
+  } catch (err) {
+    sendInviteError(res, err, 'resendInvitation');
   }
 }
 
-/**
- * DELETE /api/team/custom-groups/:id
- * Removes a custom group and unassigns members.
- * Allowed ONLY for Festival Administrator.
- */
-async function deleteCustomGroup(req, res) {
+/** PUT /api/team/invitations/:id  { groups } */
+async function updateInvitation(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
-    const customGroupId = parseInt(req.params.id, 10);
+    const eventId = eventIdOf(req);
+    if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
+    await teamGroups.assertCanGrant(req, eventId, await teamInvites.normalizeGroups(eventId, req.body.groups));
+    const invitation = await teamInvites.updateInvitationGroups({ eventId, id: parseInt(req.params.id, 10), groups: req.body.groups });
+    res.json({ invitation });
+  } catch (err) {
+    sendInviteError(res, err, 'updateInvitation');
+  }
+}
 
-    const isDirectAdmin = req.user && (
-      req.user.isSuperAdmin ||
-      req.user.role === 'Admin' ||
-      req.user.current_group === 'admin'
-    );
-    if (!isDirectAdmin) {
-      const adminRows = await query(
-        'SELECT 1 FROM user_event_groups ueg JOIN `groups` g ON g.id = ueg.group_id WHERE ueg.user_id = ? AND ueg.event_id = ? AND g.group_key = "admin" LIMIT 1',
-        [req.user ? req.user.id : 0, eventId]
-      );
-      if (adminRows.length === 0) {
-        return res.status(403).json({ error: 'Only Festival Administrators can manage custom groups.' });
-      }
-    }
+/** DELETE /api/team/invitations/:id */
+async function revokeInvitation(req, res) {
+  try {
+    const eventId = eventIdOf(req);
+    if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
+    await teamInvites.revokeInvitation({ eventId, id: parseInt(req.params.id, 10) });
+    res.json({ message: 'Invitation cancelled.' });
+  } catch (err) {
+    sendInviteError(res, err, 'revokeInvitation');
+  }
+}
 
-    const existing = await query(
-      'SELECT id, name FROM event_custom_groups WHERE id = ? AND event_id = ? LIMIT 1',
-      [customGroupId, eventId]
-    );
-    if (existing.length === 0) {
-      return res.status(404).json({ error: 'Custom group not found.' });
-    }
-
-    // Unassign users from this custom group
-    await query('DELETE FROM user_event_custom_groups WHERE custom_group_id = ?', [customGroupId]);
-    await query('DELETE FROM event_custom_group_permissions WHERE custom_group_id = ?', [customGroupId]);
-    await query('DELETE FROM event_custom_groups WHERE id = ?', [customGroupId]);
-
-    res.json({ message: `Custom group "${existing[0].name}" deleted successfully.` });
-  } catch (error) {
-    console.error('[TeamController] deleteCustomGroup error:', error);
-    res.status(500).json({ error: 'Failed to delete custom group.' });
+/** GET /api/team/invitations/:id/text: the invite as plain text, to share another way */
+async function invitationText(req, res) {
+  try {
+    const eventId = eventIdOf(req);
+    if (!eventId) return res.status(400).json({ error: 'Choose a festival first.' });
+    const invitation = (await teamInvites.listPending(eventId)).find((i) => i.id === parseInt(req.params.id, 10));
+    if (!invitation) return res.status(404).json({ error: 'Invitation not found.' });
+    res.json({ text: await teamInvites.inviteText(eventId, invitation) });
+  } catch (err) {
+    sendInviteError(res, err, 'invitationText');
   }
 }
 
 module.exports = {
   list,
+  listInvitations,
+  resendInvitation,
+  updateInvitation,
+  revokeInvitation,
+  invitationText,
   getById,
   create,
   update,
@@ -999,8 +944,12 @@ module.exports = {
   searchIndividuals,
   getPermissionsCatalog,
   getMemberPermissions,
+  groupsOverview,
   listCustomGroups,
+  getCustomGroup,
   createCustomGroup,
+  updateCustomGroup,
+  customGroupUsage,
   deleteCustomGroup
 };
 

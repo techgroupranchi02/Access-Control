@@ -5,6 +5,7 @@
  */
 
 const { query } = require('../../config/database');
+const { canSignInSql } = require('../utils/userStatus');
 
 /**
  * Get active editions / events accessible to the user.
@@ -37,7 +38,7 @@ async function getAllEditions(user) {
     let allUserIds = user.userIds || [user.id];
     let userEmail = user.email || '';
     if (user.email) {
-      const linkedUsers = await query('SELECT id FROM users WHERE email = ? AND status = 1', [user.email]);
+      const linkedUsers = await query(`SELECT id FROM users WHERE email = ? AND ${canSignInSql()}`, [user.email]);
       if (linkedUsers.length > 0) {
         allUserIds = linkedUsers.map(u => u.id);
       }

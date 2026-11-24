@@ -28,8 +28,14 @@ import {
   PersonIcon,
   ExpandLessIcon,
   ExpandMoreIcon,
-  AddIcon
+  AddIcon,
+  MailIcon,
+  WarningIcon,
+  CheckCircleIcon,
+  TuneIcon
 } from '../components/common/Icons';
+import PendingInvitations from '../components/team/PendingInvitations';
+import GroupConfig from '../components/team/GroupConfig';
 
 const GROUP_FILTERS = ['All', 'Admin', 'Jury', 'Volunteer'];
 
@@ -320,6 +326,9 @@ function PermissionsByModuleSection({
   onScopeChange = null,
   selectedGroupsSummary = null,
   defaultFilterMode = null,
+  readOnlyNote = null,
+  sensitiveKeys = null,
+  enabledModuleKeys = null,
 }) {
   const [filterMode, setFilterMode] = useState(defaultFilterMode || (readOnly ? 'granted' : 'all'));
   const domainGroups = useMemo(() => getDomainGroups(catalog), [catalog]);
@@ -409,8 +418,12 @@ function PermissionsByModuleSection({
         <div className="fc-perm-readonly-banner">
           <LockIcon size={15} style={{ flexShrink: 0 }} />
           <div>
-            <strong>Inherited Permissions:</strong> Granted according to the assigned groups selected above.
-            Permissions are immutable (read-only) and cannot be added or removed here.
+            {readOnlyNote || (
+              <>
+                <strong>Inherited Permissions:</strong> Granted according to the assigned groups selected above.
+                Permissions are immutable (read-only) and cannot be added or removed here.
+              </>
+            )}
           </div>
         </div>
       )}
@@ -616,6 +629,12 @@ function PermissionsByModuleSection({
                                       'all') === 'all' && 'All'}
                                   </span>
                                 )}
+                                {sensitiveKeys?.has(perm.key) && (
+                                  <span className="fc-perm-flag is-sensitive" title="Lets someone change who has access. Only festival Admins can give a group with this permission.">Sensitive</span>
+                                )}
+                                {enabledModuleKeys && perm.moduleKey && !enabledModuleKeys.has(perm.moduleKey) && (
+                                  <span className="fc-perm-flag is-off" title="This festival hasn't turned this module on. The permission starts working if the module is turned on.">Module off</span>
+                                )}
                                 {readOnly && isChecked && permissionSourceMap && permissionSourceMap.has(perm.key) && (
                                   <span className="fc-perm-source-tag">
                                     via {permissionSourceMap.get(perm.key).join(', ')}
@@ -722,10 +741,17 @@ export default function TeamPage() {
   const navigate = useNavigate();
   const showAddModal = location.pathname.replace(/\/+$/, '') === '/team/add';
   const setShowAddModal = (open) => navigate(open ? '/team/add' : '/team');
-  // Add Custom Group is its own page too, at /team/groups/new (festival admins only)
-  const isCustomGroupRoute = location.pathname.replace(/\/+$/, '') === '/team/groups/new';
+  // Group Config (docs/adr/0009-team-group-config.md): /team/groups (overview), /team/groups/view/:key
+  // (read-only group), /team/groups/new and /team/groups/:id (create / edit a custom group, festival admins only)
+  const teamPath = location.pathname.replace(/\/+$/, '');
+  const isGroupsArea = teamPath === '/team/groups' || teamPath.startsWith('/team/groups/');
+  const groupsViewMatch = teamPath.match(/^\/team\/groups\/view\/([a-z0-9_]+)$/i);
+  const isGroupsBrowse = teamPath === '/team/groups' || Boolean(groupsViewMatch);
+  const groupEditMatch = teamPath.match(/^\/team\/groups\/(\d+)$/);
+  const editingGroupId = groupEditMatch ? parseInt(groupEditMatch[1], 10) : null;
+  const isCustomGroupRoute = teamPath === '/team/groups/new' || Boolean(editingGroupId);
   const showCustomGroupModal = isCustomGroupRoute && isFestivalAdmin;
-  const setShowCustomGroupModal = (open) => navigate(open ? '/team/groups/new' : '/team');
+  const setShowCustomGroupModal = (open) => navigate(open ? '/team/groups/new' : '/team/groups');
   const [addSelectedGroups, setAddSelectedGroups] = useState(new Set(['jury']));
   const [addExpandedModules, setAddExpandedModules] = useState(new Set());
   const [addPermSearch, setAddPermSearch] = useState('');
@@ -744,6 +770,10 @@ export default function TeamPage() {
   const [cgExpandedModules, setCgExpandedModules] = useState(new Set());
   const [cgPermSearch, setCgPermSearch] = useState('');
   const [cgLoading, setCgLoading] = useState(false);
+  const [cgOriginal, setCgOriginal] = useState(null); // the saved group, when editing
+  const [cgMeta, setCgMeta] = useState(null); // GET /team/groups: groups to start from, sensitive keys, modules
+  const [cgError, setCgError] = useState(null); // { text, stale }
+  const [cgStartFrom, setCgStartFrom] = useState('');
   
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -755,12 +785,28 @@ export default function TeamPage() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchFeedback, setSearchFeedback] = useState(null);
   const dropdownRef = useRef(null);
+  // Invitations for people without a Freecomers account (docs/adr/0008-team-invitations.md)
+  const [invitations, setInvitations] = useState([]);
+  const [seats, setSeats] = useState({ used: 0, limit: null });
+  const [teamLinks, setTeamLinks] = useState(null);
+  const [searchInvite, setSearchInvite] = useState(null);
+  const [teamNotice, setTeamNotice] = useState(null); // { tone: 'success' | 'warning', text }
+  const canManageTeam = Boolean(
+    user && (
+      user.isSuperAdmin ||
+      (user.permissions && (user.permissions['team:manage'] || user.permissions['team.manage'])) ||
+      isFestivalAdmin
+    )
+  );
 
   const fetchTeam = async () => {
     try {
       setLoading(true);
       const res = await api.get('/team');
       setUsers(res.data.users || []);
+      setInvitations(res.data.invitations || []);
+      setSeats({ used: res.data.seatsAllocated ?? (res.data.users || []).length, limit: res.data.seatLimit ?? null });
+      if (res.data.links) setTeamLinks(res.data.links);
       if (res.data.catalog) {
         setCatalog(res.data.catalog);
       }
@@ -794,6 +840,7 @@ export default function TeamPage() {
       setSelectedUser(null);
       setIsDropdownOpen(false);
       setSearchFeedback(null);
+      setSearchInvite(null);
       return;
     }
 
@@ -808,6 +855,7 @@ export default function TeamPage() {
       setIsSearching(false);
       setIsDropdownOpen(false);
       setSearchFeedback(null);
+      setSearchInvite(null);
       return;
     }
 
@@ -817,6 +865,8 @@ export default function TeamPage() {
       try {
         const res = await api.get('/team/search', { params: { q: trimmed } });
         setSearchResults(res.data.users || []);
+        setSearchInvite(res.data.invite || null);
+        if (res.data.links) setTeamLinks(res.data.links);
       } catch (err) {
         console.error('Error searching users:', err);
         setSearchFeedback('Search failed. Please try again.');
@@ -1132,10 +1182,19 @@ export default function TeamPage() {
   });
 
   const handleSelectUser = (user) => {
-    if (user.isAlreadyMember) return;
+    if (user.isAlreadyMember || user.accountState === 'deactivated') return;
     setSelectedUser(user);
     setUserQuery('');
     setSearchResults([]);
+    setIsDropdownOpen(false);
+  };
+
+  // Invite an email that has no Freecomers account yet
+  const handleSelectInvite = (email) => {
+    setSelectedUser({ invite: true, email, name: email, accountType: 'individual', accountState: 'none' });
+    setUserQuery('');
+    setSearchResults([]);
+    setSearchInvite(null);
     setIsDropdownOpen(false);
   };
 
@@ -1181,24 +1240,78 @@ export default function TeamPage() {
     setAddExpandedModules(new Set());
   };
 
-  // Open Create Custom Group Modal (Festival Admin Only)
-  const handleOpenCreateCustomGroup = () => setShowCustomGroupModal(true);
 
   // Fresh form each time the Add Custom Group page opens (also when opened directly by URL)
+  const applyGroupTemplate = (g) => {
+    setCgPermissions(new Set(g?.permissions || []));
+    setCgScopes({ ...(g?.scopes || {}) });
+  };
+
+  const loadGroupForm = async () => {
+    setCgError(null);
+    setCgPermSearch('');
+    setCgOriginal(null);
+    let meta = null;
+    try {
+      meta = (await api.get('/team/groups')).data;
+      setCgMeta(meta);
+    } catch {
+      setCgMeta(null);
+    }
+    if (editingGroupId) {
+      try {
+        const g = (await api.get(`/team/custom-groups/${editingGroupId}`)).data.group;
+        setCgName(g.name);
+        setCgDescription(g.description || '');
+        applyGroupTemplate(g);
+        setCgOriginal(g);
+      } catch (err) {
+        setCgError({ text: err.response?.data?.error || 'Could not load this group.', missing: true });
+      }
+      return;
+    }
+    // New group: blank, or a copy of the group chosen with Duplicate
+    const startKey = location.state?.startFrom || '';
+    const all = meta ? [...meta.defaultGroups, ...meta.customGroups] : [];
+    const start = all.find((g) => g.key === startKey);
+    setCgStartFrom(start ? start.key : '');
+    setCgName(start ? `Copy of ${start.name}`.slice(0, meta?.limits?.nameMax || 60) : '');
+    setCgDescription(start?.description || '');
+    applyGroupTemplate(start || null);
+  };
+
+  // Fresh form each time the new / edit group page opens (also when opened directly by URL)
   useEffect(() => {
     if (!showCustomGroupModal) return;
-    setCgName('');
-    setCgDescription('');
-    setCgPermissions(new Set());
-    setCgScopes({});
-    setCgPermSearch('');
+    loadGroupForm();
     window.scrollTo(0, 0);
-  }, [showCustomGroupModal]);
+  }, [showCustomGroupModal, editingGroupId]);
 
   // Only festival admins can create groups: anyone else opening the URL goes back to the Team list
   useEffect(() => {
-    if (isCustomGroupRoute && user && !isFestivalAdmin) navigate('/team', { replace: true });
-  }, [isCustomGroupRoute, user, isFestivalAdmin]);
+    if (isCustomGroupRoute && user && !isFestivalAdmin) {
+      navigate(editingGroupId ? `/team/groups/view/custom_${editingGroupId}` : '/team/groups', { replace: true });
+    }
+  }, [isCustomGroupRoute, user, isFestivalAdmin, editingGroupId]);
+
+  // Edit mode: what changes compared with the saved group
+  const cgDiff = useMemo(() => {
+    if (!cgOriginal) return null;
+    const before = new Set(cgOriginal.permissions);
+    const added = [...cgPermissions].filter((k) => !before.has(k));
+    const removed = [...before].filter((k) => !cgPermissions.has(k));
+    const scopeChanged = [...cgPermissions].filter((k) => before.has(k) && (cgOriginal.scopes?.[k] || 'all') !== (cgScopes[k] || 'all'));
+    const renamed = cgName.trim() !== cgOriginal.name;
+    const described = cgDescription.trim() !== (cgOriginal.description || '');
+    return { added, removed, scopeChanged, renamed, described, changed: added.length + removed.length + scopeChanged.length > 0 || renamed || described };
+  }, [cgOriginal, cgPermissions, cgScopes, cgName, cgDescription]);
+  const permLabel = useMemo(() => {
+    const m = new Map();
+    catalog.forEach((mod) => (mod.permissions || []).forEach((p) => m.set(p.key, p.label || p.key)));
+    return (k) => m.get(k) || k;
+  }, [catalog]);
+  const cgSensitiveKeys = useMemo(() => new Set(cgMeta?.sensitivePermissions || []), [cgMeta]);
+  const cgEnabledModules = useMemo(() => (cgMeta?.enabledModules ? new Set(cgMeta.enabledModules) : null), [cgMeta]);
 
   // Summary for the Add Custom Group page: chosen permissions per area (submission, review, ...)
   const cgAreaCounts = useMemo(() => {
@@ -1255,33 +1368,29 @@ export default function TeamPage() {
     setCgExpandedModules(new Set());
   };
 
-  // Submit Create Custom Group
+  // Save a new or edited custom group
   const handleCreateCustomGroupSubmit = async (e) => {
     e.preventDefault();
-    if (!cgName.trim()) {
-      alert('Please enter a group name.');
-      return;
-    }
+    if (!cgName.trim()) { setCgError({ text: 'Enter a group name.' }); return; }
+    if (cgPermissions.size === 0) { setCgError({ text: 'Tick at least one permission.' }); return; }
 
     setCgLoading(true);
+    setCgError(null);
+    const body = {
+      name: cgName.trim(),
+      description: cgDescription.trim(),
+      permissions: Array.from(cgPermissions).map((k) => ({ key: k, scopeKey: cgScopes[k] || 'all' })),
+    };
     try {
-      const res = await api.post('/team/custom-groups', {
-        name: cgName.trim(),
-        description: cgDescription.trim(),
-        permissions: Array.from(cgPermissions).map(k => ({
-          key: k,
-          scopeKey: cgScopes[k] || 'all'
-        })),
-      });
-      setShowCustomGroupModal(false);
-      setCgName('');
-      setCgDescription('');
-      setCgPermissions(new Set());
-      setCgScopes({});
+      const res = editingGroupId
+        ? await api.put(`/team/custom-groups/${editingGroupId}`, { ...body, expectedUpdatedAt: cgOriginal?.updatedAt ?? null })
+        : await api.post('/team/custom-groups', body);
+      const g = res.data.group;
+      const affected = editingGroupId && cgOriginal?.memberCount ? ` ${cgOriginal.memberCount === 1 ? '1 member has' : `${cgOriginal.memberCount} members have`} the new permissions now (they see them after reloading).` : '';
       await fetchTeam();
-      alert(res.data.message || `Custom group "${cgName.trim()}" created successfully.`);
+      navigate('/team/groups', { state: { notice: { tone: 'success', text: `${editingGroupId ? 'Saved' : 'Created'} "${g.name}".${affected}` } } });
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to create custom group.');
+      setCgError({ text: err.response?.data?.error || 'Could not save the group.', stale: err.response?.status === 409 && err.response?.data?.code === 'stale' });
     } finally {
       setCgLoading(false);
     }
@@ -1291,7 +1400,7 @@ export default function TeamPage() {
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     if (!selectedUser) {
-      alert('Please search and select a registered individual user from the database.');
+      alert('Search for a person, or type their full email to invite them.');
       return;
     }
     if (addSelectedGroups.size === 0) {
@@ -1301,17 +1410,27 @@ export default function TeamPage() {
 
     setActionLoading(true);
     try {
-      await api.post('/team', {
-        userId: selectedUser.userId,
-        groups: Array.from(addSelectedGroups)
-      });
+      const res = await api.post('/team', selectedUser.invite
+        ? { email: selectedUser.email, invite: true, groups: Array.from(addSelectedGroups) }
+        : { userId: selectedUser.userId, groups: Array.from(addSelectedGroups) });
+      const mail = res.data.email || {};
+      const who = selectedUser.invite ? selectedUser.email : (selectedUser.name || selectedUser.email);
+      if (res.data.invitation) {
+        setTeamNotice(mail.sent
+          ? { tone: 'success', text: `Invite sent to ${res.data.invitation.email}. They join the team the first time they sign in to FestiPlus with this email.` }
+          : { tone: 'warning', text: `Invite saved for ${res.data.invitation.email}, but the email wasn't sent: ${mail.reason || 'unknown error'}. Use Copy invite below to share it another way.` });
+      } else {
+        setTeamNotice(mail.sent
+          ? { tone: 'success', text: `${who} added to the team. We emailed them the sign-in link.` }
+          : { tone: 'warning', text: `${who} added to the team, but the email wasn't sent${mail.reason ? `: ${mail.reason}` : ''}.` });
+      }
       setShowAddModal(false);
       setSelectedUser(null);
       setUserQuery('');
       setAddSelectedGroups(new Set(['volunteer']));
       await fetchTeam();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to add team member.');
+      alert(err.response?.data?.error || (selectedUser.invite ? 'Failed to send the invite.' : 'Failed to add team member.'));
     } finally {
       setActionLoading(false);
     }
@@ -1393,27 +1512,28 @@ export default function TeamPage() {
 
   return (
     <div className="fc-team-page">
-      {!showAddModal && !isCustomGroupRoute && (<>
+      {!showAddModal && !isGroupsArea && (<>
       {/* Top Header */}
       <div className="fc-page-header">
         <div>
           <h1 className="fc-page-title">Team</h1>
-          <p className="fc-page-subtitle">{users.length} members · internal coordination</p>
+          <p className="fc-page-subtitle">
+            {users.length} members{invitations.length > 0 ? ` · ${invitations.length} invited` : ''}
+            {seats.limit ? ` · ${seats.used} of ${seats.limit} seats used` : ' · internal coordination'}
+          </p>
         </div>
         <div className="fc-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {isFestivalAdmin && (
-            <button 
-              type="button"
-              className="fc-btn-custom-group" 
-              onClick={handleOpenCreateCustomGroup}
-              id="create-custom-group-btn"
-              title="Create a custom group with modular permissions (Festival Admin only)"
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <AddIcon size={14} /> Add Custom Group
-              </span>
-            </button>
-          )}
+          <button
+            type="button"
+            className="fc-btn-custom-group"
+            onClick={() => navigate('/team/groups')}
+            id="group-config-btn"
+            title="Default and custom groups and their permissions"
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <TuneIcon size={14} /> Group Config
+            </span>
+          </button>
           <button 
             className="fc-btn-primary" 
             onClick={handleOpenAdd}
@@ -1550,6 +1670,22 @@ export default function TeamPage() {
           )}
         </div>
       </div>
+
+      {teamNotice && (
+        <div className={`fc-team-notice is-${teamNotice.tone}`} role="status">
+          {teamNotice.tone === 'success' ? <CheckCircleIcon size={16} /> : <WarningIcon size={16} />}
+          <span>{teamNotice.text}</span>
+          <button type="button" className="fc-team-notice-close" onClick={() => setTeamNotice(null)} aria-label="Dismiss"><CloseIcon size={13} /></button>
+        </div>
+      )}
+
+      <PendingInvitations
+        invitations={invitations}
+        customGroups={customGroups}
+        canManage={canManageTeam}
+        onChanged={fetchTeam}
+        onNotice={setTeamNotice}
+      />
 
       {/* Table Card */}
       <div className="fc-card fc-table-card">
@@ -1776,7 +1912,7 @@ export default function TeamPage() {
           <div className="fc-page-header" style={{ marginBottom: '20px' }}>
             <div>
               <h1 className="fc-page-title">Add Team Member</h1>
-              <p className="fc-page-subtitle">Give a registered Freecomers user access to this festival.</p>
+              <p className="fc-page-subtitle">Give a Freecomers user access to this festival, or invite anyone by email.</p>
             </div>
           </div>
 
@@ -1788,7 +1924,7 @@ export default function TeamPage() {
                   <span className="fc-team-add-step-no">1</span>
                   <div>
                     <h2>Choose a person</h2>
-                    <p>Search people who already have a Freecomers account, by name or email.</p>
+                    <p>Search people who have a Freecomers account by name or email. No account yet? Type their full email to invite them.</p>
                   </div>
                 </div>
                   {/* User Search & Selection */}
@@ -1802,7 +1938,7 @@ export default function TeamPage() {
                           <input
                             type="text"
                             autoFocus
-                            placeholder="Search by name or email"
+                            placeholder="Search by name or email, or type an email to invite"
                             value={userQuery}
                             onChange={(e) => setUserQuery(e.target.value)}
                             onFocus={() => {
@@ -1821,13 +1957,39 @@ export default function TeamPage() {
                                 <div className="fc-spinner" style={{ width: '16px', height: '16px', margin: '0 auto 6px' }}></div>
                                 Searching directory...
                               </div>
-                            ) : searchResults.length > 0 ? (
-                              searchResults.map((u) => (
+                            ) : (
+                              <>
+                                {searchInvite?.canInvite && (
+                                  <div
+                                    className="fc-user-search-item fc-user-search-invite"
+                                    onClick={() => handleSelectInvite(searchInvite.email)}
+                                    title="Invite this email to the team"
+                                  >
+                                    <div className="fc-user-search-avatar fc-user-search-invite-icon"><MailIcon size={15} /></div>
+                                    <div className="fc-user-search-info">
+                                      <span className="fc-user-search-name">Invite {searchInvite.email}</span>
+                                      <span className="fc-user-search-email">
+                                        {searchInvite.accountState === 'unverified'
+                                          ? "Has a Freecomers account that isn't verified yet. We'll email them to finish it, then sign in here."
+                                          : "No Freecomers account yet. We'll email them to create one with this address, then sign in here."}
+                                      </span>
+                                    </div>
+                                    <span className="fc-dept-tag" style={{ background: 'var(--fc-brand-active-bg)', color: 'var(--fc-brand)', cursor: 'pointer' }}>Invite</span>
+                                  </div>
+                                )}
+                                {searchInvite?.alreadyInvited && (
+                                  <div className="fc-user-search-empty">
+                                    {searchInvite.email} has already been invited. Resend it from Pending invitations on the Team page.
+                                  </div>
+                                )}
+                                {searchResults.map((u) => {
+                                  const blocked = u.isAlreadyMember || u.accountState === 'deactivated';
+                                  return (
                                 <div
                                   key={`${u.userId}-${u.accountType}`}
-                                  className={`fc-user-search-item ${u.isAlreadyMember ? 'disabled' : ''}`}
+                                  className={`fc-user-search-item ${blocked ? 'disabled' : ''}`}
                                   onClick={() => handleSelectUser(u)}
-                                  title={u.isAlreadyMember ? 'This user account is already in the team' : 'Click to select user'}
+                                  title={u.isAlreadyMember ? 'This user account is already in the team' : u.accountState === 'deactivated' ? 'This Freecomers account is deactivated' : 'Click to select user'}
                                 >
                                   <div className="fc-user-search-avatar" style={{ overflow: 'hidden', position: 'relative' }}>
                                     {u.thumbnailPic || u.thumbnail || u.thumbnail_pic ? (
@@ -1869,23 +2031,46 @@ export default function TeamPage() {
                                   </div>
                                   {u.isAlreadyMember ? (
                                     <span className="fc-user-search-badge in-team">Already in Team</span>
+                                  ) : u.accountState === 'deactivated' ? (
+                                    <span className="fc-user-search-badge is-blocked">Deactivated</span>
+                                  ) : u.accountState === 'unverified' ? (
+                                    <span className="fc-user-search-badge is-pending" title="Email not verified on Freecomers yet: they'll get an invite">Not verified · Invite</span>
                                   ) : (
                                     <span className="fc-dept-tag" style={{ background: 'var(--fc-brand-active-bg)', color: 'var(--fc-brand)', cursor: 'pointer' }}>
                                       Select
                                     </span>
                                   )}
                                 </div>
-                              ))
-                            ) : (
-                              <div className="fc-user-search-empty">
-                                No registered user found matching &ldquo;{userQuery}&rdquo;.
-                                <div style={{ marginTop: '5px', fontSize: '0.72rem', color: 'var(--fc-text-muted)' }}>
-                                  Team members must be registered users from next.autovertest.com/signin.
-                                </div>
-                              </div>
+                                  );
+                                })}
+                                {!searchResults.length && !searchInvite?.canInvite && !searchInvite?.alreadyInvited && (
+                                  <div className="fc-user-search-empty">
+                                    No Freecomers account matches &ldquo;{userQuery}&rdquo;.
+                                    <div style={{ marginTop: '5px', fontSize: '0.72rem', color: 'var(--fc-text-muted)' }}>
+                                      To invite someone without an account, type their full email address.
+                                    </div>
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                         )}
+                      </div>
+                    ) : selectedUser.invite ? (
+                      <div className="fc-selected-user-card">
+                        <div className="fc-selected-user-left">
+                          <div className="fc-user-search-avatar fc-user-search-invite-icon" style={{ width: '38px', height: '38px' }}><MailIcon size={17} /></div>
+                          <div className="fc-selected-user-meta">
+                            <div className="fc-selected-user-name">Invite by email</div>
+                            <span className="fc-selected-user-email">{selectedUser.email}</span>
+                            <span className="fc-selected-user-email" style={{ whiteSpace: 'normal' }}>
+                              They'll get an email to create a Freecomers account with this address{teamLinks?.siteUrl ? ` (${teamLinks.siteUrl.replace(/^https?:\/\//, '')})` : ''}, then sign in to FestiPlus. They join the team at their first sign-in.
+                            </span>
+                          </div>
+                        </div>
+                        <button type="button" className="fc-btn-change-user" onClick={handleClearSelectedUser}>
+                          Change
+                        </button>
                       </div>
                     ) : (
                       <div className="fc-selected-user-card">
@@ -2004,7 +2189,15 @@ export default function TeamPage() {
 
               <div className="fc-tas-row">
                 <span className="fc-tas-label">Person</span>
-                {selectedUser ? (
+                {selectedUser?.invite ? (
+                  <div className="fc-tas-person">
+                    <div className="fc-avatar fc-user-search-invite-icon" style={{ width: '32px', height: '32px', flexShrink: 0 }}><MailIcon size={14} /></div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="fc-tas-name">Invite</div>
+                      <div className="fc-tas-sub">{selectedUser.email}</div>
+                    </div>
+                  </div>
+                ) : selectedUser ? (
                   <div className="fc-tas-person">
                     <div className="fc-avatar" style={{ width: '32px', height: '32px', fontSize: '0.75rem', flexShrink: 0, overflow: 'hidden' }}>
                       {selectedUser.thumbnailPic || selectedUser.thumbnail || selectedUser.thumbnail_pic ? (
@@ -2043,7 +2236,7 @@ export default function TeamPage() {
               </div>
 
               <div className="fc-tas-note">
-                <PeopleIcon size={14} /> {users.length} {users.length === 1 ? 'member' : 'members'} in this team now
+                <PeopleIcon size={14} /> {users.length} {users.length === 1 ? 'member' : 'members'}{invitations.length ? ` and ${invitations.length} invited` : ''}{seats.limit ? ` · ${Math.max(0, seats.limit - seats.used)} of ${seats.limit} seats free` : ' in this team now'}
               </div>
 
               <div className="fc-tas-actions">
@@ -2053,7 +2246,9 @@ export default function TeamPage() {
                   disabled={actionLoading || !selectedUser || addSelectedGroups.size === 0}
                   style={(!selectedUser || addSelectedGroups.size === 0) ? { opacity: 0.55, cursor: 'not-allowed' } : {}}
                 >
-                  {actionLoading ? 'Adding...' : 'Add Member'}
+                  {(selectedUser?.invite || selectedUser?.accountState === 'unverified')
+                    ? (actionLoading ? 'Sending…' : 'Send invite')
+                    : (actionLoading ? 'Adding...' : 'Add Member')}
                 </button>
                 <button type="button" className="fc-team-add-cancel" onClick={() => setShowAddModal(false)}>
                   Cancel
@@ -2167,20 +2362,48 @@ export default function TeamPage() {
         </div>
       )}
 
-      {/* Add Custom Group page (/team/groups/new, festival admins only) */}
+      {/* Group Config overview and read-only group view */}
+      {isGroupsBrowse && (
+        <GroupConfig
+          key={teamPath}
+          viewKey={groupsViewMatch ? groupsViewMatch[1] : null}
+          catalog={catalog}
+          PermissionsView={PermissionsByModuleSection}
+          onNavigate={navigate}
+          onChanged={fetchTeam}
+          initialNotice={location.state?.notice || null}
+        />
+      )}
+
+      {/* New / edit custom group page (/team/groups/new, /team/groups/:id; festival admins only) */}
       {showCustomGroupModal && (
         <div className="fc-team-add-page">
           <nav className="fc-team-add-crumbs" aria-label="Breadcrumb">
             <Link to="/team">Team</Link>
             <span>/</span>
-            <span aria-current="page">Add Custom Group</span>
+            <Link to="/team/groups">Group Config</Link>
+            <span>/</span>
+            <span aria-current="page">{editingGroupId ? `Edit ${cgOriginal?.name || 'group'}` : 'New custom group'}</span>
           </nav>
           <div className="fc-page-header" style={{ marginBottom: '20px' }}>
             <div>
-              <h1 className="fc-page-title">Add Custom Group</h1>
-              <p className="fc-page-subtitle">Create a reusable group with exactly the permissions it needs, then assign it to team members.</p>
+              <h1 className="fc-page-title">{editingGroupId ? 'Edit custom group' : 'New custom group'}</h1>
+              <p className="fc-page-subtitle">
+                {editingGroupId
+                  ? 'Changes apply to everyone in this group as soon as you save.'
+                  : 'A group with exactly the permissions it needs. It belongs to this festival only.'}
+              </p>
             </div>
           </div>
+
+          {cgError && (
+            <div className="fc-team-notice is-warning" role="alert">
+              <WarningIcon size={16} />
+              <span>{cgError.text}</span>
+              {cgError.stale && <button type="button" className="fc-gc-btn" onClick={loadGroupForm}>Reload</button>}
+              {cgError.missing && <Link to="/team/groups" className="fc-gc-btn">Back to Group Config</Link>}
+            </div>
+          )}
 
           <form onSubmit={handleCreateCustomGroupSubmit} className="fc-team-add-layout">
             <div className="fc-team-add-main">
@@ -2200,6 +2423,7 @@ export default function TeamPage() {
                       id="cg-name"
                       type="text"
                       required
+                      maxLength={cgMeta?.limits?.nameMax || 60}
                       placeholder="e.g. Hospitality Lead, Programmer, Operations Lead"
                       value={cgName}
                       onChange={(e) => setCgName(e.target.value)}
@@ -2211,6 +2435,7 @@ export default function TeamPage() {
                     <input
                       id="cg-desc"
                       type="text"
+                      maxLength={cgMeta?.limits?.descriptionMax || 300}
                       placeholder="What this group is responsible for"
                       value={cgDescription}
                       onChange={(e) => setCgDescription(e.target.value)}
@@ -2228,6 +2453,31 @@ export default function TeamPage() {
                     <p>Tick what members of this group can do. Use "All" on an area to tick everything in it.</p>
                   </div>
                 </div>
+                {!editingGroupId && cgMeta && (
+                  <div className="fc-gc-startfrom">
+                    <label htmlFor="cg-start">Start from</label>
+                    <select
+                      id="cg-start"
+                      value={cgStartFrom}
+                      onChange={(e) => {
+                        const key = e.target.value;
+                        setCgStartFrom(key);
+                        applyGroupTemplate([...cgMeta.defaultGroups, ...cgMeta.customGroups].find((g) => g.key === key) || null);
+                      }}
+                    >
+                      <option value="">Nothing ticked</option>
+                      <optgroup label="Default groups">
+                        {cgMeta.defaultGroups.map((g) => <option key={g.key} value={g.key}>{g.name} ({g.permissions.length})</option>)}
+                      </optgroup>
+                      {cgMeta.customGroups.length > 0 && (
+                        <optgroup label="This festival's custom groups">
+                          {cgMeta.customGroups.map((g) => <option key={g.key} value={g.key}>{g.name} ({g.permissions.length})</option>)}
+                        </optgroup>
+                      )}
+                    </select>
+                    <span className="fc-gc-muted">Copies that group's permissions; you can change them below.</span>
+                  </div>
+                )}
                 <div className="fc-team-cg-perms">
                   <PermissionsByModuleSection
                     catalog={catalog}
@@ -2247,6 +2497,8 @@ export default function TeamPage() {
                     isCustomGroupCreation={true}
                     customScopes={cgScopes}
                     onScopeChange={handleCgScopeChange}
+                    sensitiveKeys={cgSensitiveKeys}
+                    enabledModuleKeys={cgEnabledModules}
                   />
                 </div>
               </section>
@@ -2281,20 +2533,44 @@ export default function TeamPage() {
                 )}
               </div>
 
+              {cgDiff && (
+                <div className="fc-tas-row">
+                  <span className="fc-tas-label">Changes</span>
+                  {!cgDiff.changed ? (
+                    <span className="fc-tas-empty">No changes yet</span>
+                  ) : (
+                    <div className="fc-gc-diff">
+                      {cgDiff.renamed && <div>Renamed to <strong>{cgName.trim()}</strong></div>}
+                      {cgDiff.described && <div>Description changed</div>}
+                      {cgDiff.added.map((k) => <div key={`a-${k}`} className="is-added">+ {permLabel(k)}</div>)}
+                      {cgDiff.removed.map((k) => <div key={`r-${k}`} className="is-removed">− {permLabel(k)}</div>)}
+                      {cgDiff.scopeChanged.map((k) => <div key={`s-${k}`}>{permLabel(k)}: access level changed</div>)}
+                    </div>
+                  )}
+                  {cgOriginal.memberCount > 0 && (
+                    <div className="fc-tas-sub" style={{ marginTop: 6 }}>
+                      Applies right away to {cgOriginal.memberCount === 1 ? '1 member' : `${cgOriginal.memberCount} members`}: {cgOriginal.members.map((m) => m.name).join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="fc-tas-actions">
                 <button
                   type="submit"
                   className="fc-btn-primary"
-                  disabled={cgLoading || !cgName.trim()}
-                  style={!cgName.trim() ? { opacity: 0.55, cursor: 'not-allowed' } : {}}
+                  disabled={cgLoading || !cgName.trim() || cgPermissions.size === 0 || (cgDiff && !cgDiff.changed) || cgError?.missing}
+                  style={(!cgName.trim() || cgPermissions.size === 0 || (cgDiff && !cgDiff.changed)) ? { opacity: 0.55, cursor: 'not-allowed' } : {}}
                 >
-                  {cgLoading ? 'Saving...' : 'Save Custom Group'}
+                  {cgLoading ? 'Saving...' : (editingGroupId ? 'Save changes' : 'Create group')}
                 </button>
                 <button type="button" className="fc-team-add-cancel" onClick={() => setShowCustomGroupModal(false)}>
                   Cancel
                 </button>
               </div>
-              {!cgName.trim() && <p className="fc-tas-hint">Enter a group name to continue.</p>}
+              {!cgName.trim()
+                ? <p className="fc-tas-hint">Enter a group name to continue.</p>
+                : cgPermissions.size === 0 && <p className="fc-tas-hint">Tick at least one permission.</p>}
             </aside>
           </form>
         </div>

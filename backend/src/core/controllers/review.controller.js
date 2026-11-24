@@ -6,6 +6,7 @@
  */
 
 const { query } = require('../../config/database');
+const { canSignInSql } = require('../utils/userStatus');
 const { logActor, actorUserId } = require('../utils/actor');
 const { formatThumbnailUrl } = require('../utils/media.utils');
 
@@ -562,7 +563,7 @@ async function submitScorecard(req, res) {
     // Resolve all linked user IDs for this user (supporting individual and organization IDs)
     let allUserIds = [req.user.id];
     if (req.user.email) {
-      const linkedUsers = await query('SELECT id FROM users WHERE email = ? AND status = 1', [req.user.email]);
+      const linkedUsers = await query(`SELECT id FROM users WHERE email = ? AND ${canSignInSql()}`, [req.user.email]);
       if (linkedUsers.length > 0) {
         allUserIds = linkedUsers.map(u => u.id);
       }

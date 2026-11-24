@@ -11,6 +11,32 @@
 
 const jwt = require('jsonwebtoken');
 const env = require('../../config/environment');
+const { query } = require('../../config/database');
+const { canSignInSql } = require('../utils/userStatus');
+
+/**
+ * A token stays valid for up to 30 days, but the account behind it can be deactivated (users.status 3) or
+ * removed from admins in the meantime. Each request checks the account can still sign in; the answer is
+ * cached briefly so this costs one primary-key lookup per account per minute.
+ */
+const ACCOUNT_CHECK_TTL_MS = 60 * 1000;
+const accountCache = new Map(); // 'u:<id>' | 'a:<id>' -> { ok, at }
+
+async function accountCanSignIn(reqUser) {
+  const key = reqUser.isFreecomersAdmin ? `a:${reqUser.adminId}` : `u:${reqUser.id}`;
+  const hit = accountCache.get(key);
+  if (hit && Date.now() - hit.at < ACCOUNT_CHECK_TTL_MS) return hit.ok;
+  let ok;
+  if (reqUser.isFreecomersAdmin) {
+    ok = Boolean(reqUser.adminId) && (await query('SELECT 1 FROM admins WHERE id = ? LIMIT 1', [reqUser.adminId])).length > 0;
+  } else {
+    const id = Number(reqUser.id);
+    ok = Number.isInteger(id) && id > 0 && (await query(`SELECT 1 FROM users WHERE id = ? AND ${canSignInSql()} LIMIT 1`, [id])).length > 0;
+  }
+  if (accountCache.size > 5000) accountCache.clear();
+  accountCache.set(key, { ok, at: Date.now() });
+  return ok;
+}
 
 /**
  * req.user from a verified token. `id` is always a `users` table id, or null.
@@ -40,7 +66,7 @@ function toRequestUser(decoded) {
  * Middleware that requires a valid JWT in the cookie.
  * On success, attaches req.user = { id, email, name }.
  */
-function authenticate(req, res, next) {
+async function authenticate(req, res, next) {
   try {
     // Read token: prioritize Authorization: Bearer <token> over cookies to avoid stale cookie override on SSO
     let token = null;
@@ -71,6 +97,18 @@ function authenticate(req, res, next) {
     req.user = toRequestUser(decoded);
     if (isBearer) {
       req.bearerToken = token;
+    }
+
+    // The account must still be able to sign in (not deactivated, admin not removed)
+    let active;
+    try {
+      active = await accountCanSignIn(req.user);
+    } catch (dbErr) {
+      console.error('[Auth] Account check failed:', dbErr.message);
+      return res.status(503).json({ error: 'Could not check your account. Try again in a moment.' });
+    }
+    if (!active) {
+      return res.status(401).json({ error: 'Your account is no longer active. Please sign in again.' });
     }
 
     next();
