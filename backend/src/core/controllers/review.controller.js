@@ -6,6 +6,7 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 const { canSignInSql } = require('../utils/userStatus');
 const { logActor, actorUserId } = require('../utils/actor');
 const { formatThumbnailUrl } = require('../utils/media.utils');
@@ -50,19 +51,14 @@ const CRITERIA_ALIASES = {
 /**
  * GET /api/reviews/pipeline
  * Returns:
- * - pipelineState
  * - metrics: 10 summary cards
  * - progressMatrix: all films with reviews count & overall avg
  * - filmsInRound: films in active screening round with review stats & assigned judges
  */
 async function getPipeline(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     const roundNumber = parseInt(req.query.round, 10) || 1;
-
-    // Pipeline state
-    const stateRows = await query('SELECT * FROM pipeline_states WHERE event_id = ? LIMIT 1', [eventId]);
-    const pipeline = stateRows.length > 0 ? stateRows[0] : { current_stage: 1, voting_open: false, active_round_count: 2 };
 
     const categories = await query('SELECT * FROM award_categories WHERE event_id = ? ORDER BY order_index ASC', [eventId]);
 
@@ -266,7 +262,6 @@ async function getPipeline(req, res) {
     });
 
     res.json({
-      pipelineState: pipeline,
       awardCategories: categories,
       metrics,
       progressMatrix,
@@ -285,7 +280,7 @@ async function getPipeline(req, res) {
  */
 async function listAssignments(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     const userId = req.user.id;
     const roundNumber = parseInt(req.query.round, 10) || 1;
 
@@ -384,12 +379,12 @@ async function listAssignments(req, res) {
 }
 
 /**
- * GET /api/reviews/jury & GET /api/reviews/judges
+ * GET /api/reviews/jury
  * Returns all jury members available for assignment for this event.
  */
 async function listJury(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
 
     // Fetch users with group 'jury' or 'judge' assigned as jury for this festival
     let rawJury = await query(`
@@ -422,7 +417,6 @@ async function listJury(req, res) {
   }
 }
 
-const listJudges = listJury;
 
 /**
  * POST /api/reviews/assign
@@ -430,7 +424,7 @@ const listJudges = listJury;
  */
 async function assignJury(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     const { film_id, round_number = 1, jury_ids, judge_ids = [] } = req.body;
 
     if (!film_id) {
@@ -533,7 +527,6 @@ async function assignJury(req, res) {
   }
 }
 
-const assignJudges = assignJury;
 
 /**
  * POST /api/reviews/scorecard
@@ -543,7 +536,7 @@ async function submitScorecard(req, res) {
   try {
     // Scores and ballots belong to a jury member's account; a Freecomers admin has none (ADR 0007)
     if (!actorUserId(req)) return res.status(403).json({ error: 'Sign in as a jury member to submit a scorecard.' });
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     const { assignment_id, film_id, round_number = 1, scores, notes } = req.body;
 
     if (!film_id || !scores || typeof scores !== 'object') {
@@ -694,7 +687,7 @@ async function submitScorecard(req, res) {
  */
 async function makeDecision(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     const { film_id, decision } = req.body;
 
     if (!film_id || !decision) {
@@ -739,26 +732,6 @@ async function makeDecision(req, res) {
 }
 
 /**
- * POST /api/reviews/toggle-voting
- * Admin opens/closes voting in pipeline_states.
- */
-async function toggleVoting(req, res) {
-  try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
-    const { voting_open } = req.body;
-
-    await query(`
-      UPDATE pipeline_states SET voting_open = ? WHERE event_id = ?
-    `, [Boolean(voting_open), eventId]);
-
-    res.json({ message: `Voting ${voting_open ? 'opened' : 'closed'} successfully.`, voting_open: Boolean(voting_open) });
-  } catch (error) {
-    console.error('[ReviewController] toggleVoting error:', error);
-    res.status(500).json({ error: 'Failed to update voting state.' });
-  }
-}
-
-/**
  * POST /api/reviews/ballot
  * Confidential jury ballot.
  */
@@ -766,7 +739,7 @@ async function submitBallot(req, res) {
   try {
     // Scores and ballots belong to a jury member's account; a Freecomers admin has none (ADR 0007)
     if (!actorUserId(req)) return res.status(403).json({ error: 'Sign in as a jury member to submit a ballot.' });
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     const { category_id, ranked_nominees } = req.body;
 
     if (!category_id || !ranked_nominees) {
@@ -792,7 +765,7 @@ async function submitBallot(req, res) {
  */
 async function completeStage(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { stage_order, stage_id } = req.body;
 
     let currentStage = null;
@@ -827,7 +800,7 @@ async function completeStage(req, res) {
 
     // Fetch films currently in this stage
     const filmsInStage = await query(`
-      SELECT id, title, overall_average_rating, composite_score
+      SELECT id, title, overall_average_rating
       FROM submissions
       WHERE event_id = ? AND (review_state_id = ? OR current_stage_name = ?)
     `, [eventId, currentStage.id, currentStage.unique_name]);
@@ -837,7 +810,7 @@ async function completeStage(req, res) {
     let pendingFilms = [];
 
     for (const film of filmsInStage) {
-      const score = parseFloat(film.composite_score != null ? film.composite_score : (film.overall_average_rating || 0));
+      const score = parseFloat(film.overall_average_rating || 0);
       if (score >= cutoff) {
         // Qualified! Advance to next stage
         await query(`
@@ -891,12 +864,9 @@ module.exports = {
   getPipeline,
   listAssignments,
   listJury,
-  listJudges,
   assignJury,
-  assignJudges,
   submitScorecard,
   makeDecision,
-  toggleVoting,
   submitBallot,
   completeStage,
 };

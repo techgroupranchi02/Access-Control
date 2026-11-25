@@ -4,13 +4,14 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 
 /**
  * GET /api/calendar
  */
 async function list(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
 
     // venues.service reads whatever columns the venues table has (production's differs from dev's)
     const venues = await require('../services/venues.service').listEventVenues(eventId);
@@ -84,7 +85,7 @@ async function list(req, res) {
  */
 async function createSlot(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     const { venue_name, day_index = 0, start_time, end_time, film_id } = req.body;
 
     if (!venue_name || !start_time || !end_time || !film_id) {

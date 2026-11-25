@@ -4,6 +4,7 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 const bcrypt = require('bcrypt');
 const { resolveHighestScope } = require('../services/scoping.service');
 const { formatThumbnailUrl } = require('../utils/media.utils');
@@ -13,12 +14,8 @@ const { assignUserToGroups, InviteError } = teamInvites;
 const teamGroups = require('../services/teamGroups.service');
 const { GroupError } = teamGroups;
 
-/** The festival from the request headers, or null. New team endpoints never fall back to a fixed festival. */
-function eventIdOf(req) {
-  const raw = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId;
-  const n = parseInt(raw, 10);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
+/** The festival from the request (core/utils/eventId.js), or null. Never falls back to a fixed festival. */
+const eventIdOf = getEventId;
 
 function sendInviteError(res, err, tag) {
   if (err instanceof InviteError || err instanceof GroupError) {
@@ -196,7 +193,7 @@ async function getMemberPermissions(userId, eventId) {
  */
 async function list(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
 
     // Fetch all unique users assigned to this festival edition (both organization and individual accounts)
     const rows = await query(`
@@ -333,7 +330,7 @@ async function list(req, res) {
 async function getById(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
 
     const rows = await query(`
       SELECT 

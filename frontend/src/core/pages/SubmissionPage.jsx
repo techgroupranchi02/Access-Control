@@ -319,7 +319,6 @@ export default function SubmissionPage() {
   // Fetch available jury members for assignments
   useEffect(() => {
     api.get('/reviews/jury')
-      .catch(() => api.get('/reviews/judges'))
       .then(res => {
         setAvailableJury(res.data?.data || []);
       })

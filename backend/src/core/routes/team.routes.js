@@ -7,9 +7,9 @@ const express = require('express');
 const router = express.Router();
 const teamController = require('../controllers/team.controller');
 const { authenticate } = require('../middleware/auth.middleware');
-const { requirePermission } = require('../middleware/permission.middleware');
+const { requirePermission, requireEventId, requireFestivalMember } = require('../middleware/permission.middleware');
 
-router.use(authenticate);
+router.use(authenticate, requireEventId, requireFestivalMember);
 
 router.get('/search', requirePermission('team:view'), teamController.searchIndividuals);
 // Group Config (docs/adr/0009-team-group-config.md): reads need team:view; changes need team:manage and festival Admin

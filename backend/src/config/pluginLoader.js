@@ -3,13 +3,13 @@
  * Dynamically discovers and registers custom plugin routes from the database.
  * 
  * This is the core of the plugin architecture:
- * - Reads the 'features' table for custom features with plugin_dir set
+ * - Reads the 'modules' table for custom modules (type 'custom') with plugin_dir set
  * - Dynamically requires each plugin's routes file
  * - Mounts them on /api/plugins/{featureKey}
  * 
  * Adding a new plugin requires:
  * 1. Creating a plugin directory under src/plugins/
- * 2. Inserting a record in the 'features' table
+ * 2. Inserting a row in the 'modules' table (type 'custom', plugin_dir)
  * 3. ZERO changes to core business logic
  */
 

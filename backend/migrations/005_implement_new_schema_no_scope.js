@@ -5,8 +5,8 @@
  * 1. events: event_id PK, user_id, name, description, event_type, saas_enabled, is_deleted, timestamps
  * 2. users: (no changes)
  * 3. modules: id, module_key (50), label (50), description (150), type, icon, plugin_dir, route, display_order, created_at
- * 4. pages: id, module_id, page_key, route, permission_id, display_order, created_at
- * 5. permissions: id, permission_key (100), label (255), description, module_id, page_id, actions_match, actions_unmatch, created_at
+ * 4. pages: id, module_id, page_key, route, display_order, created_at (permission_id dropped by migration 036)
+ * 5. permissions: id, permission_key (100), label (255), description, module_id, actions_match, actions_unmatch, created_at (page_id dropped by migration 036)
  * 6. groups: id, group_key (100), label (255), description, is_system, created_at
  * 7. module_groups: id, group_id, module_id, name, UNIQUE(group_id, module_id)
  * 8. module_groups_permissions: id, module_group_id, permission_id, UNIQUE(module_group_id, permission_id)
@@ -111,12 +111,10 @@ async function up() {
       \`page_key\` VARCHAR(255) NOT NULL,
       \`label\` VARCHAR(255) DEFAULT NULL,
       \`route\` VARCHAR(255) NOT NULL,
-      \`permission_id\` INT DEFAULT NULL,
       \`display_order\` INT DEFAULT 0,
       \`created_at\` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (\`id\`),
-      KEY \`fk_page_module\` (\`module_id\`),
-      KEY \`fk_page_permission\` (\`permission_id\`)
+      KEY \`fk_page_module\` (\`module_id\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
   console.log('[Migration 005] ✓ `pages` table created/ready');
@@ -140,12 +138,8 @@ async function up() {
     await query(`ALTER TABLE \`permissions\` ADD COLUMN \`module_id\` INT DEFAULT NULL AFTER \`description\``);
     await query(`ALTER TABLE \`permissions\` ADD KEY \`fk_perm_module\` (\`module_id\`)`);
   }
-  if (!updatedPermCols.includes('page_id')) {
-    await query(`ALTER TABLE \`permissions\` ADD COLUMN \`page_id\` INT DEFAULT NULL AFTER \`module_id\``);
-    await query(`ALTER TABLE \`permissions\` ADD KEY \`fk_perm_page\` (\`page_id\`)`);
-  }
   if (!updatedPermCols.includes('actions_match')) {
-    await query(`ALTER TABLE \`permissions\` ADD COLUMN \`actions_match\` ENUM('view','active') NOT NULL DEFAULT 'view' AFTER \`page_id\``);
+    await query(`ALTER TABLE \`permissions\` ADD COLUMN \`actions_match\` ENUM('view','active') NOT NULL DEFAULT 'view' AFTER \`module_id\``);
   }
   if (!updatedPermCols.includes('actions_unmatch')) {
     await query(`ALTER TABLE \`permissions\` ADD COLUMN \`actions_unmatch\` ENUM('hide','inactive') NOT NULL DEFAULT 'hide' AFTER \`actions_match\``);
@@ -219,16 +213,9 @@ async function up() {
   for (const m of modules) {
     const existingPage = await query(`SELECT id FROM \`pages\` WHERE \`module_id\` = ?`, [m.id]);
     if (existingPage.length === 0) {
-      // Find a matching primary read/view permission for this module
-      const viewPerm = await query(
-        `SELECT id FROM \`permissions\` WHERE \`module_id\` = ? AND (\`permission_key\` LIKE '%:view' OR \`permission_key\` LIKE '%:read' OR \`permission_key\` LIKE '%.view' OR \`permission_key\` LIKE '%.read') LIMIT 1`,
-        [m.id]
-      );
-      const permId = viewPerm[0] ? viewPerm[0].id : null;
-
       await query(
-        `INSERT INTO \`pages\` (module_id, page_key, route, permission_id, display_order) VALUES (?, ?, ?, ?, ?)`,
-        [m.id, `${m.module_key}_main`, `/${m.module_key}`, permId, 1]
+        `INSERT INTO \`pages\` (module_id, page_key, route, display_order) VALUES (?, ?, ?, ?)`,
+        [m.id, `${m.module_key}_main`, `/${m.module_key}`, 1]
       );
     }
   }

@@ -1,12 +1,12 @@
 /**
  * Modules Routes
  * Connects controllers for all declarative edition modules:
- * Reviews, Calendar, Tasks, Departments, Guests, Chat, Sponsors, Payouts, Payments, Settings, News, Analytics.
+ * Reviews, Calendar, Tasks, Departments, Guests, Chat, Sponsors, Payouts, Settings.
  */
 
 const express = require('express');
 const { authenticate } = require('../middleware/auth.middleware');
-const { requirePermission, requireModule } = require('../middleware/permission.middleware');
+const { requirePermission, requireAnyPermission, requireModule, requireEventId, requireFestivalMember } = require('../middleware/permission.middleware');
 
 const taskController = require('../controllers/task.controller');
 const reviewController = require('../controllers/review.controller');
@@ -28,10 +28,7 @@ const guestsRouter = express.Router();
 const chatRouter = express.Router();
 const sponsorsRouter = express.Router();
 const payoutsRouter = express.Router();
-const paymentsRouter = express.Router();
 const settingsRouter = express.Router();
-const newsRouter = express.Router();
-const analyticsRouter = express.Router();
 
 // Apply authentication to all module subrouters
 [
@@ -43,82 +40,68 @@ const analyticsRouter = express.Router();
   chatRouter,
   sponsorsRouter,
   payoutsRouter,
-  paymentsRouter,
   settingsRouter,
-  newsRouter,
-  analyticsRouter,
-].forEach(r => r.use(authenticate));
+].forEach(r => r.use(authenticate, requireEventId, requireFestivalMember)); // a user can only act on festivals they belong to
 
 // ── Review & Scoring Pipeline ─────────────────────────────────────────
 reviewRouter.use(requireModule('submissions'));
-reviewRouter.get('/pipeline', reviewController.getPipeline);
-reviewRouter.get('/assignments', reviewController.listAssignments);
-reviewRouter.get('/jury', reviewController.listJury);
-reviewRouter.get('/judges', reviewController.listJury);
-reviewRouter.post('/assign', reviewController.assignJury);
-reviewRouter.post('/scorecard', reviewController.submitScorecard);
-reviewRouter.post('/decision', reviewController.makeDecision);
-reviewRouter.post('/toggle-voting', reviewController.toggleVoting);
-reviewRouter.post('/ballot', reviewController.submitBallot);
-reviewRouter.post('/complete-stage', reviewController.completeStage);
-// Fallback list
-reviewRouter.get('/', reviewController.listAssignments);
+reviewRouter.get('/pipeline', requirePermission('review:view'), reviewController.getPipeline);
+reviewRouter.get('/assignments', requirePermission('review:view'), reviewController.listAssignments);
+reviewRouter.get('/jury', requirePermission('review:view'), reviewController.listJury);
+reviewRouter.post('/assign', requirePermission('review:assign'), reviewController.assignJury);
+reviewRouter.post('/scorecard', requirePermission('review:score'), reviewController.submitScorecard);
+reviewRouter.post('/decision', requirePermission('review:advance'), reviewController.makeDecision);
+reviewRouter.post('/ballot', requirePermission('review:score'), reviewController.submitBallot);
+reviewRouter.post('/complete-stage', requirePermission('review:advance'), reviewController.completeStage);
 
 // ── Calendar & Screenings ─────────────────────────────────────────────
 calendarRouter.use(requireModule('calendar'));
-calendarRouter.get('/', requirePermission('calendar.view'), scheduleController.list);
-calendarRouter.post('/slot', requirePermission('calendar.manage_events'), scheduleController.createSlot);
+calendarRouter.get('/', requirePermission('schedule:view'), scheduleController.list);
+calendarRouter.post('/slot', requirePermission('schedule:manage'), scheduleController.createSlot);
 
 // ── Departmental Tasks ────────────────────────────────────────────────
 tasksRouter.use(requireModule('tasks'));
-tasksRouter.get('/', requirePermission('task.view'), taskController.list);
-tasksRouter.post('/', requirePermission('task.create'), taskController.create);
-tasksRouter.put('/:id/status', requirePermission('task.update_status'), taskController.updateStatus);
+tasksRouter.get('/', requirePermission('task:view'), taskController.list);
+tasksRouter.post('/', requirePermission('task:create'), taskController.create);
+tasksRouter.put('/:id/status', requirePermission('task:status_update'), taskController.updateStatus);
 
 // ── Guests & Hospitality ──────────────────────────────────────────────
-guestsRouter.get('/', guestController.list);
-guestsRouter.post('/:id/checkin', guestController.checkIn);
-guestsRouter.post('/:id/print-badge', guestController.printBadge);
+guestsRouter.get('/', requirePermission('guest:view'), guestController.list);
+guestsRouter.post('/:id/checkin', requirePermission('guest:checkin'), guestController.checkIn);
+guestsRouter.post('/:id/print-badge', requirePermission('guest:edit'), guestController.printBadge);
 
 // ── Communications & Chat ─────────────────────────────────────────────
-chatRouter.get('/channels', chatController.listChannels);
-chatRouter.get('/channels/:channelId/messages', chatController.listMessages);
-chatRouter.post('/channels/:channelId/messages', chatController.sendMessage);
+chatRouter.get('/channels', requirePermission('chat:view'), chatController.listChannels);
+chatRouter.get('/channels/:channelId/messages', requirePermission('chat:view'), chatController.listMessages);
+chatRouter.post('/channels/:channelId/messages', requirePermission('chat:view'), chatController.sendMessage);
 
 // ── Sponsors ──────────────────────────────────────────────────────────
-sponsorsRouter.get('/', sponsorController.list);
-sponsorsRouter.put('/deliverables/:id/status', sponsorController.updateDeliverableStatus);
+sponsorsRouter.get('/', requirePermission('sponsors:view'), sponsorController.list);
+sponsorsRouter.put('/deliverables/:id/status', requirePermission('sponsors:manage'), sponsorController.updateDeliverableStatus);
 
 // ── Payouts ───────────────────────────────────────────────────────────
-payoutsRouter.get('/', payoutController.list);
-payoutsRouter.get('/export-csv', payoutController.exportCsv);
-payoutsRouter.get('/:paymentId/receipt', payoutController.getReceipt);
+payoutsRouter.get('/', requirePermission('payouts:view'), payoutController.list);
+payoutsRouter.get('/export-csv', requirePermission('payouts:view'), payoutController.exportCsv);
+payoutsRouter.get('/:paymentId/receipt', requirePermission('payouts:view'), payoutController.getReceipt);
 
 // ── Departments ───────────────────────────────────────────────────────
 departmentsRouter.use(requireModule('departments'));
-departmentsRouter.get('/', requirePermission('department.view'), departmentController.list);
-
-// ── Payments ──────────────────────────────────────────────────────────
-paymentsRouter.use(requireModule('payments'));
-paymentsRouter.get('/', requirePermission('payment.view'), payoutController.list);
-paymentsRouter.get('/export-csv', payoutController.exportCsv);
-paymentsRouter.get('/:paymentId/receipt', payoutController.getReceipt);
-paymentsRouter.get('/payouts', payoutController.list);
-paymentsRouter.get('/payouts/export-csv', payoutController.exportCsv);
-paymentsRouter.get('/payouts/:paymentId/receipt', payoutController.getReceipt);
+departmentsRouter.get('/', requirePermission('department:view'), departmentController.list);
 
 // ── Edition Settings ──────────────────────────────────────────────────
-settingsRouter.get('/', requirePermission('settings.view'), modulesController.getSettings);
-settingsRouter.post('/modules/:moduleId/toggle', requirePermission('settings.manage_addons'), modulesController.toggleAddon);
+settingsRouter.get('/', requirePermission('settings:manage'), modulesController.getSettings);
+settingsRouter.post('/modules/:moduleId/toggle', requirePermission('settings:manage'), modulesController.toggleAddon);
 
 // Film Flags CRUD
-settingsRouter.get('/flags', settingsController.listFlags);
-settingsRouter.post('/flags', settingsController.createFlag);
-settingsRouter.put('/flags/:id', settingsController.updateFlag);
-settingsRouter.delete('/flags/:id', settingsController.deleteFlag);
+// Review settings are read by Admins, the Jury and anyone who can see submissions; only settings:manage changes them
+const canReadReviewSettings = requireAnyPermission(['settings:manage', 'review:view', 'submission:view']);
+settingsRouter.get('/flags', canReadReviewSettings, settingsController.listFlags);
+settingsRouter.post('/flags', requirePermission('settings:manage'), settingsController.createFlag);
+settingsRouter.put('/flags/:id', requirePermission('settings:manage'), settingsController.updateFlag);
+settingsRouter.delete('/flags/:id', requirePermission('settings:manage'), settingsController.deleteFlag);
 
 // Review Rounds & Criteria Configuration
-settingsRouter.get('/review-rounds', settingsController.getReviewRounds);
+settingsRouter.get('/review-rounds', canReadReviewSettings, settingsController.getReviewRounds);
 settingsRouter.put('/review-rounds/max-rounds', settingsController.updateMaxRounds);
 settingsRouter.put('/review-rounds/:roundNumber', settingsController.updateRoundConfig);
 settingsRouter.post('/review-rounds/:roundNumber/categories', settingsController.addCategory);
@@ -126,23 +109,14 @@ settingsRouter.put('/review-rounds/:roundNumber/categories/:id', settingsControl
 settingsRouter.delete('/review-rounds/:roundNumber/categories/:id', settingsController.deleteCategory);
 
 // Sequential 6-Stages Review Workflow Settings
-settingsRouter.get('/review-states', settingsController.getReviewStates);
-settingsRouter.get('/review-states/:id', settingsController.getReviewStateById);
-settingsRouter.post('/review-states', settingsController.createReviewState);
-settingsRouter.put('/review-states/:id', settingsController.updateReviewState);
-settingsRouter.delete('/review-states/:id', settingsController.deleteReviewState);
-settingsRouter.post('/review-states/reorder', settingsController.reorderReviewStates);
-settingsRouter.post('/review-states/:id/criteria', settingsController.addStateCriteria);
-settingsRouter.delete('/review-states/:id/criteria/:critId', settingsController.deleteStateCriteria);
-
-// ── News & Publications ───────────────────────────────────────────────
-newsRouter.use(requireModule('news'));
-newsRouter.get('/', requirePermission('news.view'), modulesController.listNews);
-newsRouter.post('/', requirePermission('news.publish'), modulesController.publishNews);
-
-// ── Analytics ─────────────────────────────────────────────────────────
-analyticsRouter.use(requireModule('analytics'));
-analyticsRouter.get('/', requirePermission('analytics.view'), modulesController.getAnalytics);
+settingsRouter.get('/review-states', canReadReviewSettings, settingsController.getReviewStates);
+settingsRouter.get('/review-states/:id', canReadReviewSettings, settingsController.getReviewStateById);
+settingsRouter.post('/review-states', requirePermission('settings:manage'), settingsController.createReviewState);
+settingsRouter.put('/review-states/:id', requirePermission('settings:manage'), settingsController.updateReviewState);
+settingsRouter.delete('/review-states/:id', requirePermission('settings:manage'), settingsController.deleteReviewState);
+settingsRouter.post('/review-states/reorder', requirePermission('settings:manage'), settingsController.reorderReviewStates);
+settingsRouter.post('/review-states/:id/criteria', requirePermission('settings:manage'), settingsController.addStateCriteria);
+settingsRouter.delete('/review-states/:id/criteria/:critId', requirePermission('settings:manage'), settingsController.deleteStateCriteria);
 
 module.exports = {
   reviewRouter,
@@ -153,8 +127,5 @@ module.exports = {
   chatRouter,
   sponsorsRouter,
   payoutsRouter,
-  paymentsRouter,
   settingsRouter,
-  newsRouter,
-  analyticsRouter,
 };

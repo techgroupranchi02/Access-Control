@@ -7,6 +7,7 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 
 const CANONICAL_CRITERIA = [
   { key: 'screenplay', label: 'Screenplay' },
@@ -24,11 +25,6 @@ const CANONICAL_CRITERIA = [
   { key: 'message_importance', label: 'Importance of film message' }
 ];
 
-function getEventId(req) {
-  const raw = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
-  const parsed = parseInt(raw, 10);
-  return isNaN(parsed) ? 1 : parsed;
-}
 
 /**
  * Ensures an event has baseline edition settings, round configs, and criteria.

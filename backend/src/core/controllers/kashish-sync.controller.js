@@ -5,22 +5,12 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 const { fetchAllKashishVotes } = require('../services/kashish-api.service');
 const { recalculateScores } = require('./audience.controller');
 const kashishExternal = require('../services/kashishExternalVotes.service');
 const showWindows = require('../services/showWindows.service');
 
-function getEventId(req) {
-  return req.headers['x-event-id'] ||
-         req.headers['x-edition-id'] ||
-         req.headers['x-festival-id'] ||
-         req.query.eventId ||
-         req.query.festivalId ||
-         req.query.festival_id ||
-         req.body?.eventId ||
-         req.body?.festivalId ||
-         1;
-}
 
 /**
  * Normalize title for fuzzy matching (lowercase, remove punctuation, collapse spaces)
@@ -235,7 +225,7 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'scan',
     await query(`
       UPDATE kashish_sync_logs SET
         total_fetched = ?, new_votes_created = ?, duplicate_skipped = ?, users_auto_matched = ?,
-        users_auto_created = 0, movies_unmapped = ?, status = 'completed', completed_at = CURRENT_TIMESTAMP
+        movies_unmapped = ?, status = 'completed', completed_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [votes.length, counts.counted, counts.duplicate + counts.already_final, counts.users_matched, unmappedMovieInfo.size, logId]);
 
@@ -252,7 +242,6 @@ async function syncEventVotes(eventId, { userId = null, apiKey, source = 'scan',
       new_votes_created: counts.counted,
       duplicate_skipped: counts.duplicate + counts.already_final,
       users_auto_matched: counts.users_matched,
-      users_auto_created: 0,
       movies_unmapped: unmappedMovieInfo.size,
       unmapped_movies: [...unmappedMovieInfo].map(([id, title]) => ({ kashish_movie_id: id, kashish_movie_title: title }))
     };
@@ -524,7 +513,7 @@ async function listVoteReceipts(req, res) {
  */
 async function getExternalSummary(req, res) {
   try {
-    const eventId = parseInt(req.headers['x-event-id'] || req.headers['x-edition-id'] || req.query.eventId, 10);
+    const eventId = getEventId(req);
     if (!eventId) return res.status(400).json({ error: 'Festival (event) id is required.' });
     const summary = await kashishExternal.getExternalSummary(eventId);
     res.json({ success: true, ...summary });
@@ -555,7 +544,7 @@ function csvCell(value) {
 
 async function listExternalVotes(req, res) {
   try {
-    const eventId = parseInt(req.headers['x-event-id'] || req.headers['x-edition-id'] || req.query.eventId, 10);
+    const eventId = getEventId(req);
     if (!eventId) return res.status(400).json({ error: 'Festival (event) id is required.' });
     const group = String(req.query.group || '');
     if (!kashishExternal.VOTE_LIST_OUTCOMES[group]) return res.status(400).json({ error: 'Pick which votes to list.' });

@@ -7,9 +7,9 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/admin.controller');
 const { authenticate } = require('../middleware/auth.middleware');
-const { requirePermission } = require('../middleware/permission.middleware');
+const { requirePermission, requireFestivalMember } = require('../middleware/permission.middleware');
 
-router.use(authenticate);
+router.use(authenticate, requireFestivalMember);
 router.use(requirePermission('admin:access'));
 
 // Groups
@@ -19,7 +19,6 @@ router.put('/groups/:id/permissions', adminController.updateRolePermissions);
 
 // Permissions
 router.get('/permissions', adminController.listPermissions);
-router.get('/permission-groups', adminController.listPermissionGroups);
 
 // Users
 router.get('/users', adminController.listUsers);

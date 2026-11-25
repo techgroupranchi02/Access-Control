@@ -470,7 +470,7 @@ export default function PassTemplateEditor({ templateId }) {
         addElement({ type: 'image', name: nextName('Image'), position: { x: (W - w) / 2, y: (H - h) / 2, w, h }, metadata: { source: 'upload', asset_id: assetId, fit: 'contain', opacity: 1, radius: 0, showBadgeNo: false } });
       }
     } catch (err) {
-      setImageError(err.response?.data?.message || err.message || 'Could not upload the image.');
+      setImageError(err.response?.data?.error || err.response?.data?.message || err.message || 'Could not upload the image.');
     } finally {
       setBusy('');
       replaceTarget.current = null;
@@ -544,7 +544,7 @@ export default function PassTemplateEditor({ templateId }) {
       else await api.put(`/pass-templates/${draft.id}`, body);
       navigate('/settings/badges', { state: { notice: `Saved "${draft.name.trim()}".` } });
     } catch (err) {
-      setSaveError(err.response?.status === 413 ? 'The image is too large to upload. Export a smaller version.' : (err.response?.data?.message || 'Could not save the template.'));
+      setSaveError(err.response?.status === 413 ? 'The image is too large to upload. Export a smaller version.' : (err.response?.data?.error || err.response?.data?.message || 'Could not save the template.'));
       setSaving(false);
     }
   };

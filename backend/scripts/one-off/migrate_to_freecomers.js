@@ -1,4 +1,8 @@
 /**
+ * ONE-OFF (already run): copied the Access-Control tables into freecomers_database when the two databases were
+ * merged. Kept for reference only; don't run it again. Moved out of src/ in the API review (A6); the unused
+ * tables payout_milestones and email_templates were taken off its list (D1).
+ *
  * Migration Script: Migrate Access-Control to freecomers_database
  * 
  * Rules strictly followed:
@@ -42,10 +46,8 @@ const TABLES_TO_CREATE = [
   'task_assignees',
   'sponsors',
   'sponsor_deliverables',
-  'payout_milestones',
   'chat_channels',
-  'chat_messages',
-  'email_templates'
+  'chat_messages'
 ];
 
 async function migrate() {
@@ -165,8 +167,7 @@ async function migrate() {
     'task_assignees',
     'sponsors',
     'sponsor_deliverables',
-    'payout_milestones',
-    'chat_channels',
+      'chat_channels',
     'chat_messages'
   ];
 

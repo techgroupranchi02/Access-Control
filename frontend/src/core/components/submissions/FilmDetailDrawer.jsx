@@ -263,7 +263,6 @@ export default function FilmDetailDrawer({
   // Fetch available jury members for assignment
   useEffect(() => {
     api.get('/reviews/jury')
-      .catch(() => api.get('/reviews/judges'))
       .then((res) => {
         setAvailableJudges(res.data?.data || []);
       })
@@ -888,23 +887,19 @@ export default function FilmDetailDrawer({
                 </tr>
                 <tr>
                   <td className="fc-drawer-meta-label">Country</td>
-                  <td className="fc-drawer-meta-value">{activeFilm.country || 'India'}</td>
+                  <td className="fc-drawer-meta-value">{activeFilm.country || '—'}</td>
                 </tr>
                 <tr>
                   <td className="fc-drawer-meta-label">Language</td>
-                  <td className="fc-drawer-meta-value">{activeFilm.language || activeFilm.lang || 'Hindi'}</td>
+                  <td className="fc-drawer-meta-value">{activeFilm.language || activeFilm.lang || '—'}</td>
                 </tr>
                 <tr>
                   <td className="fc-drawer-meta-label">Format</td>
-                  <td className="fc-drawer-meta-value">{activeFilm.format || activeFilm.fmt || 'MP4'}</td>
-                </tr>
-                <tr>
-                  <td className="fc-drawer-meta-label">Premiere</td>
-                  <td className="fc-drawer-meta-value">{activeFilm.premiere || 'World Premiere'}</td>
+                  <td className="fc-drawer-meta-value">{activeFilm.format || activeFilm.fmt || '—'}</td>
                 </tr>
                 <tr>
                   <td className="fc-drawer-meta-label">Year</td>
-                  <td className="fc-drawer-meta-value">{activeFilm.year || activeFilm.yr || 2025}</td>
+                  <td className="fc-drawer-meta-value">{activeFilm.year || activeFilm.yr || '—'}</td>
                 </tr>
                 <tr>
                   <td className="fc-drawer-meta-label">Contact</td>

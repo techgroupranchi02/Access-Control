@@ -12,6 +12,7 @@
 const { query } = require('../../config/database');
 const { canSignInSql } = require('../utils/userStatus');
 const { resolveHighestScope } = require('../services/scoping.service');
+const { getEventId, EVENT_REQUIRED_MESSAGE } = require('../utils/eventId');
 
 /**
  * Creates a middleware that checks if the current user has the specified permission.
@@ -27,7 +28,8 @@ function requirePermission(permissionKey) {
         return res.status(401).json({ error: 'Authentication required.' });
       }
 
-      const editionId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || req.query.editionId || req.query.festivalId || 1;
+      const editionId = getEventId(req);
+      if (!editionId) return res.status(400).json({ error: EVENT_REQUIRED_MESSAGE });
 
       // If user is Freecomers SuperAdmin / platform admin, allow all
       if (req.user.isSuperAdmin || req.user.role === 'admin') {
@@ -147,7 +149,8 @@ function requirePermission(permissionKey) {
 function requireModule(moduleKey) {
   return async (req, res, next) => {
     try {
-      const editionId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || req.query.editionId || req.query.festivalId || 1;
+      const editionId = getEventId(req);
+      if (!editionId) return res.status(400).json({ error: EVENT_REQUIRED_MESSAGE });
 
 
       // Check if module is enabled in events_modules (row presence = enabled)
@@ -178,6 +181,74 @@ function requireModule(moduleKey) {
 
 // Backward-compatible alias
 const requireFeature = requireModule;
+
+/** The festival a request is for (core/utils/eventId.js), or null. */
+const requestedFestivalId = getEventId;
+
+/** Refuses a request that names no festival (400), instead of falling back to a fixed one. */
+function requireEventId(req, res, next) {
+  if (!getEventId(req)) return res.status(400).json({ error: EVENT_REQUIRED_MESSAGE });
+  next();
+}
+
+const MEMBER_CACHE_TTL_MS = 60 * 1000;
+const memberCache = new Map(); // '<userKey>:<eventId>' -> { ok, at }
+
+/** True when the user belongs to the festival: owner, approved claim, or in any of its groups. */
+async function isFestivalMember(user, eventId) {
+  let ids = (user.userIds && user.userIds.length ? user.userIds : [user.id]).filter(Boolean);
+  if (user.email) {
+    const linked = await query(`SELECT id FROM users WHERE email = ? AND ${canSignInSql()}`, [user.email]);
+    if (linked.length) ids = linked.map((u) => u.id);
+  }
+  if (!ids.length) return false;
+  const ph = ids.map(() => '?').join(',');
+  const rows = await query(
+    `SELECT 1 FROM events WHERE event_id = ? AND user_id IN (${ph})
+     UNION SELECT 1 FROM user_event_groups WHERE event_id = ? AND user_id IN (${ph})
+     UNION SELECT 1 FROM user_event_custom_groups uecg
+       JOIN event_custom_groups ecg ON ecg.id = uecg.custom_group_id AND ecg.event_id = uecg.event_id
+       WHERE uecg.event_id = ? AND uecg.user_id IN (${ph})
+     UNION SELECT 1 FROM film_festivals ff
+       JOIN film_festivals_claims ffc ON ffc.film_festival_id = ff.film_festival_id AND ffc.claim_request_status = 'approved'
+       WHERE ff.event_id = ? AND ffc.user_id IN (${ph})
+     LIMIT 1`,
+    [eventId, ...ids, eventId, ...ids, eventId, ...ids, eventId, ...ids]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * A signed-in user may only act on festivals they belong to. Runs after `authenticate` on every festival
+ * router, so a route that forgets its requirePermission still can't be used for another festival by changing
+ * the festival header. Freecomers admins pass. A request that names no festival passes here; requireEventId
+ * (or the route's own check) handles that.
+ */
+async function requireFestivalMember(req, res, next) {
+  try {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required.' });
+    if (req.user.isFreecomersAdmin || req.user.isSuperAdmin) return next();
+    const eventId = requestedFestivalId(req);
+    if (!eventId) return next();
+    const key = `${req.user.id || 'x'}:${req.user.email || ''}:${eventId}`;
+    const hit = memberCache.get(key);
+    let ok;
+    if (hit && Date.now() - hit.at < MEMBER_CACHE_TTL_MS) {
+      ok = hit.ok;
+    } else {
+      ok = await isFestivalMember(req.user, eventId);
+      if (memberCache.size > 5000) memberCache.clear();
+      memberCache.set(key, { ok, at: Date.now() });
+    }
+    if (!ok) {
+      return res.status(403).json({ error: "You're not on this festival's team." });
+    }
+    next();
+  } catch (error) {
+    console.error('[Permission] Festival membership check failed:', error.message);
+    return res.status(500).json({ error: 'Permission check failed.' });
+  }
+}
 
 /**
  * True when the user passes requirePermission(key) (admins, owners and granted groups). For checks inside a
@@ -210,4 +281,4 @@ function requireAnyPermission(keys) {
   };
 }
 
-module.exports = { requirePermission, requireAnyPermission, requireModule, requireFeature, userHasPermission, hasAnyPermission };
+module.exports = { requirePermission, requireAnyPermission, requireModule, requireFeature, userHasPermission, hasAnyPermission, requireFestivalMember, requireEventId, requestedFestivalId, isFestivalMember };

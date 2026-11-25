@@ -122,6 +122,9 @@ const env = {
   // Settings › Audience › Screenings. Unset = the server's own zone. showWindows.service.js
   festivalTimeZone: (process.env.FESTIVAL_TIMEZONE || '').trim() || null,
   kashishFullSyncIntervalMin: Number.isFinite(parseInt(process.env.KASHISH_FULL_SYNC_INTERVAL_MIN, 10)) ? Math.max(parseInt(process.env.KASHISH_FULL_SYNC_INTERVAL_MIN, 10), 0) : 60,
+  // Kashish sync log retention (API review D8): days to keep (0 = never trim) and runs always kept per festival
+  kashishSyncLogRetentionDays: Number.isFinite(parseInt(process.env.KASHISH_SYNC_LOG_RETENTION_DAYS, 10)) ? Math.max(parseInt(process.env.KASHISH_SYNC_LOG_RETENTION_DAYS, 10), 0) : 90,
+  kashishSyncLogKeepPerEvent: Number.isFinite(parseInt(process.env.KASHISH_SYNC_LOG_KEEP_PER_EVENT, 10)) ? Math.max(parseInt(process.env.KASHISH_SYNC_LOG_KEEP_PER_EVENT, 10), 0) : 50,
 };
 
 module.exports = env;

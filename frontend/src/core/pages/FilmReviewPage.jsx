@@ -91,7 +91,7 @@ export default function FilmReviewPage() {
 
       try {
         const res = await api.get(`/submissions/${id}`, {
-          headers: currentFestival?.id ? { 'X-Festival-Id': currentFestival.id } : {},
+          headers: currentFestival?.id ? { 'X-Event-Id': currentFestival.id } : {},
         });
         const filmData = res.data;
         if (!isMounted) return;
@@ -176,7 +176,7 @@ export default function FilmReviewPage() {
     async function loadQueue() {
       try {
         const res = await api.get('/submissions', {
-          headers: currentFestival?.id ? { 'X-Festival-Id': currentFestival.id } : {},
+          headers: currentFestival?.id ? { 'X-Event-Id': currentFestival.id } : {},
         });
         const allFilms = res.data?.data || [];
         const currentId = parseInt(id, 10);
@@ -237,7 +237,7 @@ export default function FilmReviewPage() {
       };
 
       await api.post('/reviews/scorecard', payload, {
-        headers: currentFestival?.id ? { 'X-Festival-Id': currentFestival.id } : {},
+        headers: currentFestival?.id ? { 'X-Event-Id': currentFestival.id } : {},
       });
 
       setSavedSuccess(true);

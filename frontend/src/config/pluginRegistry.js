@@ -1,35 +1,19 @@
 /**
  * Plugin Registry
- * Maps plugin feature keys to their lazy-loaded React components.
- * 
- * To add a new plugin:
+ * Maps plugin module keys to their lazy-loaded React components.
+ *
+ * To add a plugin:
  * 1. Create the component in src/plugins/{pluginKey}/
- * 2. Add an entry here
- * 3. The feature must be registered in the database 'features' table
- * 4. ZERO changes to core business logic required
+ * 2. Add an entry here, e.g.
+ *      myPlugin: { component: lazy(() => import('../plugins/myPlugin/MyPluginPage.jsx')), navLabel: 'My Plugin', route: '/my-plugin' }
+ * 3. Add the backend side: a `modules` row with type 'custom' and plugin_dir, and
+ *    backend/src/plugins/{dir}/{dir}.routes.js (mounted at /api/plugins/{module_key} by pluginLoader.js)
+ *
+ * The demo plugins Custom A/B/C were removed (API review A4); there are no plugins at the moment.
  */
 
-import { lazy } from 'react';
+// import { lazy } from 'react';
 
-const pluginRegistry = {
-  customA: {
-    component: lazy(() => import('../plugins/customA/CustomAPage.jsx')),
-    navLabel: 'Custom A',
-    navIcon: 'puzzle',
-  },
-  // Future plugins:
-  customB: {
-    component: lazy(() => import('../plugins/customB/CustomBPage.jsx')),
-    navLabel: 'Custom B',
-    navIcon: 'layers',
-    route: '/custom-b',
-  },
-  customC: {
-    component: lazy(() => import('../plugins/customC/CustomCPage.jsx')),
-    navLabel: 'Custom C',
-    navIcon: 'layers',
-    route: '/custom-c',
-  },
-};
+const pluginRegistry = {};
 
 export default pluginRegistry;

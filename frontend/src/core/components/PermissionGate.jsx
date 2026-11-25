@@ -4,9 +4,9 @@
  * This is the core component for granular access control in the UI.
  * 
  * Usage:
- *   <PermissionGate permission="customA:read" fallback={<AccessDenied />}>
- *     <PermissionGate permission="customA:update">
- *       <PermissionGate permission="customA:delete">
+ *   <PermissionGate permission="submission:view" fallback={<AccessDenied />}>
+ *     <PermissionGate permission="submission:edit">
+ *       <PermissionGate permission="submission:delete">
  *         <button>Delete</button>
  *       </PermissionGate>
  *     </PermissionGate>

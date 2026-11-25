@@ -12,7 +12,7 @@ const { canSignInSql } = require('../utils/userStatus');
  */
 async function getAllPermissions() {
   return query(
-    'SELECT id, permission_key, label, label as name, description, module_id, page_id, actions_match, actions_unmatch, created_at FROM permissions ORDER BY permission_key'
+    'SELECT id, permission_key, label, label as name, description, module_id, actions_match, actions_unmatch, created_at FROM permissions ORDER BY permission_key'
   );
 }
 
@@ -31,7 +31,7 @@ async function getAllGroups() {
 
   for (const group of groups) {
     const perms = await query(
-      `SELECT DISTINCT p.id, p.permission_key, p.label, p.label as name, p.module_id, p.page_id, p.actions_match, p.actions_unmatch, mgp.scope_key as scopeKey
+      `SELECT DISTINCT p.id, p.permission_key, p.label, p.label as name, p.module_id, p.actions_match, p.actions_unmatch, mgp.scope_key as scopeKey
        FROM permissions p
        JOIN module_groups_permissions mgp ON mgp.permission_id = p.id
        JOIN module_groups mg ON mg.id = mgp.module_group_id
@@ -62,7 +62,7 @@ async function getGroupById(groupId) {
 
   const group = groups[0];
   const perms = await query(
-    `SELECT DISTINCT p.id, p.permission_key, p.label, p.label as name, p.module_id, p.page_id, p.actions_match, p.actions_unmatch, mgp.scope_key as scopeKey
+    `SELECT DISTINCT p.id, p.permission_key, p.label, p.label as name, p.module_id, p.actions_match, p.actions_unmatch, mgp.scope_key as scopeKey
      FROM permissions p
      JOIN module_groups_permissions mgp ON mgp.permission_id = p.id
      JOIN module_groups mg ON mg.id = mgp.module_group_id

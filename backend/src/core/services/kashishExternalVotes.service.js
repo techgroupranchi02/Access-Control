@@ -461,7 +461,7 @@ async function syncExternalVotes(eventId, { apiKey, logId = null, full = false, 
     await query(`
       UPDATE kashish_sync_logs SET
         total_fetched = ?, new_votes_created = ?, duplicate_skipped = ?, users_auto_matched = ?,
-        users_auto_created = 0, movies_unmapped = 0, status = 'completed', completed_at = CURRENT_TIMESTAMP
+        movies_unmapped = 0, status = 'completed', completed_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [votes.length, outcomes.counted, outcomes.duplicate, usersMatched, logId]);
   }

@@ -5,12 +5,8 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 
-function getEventId(req) {
-  const raw = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
-  const parsed = parseInt(raw, 10);
-  return isNaN(parsed) ? 1 : parsed;
-}
 
 /**
  * GET /api/modules/:moduleKey/settings
@@ -49,7 +45,7 @@ async function getModuleSettings(req, res) {
 
     // Fetch any registered settings pages for this module
     const settingPages = await query(
-      `SELECT id, page_key, label, route, permission_id, display_order, sidebar_menu, menu_order 
+      `SELECT id, page_key, label, route, display_order, sidebar_menu, menu_order 
        FROM pages 
        WHERE module_id = ? AND page_type = 'settings' 
        ORDER BY menu_order ASC, display_order ASC`,

@@ -92,10 +92,8 @@ async function up() {
       event_id BIGINT UNSIGNED NOT NULL,
       screening_block_id BIGINT UNSIGNED NOT NULL,
       attendee_id BIGINT UNSIGNED NOT NULL,
-      venue_id BIGINT UNSIGNED NULL,
       scanned_by_user_id INT UNSIGNED NOT NULL,
       scan_status ENUM('valid', 'duplicate_ignored', 'offline_synced') NOT NULL DEFAULT 'valid',
-      offline_client_timestamp TIMESTAMP NULL DEFAULT NULL,
       scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE KEY uk_attendee_screening (screening_block_id, attendee_id),
       INDEX idx_checkin_event (event_id),
@@ -156,7 +154,6 @@ async function up() {
       action ENUM('cast', 'flag', 'void', 'restore', 'bulk_override') NOT NULL,
       actor_user_id INT UNSIGNED NULL,
       reason TEXT NULL,
-      metadata JSON NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_audit_event (event_id),
       INDEX idx_audit_vote (vote_id)

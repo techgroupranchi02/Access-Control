@@ -3,7 +3,7 @@
  * 
  * 1. Creates `festival_review_states` table for dynamic 6-stage review pipeline.
  * 2. Creates `festival_state_criteria` table for rubric criteria and percentage weights.
- * 3. Alters `submissions` table to add `review_state_id`, `current_stage_name`, `composite_score`, `auto_promoted`.
+ * 3. Alters `submissions` table to add `review_state_id`, `current_stage_name`, `auto_promoted` (`composite_score` was never filled; dropped by migration 036).
  * 4. Seeds the approved 6 sequential stages for primary festival events:
  *    Stage 1: Round 1: Screening (5-Star Rubric)
  *    Stage 2: Round 2: Consideration (10-Star Weighted Scale)
@@ -28,7 +28,6 @@ async function up() {
       \`unique_name\` VARCHAR(100) NOT NULL,
       \`stage_order\` SMALLINT UNSIGNED NOT NULL DEFAULT 1,
       \`access_group_name\` VARCHAR(100) NOT NULL DEFAULT 'jury',
-      \`custom_group_id\` INT NULL,
       \`scope_key\` VARCHAR(100) NOT NULL DEFAULT 'assigned',
       
       -- Evaluation System
@@ -43,7 +42,6 @@ async function up() {
       \`completion_logic\` ENUM('all_reviews_done', 'date_dependent', 'admin_override') NOT NULL DEFAULT 'all_reviews_done',
       \`auto_advance_cutoff\` DECIMAL(4,2) NULL DEFAULT 4.50,
       \`auto_reject_cutoff\` DECIMAL(4,2) NULL DEFAULT 3.00,
-      \`deadline_at\` DATETIME NULL,
       \`unreviewed_action\` ENUM('mark_rejected', 'keep_current', 'advance') NOT NULL DEFAULT 'mark_rejected',
       \`status\` ENUM('not_started', 'active', 'completed') NOT NULL DEFAULT 'active',
       
@@ -101,13 +99,8 @@ async function up() {
     console.log('[Migration 010] ✓ Added current_stage_name to submissions');
   }
 
-  if (!subCols.includes('composite_score')) {
-    await query('ALTER TABLE `submissions` ADD COLUMN `composite_score` DECIMAL(4,2) NULL AFTER `current_stage_name`');
-    console.log('[Migration 010] ✓ Added composite_score to submissions');
-  }
-
   if (!subCols.includes('auto_promoted')) {
-    await query('ALTER TABLE `submissions` ADD COLUMN `auto_promoted` TINYINT(1) NOT NULL DEFAULT 0 AFTER `composite_score`');
+    await query('ALTER TABLE `submissions` ADD COLUMN `auto_promoted` TINYINT(1) NOT NULL DEFAULT 0 AFTER `current_stage_name`');
     console.log('[Migration 010] ✓ Added auto_promoted to submissions');
   }
 
@@ -312,7 +305,7 @@ async function down() {
   await query('DROP TABLE IF EXISTS `festival_state_criteria`;');
   await query('DROP TABLE IF EXISTS `festival_review_states`;');
   try {
-    await query('ALTER TABLE `submissions` DROP COLUMN `review_state_id`, DROP COLUMN `current_stage_name`, DROP COLUMN `composite_score`, DROP COLUMN `auto_promoted`;');
+    await query('ALTER TABLE `submissions` DROP COLUMN `review_state_id`, DROP COLUMN `current_stage_name`, DROP COLUMN `auto_promoted`;');
   } catch (e) {
     console.error('Note reverting submissions columns:', e.message);
   }

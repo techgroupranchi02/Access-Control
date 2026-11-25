@@ -4,10 +4,11 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 
 async function list(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
 
     const sponsors = await query('SELECT * FROM sponsors WHERE event_id = ? ORDER BY id ASC', [eventId]);
     const deliverables = await query(`

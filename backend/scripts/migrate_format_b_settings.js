@@ -119,22 +119,19 @@ async function runMigration() {
       WHERE module_id = 34 AND page_key = 'team_hub'
     `);
 
-    const teamManagePerm = await query("SELECT id FROM permissions WHERE permission_key = 'team:manage' LIMIT 1");
-    const permId = teamManagePerm.length > 0 ? teamManagePerm[0].id : null;
-
     const existingTeamSettings = await query("SELECT id FROM pages WHERE module_id = 34 AND page_key = 'team_settings' LIMIT 1");
     if (existingTeamSettings.length === 0) {
       console.log('[Migration] Registering team_settings in pages table...');
       await query(`
-        INSERT INTO pages (module_id, page_key, label, route, permission_id, display_order, page_type, sidebar_menu, menu_order)
-        VALUES (34, 'team_settings', 'Team & Access Policy Settings', '/team/settings', ?, 2, 'settings', 1, 2)
-      `, [permId]);
+        INSERT INTO pages (module_id, page_key, label, route, display_order, page_type, sidebar_menu, menu_order)
+        VALUES (34, 'team_settings', 'Team & Access Policy Settings', '/team/settings', 2, 'settings', 1, 2)
+      `);
     } else {
       await query(`
         UPDATE pages 
-        SET label = 'Team & Access Policy Settings', route = '/team/settings', page_type = 'settings', sidebar_menu = 1, menu_order = 2, permission_id = ?
+        SET label = 'Team & Access Policy Settings', route = '/team/settings', page_type = 'settings', sidebar_menu = 1, menu_order = 2
         WHERE module_id = 34 AND page_key = 'team_settings'
-      `, [permId]);
+      `);
     }
 
     // 5. Seed default Team settings in event_module_settings for active events

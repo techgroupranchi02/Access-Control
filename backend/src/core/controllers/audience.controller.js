@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 const { festivalImageUrl } = require('../utils/media.utils');
 const { query, getConnection } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 const { PREBUILT_TEMPLATES, getAvailableTemplates, getTemplateByKey } = require('../services/registration-form-templates');
 const qrCredential = require('../services/qrCredential.service');
 const qrPrintLog = require('../services/qrPrintLog.service');
@@ -105,17 +106,6 @@ async function findAttendeeByPhone(eventId, phoneDigits) {
 /**
  * Helper: Extract event_id from request headers or query
  */
-function getEventId(req) {
-  return req.headers['x-event-id'] ||
-    req.headers['x-edition-id'] ||
-    req.headers['x-festival-id'] ||
-    req.query.eventId ||
-    req.query.festivalId ||
-    req.query.festival_id ||
-    req.body?.eventId ||
-    req.body?.festivalId ||
-    1;
-}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 1. AUDIENCE SETTINGS & CATEGORIES (/audience)
@@ -855,7 +845,6 @@ async function performScreeningCheckin(req, res) {
     const qr_token = req.body.qr_token || req.body.badge_identifier || req.body.badge_token || req.body.token;
     const attendee_id = req.body.attendee_id || req.body.attendeeId;
     const screening_block_id = req.body.screening_block_id || req.body.screeningBlockId || req.body.screening_id;
-    const venue_id = req.body.venue_id;
 
     if (!screening_block_id) {
       return res.status(400).json({ error: 'Screening session ID is required.' });
@@ -959,9 +948,9 @@ async function performScreeningCheckin(req, res) {
       }
 
       await query(`
-        INSERT INTO screening_checkins (event_id, screening_block_id, attendee_id, venue_id, scanned_by_user_id, scanned_by_admin_id, scan_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [eventId, block.id, targetAttendeeId, venue_id || null, await requiredActorUserId(req, eventId), adminId, inWindow ? 'valid' : 'outside_window']);
+        INSERT INTO screening_checkins (event_id, screening_block_id, attendee_id, scanned_by_user_id, scanned_by_admin_id, scan_status)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [eventId, block.id, targetAttendeeId, await requiredActorUserId(req, eventId), adminId, inWindow ? 'valid' : 'outside_window']);
 
       // Also update saas_attendees status if registered
       await query("UPDATE saas_attendees SET status = 'checked_in' WHERE attendee_id = ? AND event_id = ?", [targetAttendeeId, eventId]);
@@ -1405,7 +1394,7 @@ async function listAttendance(req, res) {
       const match = qrCredential.phoneLast4Matches(rows[0].phone, req.body?.phone_last4);
       if (!match) {
         res.locals.credentialMiss = true;
-        return res.status(403).json({ success: false, match: false, error: 'Those digits don\'t match the delegate\'s registered mobile number.' });
+        return res.status(403).json({ match: false, error: 'Those digits don\'t match the delegate\'s registered mobile number.' });
       }
       res.json({ success: true, match: true });
     } catch (error) {
@@ -1639,13 +1628,13 @@ async function listAttendance(req, res) {
       const eventId = getEventId(req);
       const values = Array.isArray(req.body?.qr_values) ? req.body.qr_values : [];
       if (values.length > qrPrintLog.MAX_ITEMS) {
-        return res.status(400).json({ success: false, message: `Check up to ${qrPrintLog.MAX_ITEMS} badges at a time.` });
+        return res.status(400).json({ error: `Check up to ${qrPrintLog.MAX_ITEMS} badges at a time.` });
       }
       const printed = await qrPrintLog.getPrintStatus(eventId, values);
       res.json({ success: true, printed });
     } catch (err) {
       console.error('Error reading badge print history:', err);
-      res.status(500).json({ success: false, message: 'Could not check which badges were printed before.' });
+      res.status(500).json({ error: 'Could not check which badges were printed before.' });
     }
   }
 
@@ -1658,14 +1647,14 @@ async function listAttendance(req, res) {
       const eventId = getEventId(req);
       const items = Array.isArray(req.body?.items) ? req.body.items : [];
       if (items.length > qrPrintLog.MAX_ITEMS) {
-        return res.status(400).json({ success: false, message: `Record up to ${qrPrintLog.MAX_ITEMS} badges at a time.` });
+        return res.status(400).json({ error: `Record up to ${qrPrintLog.MAX_ITEMS} badges at a time.` });
       }
       const result = await qrPrintLog.recordPrints(eventId, items, { mode: req.body?.mode, userId: actorUserId(req), adminId: actorAdminId(req) });
       res.json({ success: true, ...result });
     } catch (err) {
-      if (err.status === 400) return res.status(400).json({ success: false, message: err.message });
+      if (err.status === 400) return res.status(400).json({ error: err.message });
       console.error('Error recording badge prints:', err);
-      res.status(500).json({ success: false, message: 'Could not record the print.' });
+      res.status(500).json({ error: 'Could not record the print.' });
     }
   }
 
@@ -1680,9 +1669,9 @@ async function listAttendance(req, res) {
       await cardPdf.streamCardPdfZip(req.body, res, { eventId: getEventId(req), zipName });
     } catch (err) {
       if (res.headersSent) return;
-      if (err instanceof cardPdf.CardPdfError) return res.status(err.status).json({ success: false, message: err.message });
+      if (err instanceof cardPdf.CardPdfError) return res.status(err.status).json({ error: err.message });
       console.error('[CardPdf] Error making card PDFs:', err);
-      res.status(500).json({ success: false, message: 'Could not make the PDFs. Try again, or use Print.' });
+      res.status(500).json({ error: 'Could not make the PDFs. Try again, or use Print.' });
     }
   }
 
@@ -2147,10 +2136,11 @@ async function listAttendance(req, res) {
 
       let createdCount = 0;
       let updatedCount = 0;
+      const skipped = []; // rows not imported, recorded in the sync log (API review D4)
 
       const resolveCategory = await categoryResolver(eventId);
-      for (const d of delegates) {
-        if (!d.name) continue;
+      for (const [index, d] of delegates.entries()) {
+        if (!d || !d.name) { skipped.push({ row: index + 1, reason: 'No name' }); continue; }
         const email = d.email ? d.email.trim() : null;
         const phone = d.phone || d.mobile ? String(d.phone || d.mobile).trim() : null;
         const category = resolveCategory(d.category);
@@ -2184,14 +2174,14 @@ async function listAttendance(req, res) {
 
       // Log sync
       await query(`
-      INSERT INTO festival_external_sync_logs (event_id, source_system, entity_type, records_fetched, records_created, records_updated, synced_by_user_id)
-      VALUES (?, 'kashish_csv_bulk', 'attendees', ?, ?, ?, ?)
-    `, [eventId, delegates.length, createdCount, updatedCount, actorUserId(req)]);
+      INSERT INTO festival_external_sync_logs (event_id, source_system, entity_type, records_fetched, records_created, records_updated, records_failed, error_payload, synced_by_user_id)
+      VALUES (?, 'kashish_csv_bulk', 'attendees', ?, ?, ?, ?, ?, ?)
+    `, [eventId, delegates.length, createdCount, updatedCount, skipped.length, skipped.length ? JSON.stringify(skipped.slice(0, 500)) : null, actorUserId(req)]);
 
       res.json({
         success: true,
-        message: `Sync completed: ${createdCount} created, ${updatedCount} updated.`,
-        metrics: { total: delegates.length, created: createdCount, updated: updatedCount }
+        message: `Sync completed: ${createdCount} created, ${updatedCount} updated${skipped.length ? `, ${skipped.length} skipped` : ''}.`,
+        metrics: { total: delegates.length, created: createdCount, updated: updatedCount, skipped: skipped.length }
       });
     } catch (error) {
       console.error('[AudienceController] bulkImportAttendees error:', error.message);
@@ -2603,7 +2593,7 @@ async function listAttendance(req, res) {
    */
   async function exportVotingLeaderboard(req, res) {
     try {
-      const eventId = parseInt(req.headers['x-event-id'] || req.headers['x-edition-id'] || req.query.eventId, 10);
+      const eventId = getEventId(req);
       if (!eventId) return res.status(400).json({ error: 'Festival (event) id is required.' });
       const format = req.query.format === 'pdf' ? 'pdf' : req.query.format === 'csv' ? 'csv' : null;
       if (!format) return res.status(400).json({ error: 'Pick CSV or PDF.' });
@@ -3254,6 +3244,7 @@ async function listAttendance(req, res) {
   async function listFestivalFilms(req, res) {
     try {
       const eventId = getEventId(req);
+      if (!eventId) return res.status(400).json({ error: 'eventId is required.' });
       const sql = `
       SELECT 
         s.id AS film_id,
@@ -3413,7 +3404,8 @@ async function listAttendance(req, res) {
         return res.status(404).json({ error: 'Film not found.' });
       }
       const film = filmRows[0];
-      const eventId = film.event_id || attendee.event_id || 40;
+      const eventId = film.event_id || attendee.event_id;
+      if (!eventId) return res.status(400).json({ error: 'This film is not linked to a festival.' });
 
       // 3. Upsert review (defaults to pending moderation)
       const sql = `

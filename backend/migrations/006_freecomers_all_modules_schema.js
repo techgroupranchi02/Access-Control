@@ -3,14 +3,17 @@
  *
  * Implements production operational tables for all Freecomers platform modules:
  * 1. submissions, submission_flags, submission_logs
- * 2. screening_assignments, screening_reviews, pipeline_states
+ * 2. screening_assignments, screening_reviews (pipeline_states removed: dropped by migration 035)
  * 3. award_categories, jury_ballots
  * 4. tasks, task_assignees
  * 5. venues, venue_screening_slots
  * 6. guests
  * 7. chat_channels, chat_messages
  * 8. sponsors, sponsor_deliverables
- * 9. email_templates, payout_milestones, festival_departments
+ * 9. festival_departments
+ *
+ * attendances, email_templates and payout_milestones were removed from this migration: they were never used
+ * and are dropped by migration 035 (API review D1). This file runs on every deploy, so it must not recreate them.
  */
 
 const { query } = require('../src/config/database');
@@ -52,7 +55,6 @@ async function up() {
       country VARCHAR(100) NOT NULL,
       language VARCHAR(100) NOT NULL DEFAULT 'English',
       format VARCHAR(50) NOT NULL DEFAULT 'Digital',
-      premiere VARCHAR(100) NULL DEFAULT 'None',
       year SMALLINT UNSIGNED NOT NULL DEFAULT 2026,
       email VARCHAR(255) NOT NULL,
       synopsis TEXT NULL,
@@ -76,8 +78,6 @@ async function up() {
       submission_id BIGINT UNSIGNED NOT NULL,
       action VARCHAR(50) NOT NULL,
       actor_user_id INT UNSIGNED NOT NULL,
-      old_value JSON NULL,
-      new_value JSON NULL,
       notes TEXT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_sublogs_submission (submission_id)
@@ -119,17 +119,7 @@ async function up() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
-  // 6. pipeline_states
-  await query(`
-    CREATE TABLE IF NOT EXISTS pipeline_states (
-      id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      event_id BIGINT UNSIGNED NOT NULL,
-      current_stage TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '1=Screening, 2=Selection, 3=Nominations, 4=Jury, 5=Results, 6=Finals',
-      voting_open BOOLEAN NOT NULL DEFAULT FALSE,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uk_event_pipeline (event_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
+  // 6. pipeline_states: no longer created (never used; dropped by migration 035)
 
   // 7. award_categories
   await query(`
@@ -172,20 +162,6 @@ async function up() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS attendances (
-      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      event_id BIGINT UNSIGNED NOT NULL,
-      attendee_id BIGINT UNSIGNED NULL,
-      user_id BIGINT UNSIGNED NULL,
-      venue_id BIGINT UNSIGNED NULL,
-      volunteer_id BIGINT UNSIGNED NULL,
-      checked_in_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_event (event_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
   // 8. jury_ballots
   await query(`
     CREATE TABLE IF NOT EXISTS jury_ballots (
@@ -193,7 +169,6 @@ async function up() {
       event_id BIGINT UNSIGNED NOT NULL,
       category_id INT UNSIGNED NOT NULL,
       jury_user_id INT UNSIGNED NOT NULL,
-      voted_film_id BIGINT UNSIGNED NULL DEFAULT NULL,
       ranked_nominees JSON NULL DEFAULT NULL,
       submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE KEY uk_juror_vote (category_id, jury_user_id),
@@ -269,7 +244,6 @@ async function up() {
       hotel_details VARCHAR(255) NULL,
       flight_details VARCHAR(255) NULL,
       assigned_volunteer_id INT UNSIGNED NULL,
-      assigned_seat VARCHAR(100) NULL,
       badge_issued BOOLEAN NOT NULL DEFAULT FALSE,
       checked_in_at TIMESTAMP NULL DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -286,8 +260,6 @@ async function up() {
       event_id BIGINT UNSIGNED NOT NULL,
       name VARCHAR(100) NOT NULL,
       description TEXT NULL,
-      is_system_group BOOLEAN NOT NULL DEFAULT FALSE,
-      visibility_mode ENUM('roles', 'users', 'all') NOT NULL DEFAULT 'roles',
       visible_to_roles JSON NOT NULL COMMENT '["admin", "volunteer"]',
       created_by_user_id INT UNSIGNED NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -302,8 +274,6 @@ async function up() {
       channel_id VARCHAR(50) NOT NULL,
       sender_user_id INT UNSIGNED NOT NULL,
       content TEXT NOT NULL,
-      reply_to VARCHAR(50) NULL,
-      edited_at TIMESTAMP NULL DEFAULT NULL,
       sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_messages_channel_sent (channel_id, sent_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -335,31 +305,6 @@ async function up() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
-  // 18. email_templates
-  await query(`
-    CREATE TABLE IF NOT EXISTS email_templates (
-      id VARCHAR(50) PRIMARY KEY,
-      event_id BIGINT UNSIGNED NOT NULL,
-      subject VARCHAR(255) NOT NULL,
-      body_html TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      INDEX idx_templates_event (event_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
-  // 19. payout_milestones
-  await query(`
-    CREATE TABLE IF NOT EXISTS payout_milestones (
-      id VARCHAR(50) PRIMARY KEY,
-      event_id BIGINT UNSIGNED NOT NULL,
-      title VARCHAR(100) NOT NULL,
-      target_amount DECIMAL(12, 2) NOT NULL,
-      status ENUM('Locked', 'Eligible', 'Disbursed') NOT NULL DEFAULT 'Locked',
-      disbursed_at TIMESTAMP NULL DEFAULT NULL,
-      INDEX idx_payouts_event (event_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-  `);
-
   // 20. festival_departments
   await query(`
     CREATE TABLE IF NOT EXISTS festival_departments (
@@ -379,7 +324,7 @@ async function down() {
   console.log('[Migration 006] Dropping operational module tables...');
   await query('SET FOREIGN_KEY_CHECKS = 0;');
   const tables = [
-    'festival_departments', 'payout_milestones', 'email_templates', 'sponsor_deliverables',
+    'festival_departments', 'sponsor_deliverables',
     'sponsors', 'chat_messages', 'chat_channels', 'guests', 'venue_screening_slots',
     'venues', 'task_assignees', 'tasks', 'jury_ballots', 'award_categories',
     'pipeline_states', 'screening_reviews', 'screening_assignments', 'submission_logs',

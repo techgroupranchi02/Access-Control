@@ -25,6 +25,13 @@ _Nothing in progress._
 
 ## Up next
 
+- **Limit `/api/admin/*` to Freecomers admins** (found in API review A7). It lists every user and assigns or removes roles in any festival (`festivalId` in the body), but only needs `admin:access`, which every festival Admin passes.
+- **Calendar page:** `GET /api/calendar` requires a `calendar` module that doesn't exist (the module is `schedule`), so the page always gets 404.
+- **`POST /api/reviews/complete-stage`** defaults to stage 1 when no stage is sent; require `stage_id`.
+- **`PUT /api/sponsors/deliverables/:id/status`** answers 500 on a missing body (bind parameter undefined); validate the input.
+- **D7, the remaining links:** about 34 more links between Access-Control tables could get foreign keys.
+- **Review rounds setting:** `festival_edition_settings.max_screening_rounds` still works through `PUT /api/settings/review-rounds/max-rounds`, but no screen calls it since review stages replaced rounds. Decide whether to bring the setting back or drop the endpoint and table (found in the 2026-11-25 column sweep).
+
 - **Make the `KB26-` delegate label dynamic.** The backend builds it with a fixed prefix when a delegate registers (`audience.controller.js`); it should come from festival settings.
 - **Remove Kashish wording from the fallback registration FAQ** in `RegistrationPage.jsx` (used only when a festival hasn't saved its own FAQ).
 - **Bring `.env.example` up to date.** It lists only the database, app and JWT keys; it should list every key in the [README](../README.md#configuration).
@@ -35,6 +42,7 @@ _Nothing in progress._
 
 | Since | Item | Owner | Notes |
 | --- | --- | --- | --- |
+| 2026-11-24 | Production: before deploying the API review fixes, check whether review stages of festivals 40, 1 or 126 have been disappearing (old migration 013 deleted them on every deploy). After deploying, check the migrate log for `[Migration 035]`, `[Migration 036]` and `[Migration 038]` (keep the backup files they name; a `⚠` line from 038 means scans point to deleted shows and need a look). | User | 035 drops 9 unused tables, 036 drops 18 unused columns, 038 removes orphan rows; each backs them up to `backend/logs/db-backups/` first. |
 | 2026-11-23 | Optional: pre-fill the email on Freecomers signup from the invite link (`/signup?email=…`) | Freecomers web team | `freecomers_frontend_next` (separate repo). FestiPlus would then add the email to the link. |
 | 2026-11-20 | Production: set delegates whose category is not one of the festival's (e.g. Sarang Bhakra, BANGALORE_GENERAL) to the festival's category: preview + UPDATE query given in chat on 2026-11-20. | User | Data only; the code fix stops new ones after deploy. |
 | 2026-11-20 | Production: after the next deploy, check the migrate log for `[Migration 027] … 1 change(s)` (time zone set) and `[Migration 030] ✓ festival …: N of M scan(s) re-marked`; then Attendance shows today's scans as valid inside their windows. | User | The "server time zone must be IST" item below is no longer required once this is deployed. |
@@ -56,6 +64,64 @@ _Nothing in progress._
 | — | Deploy the pending Laravel and Next.js fixes to production | DevOps | Production deploy only; they are not in this repo. |
 
 ## Done
+
+- **2026-11-25: Second sweep for useless columns** (`uncommitted`). Prompted by `screening_checkins.venue_id` always being NULL. Profiled all 473 columns of the 62 FestiPlus tables on dev (non-NULL, distinct and default-only counts), grepped each name in Access-Control, the Freecomers Laravel apps and festease, and read every hit. Dropped only what is empty and that no code ever fills:
+  - **Columns** (added to migration 036, which backs each one up to `backend/logs/db-backups/` first):
+    - `screening_checkins.venue_id`: set from a request field the scanner never sends; a scan's venue is its show's `screening_blocks.venue_id`;
+    - `festival_review_states.custom_group_id`, `audience_voting_audit_logs.metadata`: never read or written;
+    - `submissions.composite_score`: only ever reset to NULL; the rating filters, Advance check and board ratings now use `overall_average_rating` alone (the `composite_score` response key stays, computed in code);
+    - `submissions.premiere`: always `'None'`, never written; the film drawer's Premiere row is gone, and its Country / Language / Format / Year rows show "—" instead of made-up values ('India', 'Hindi', 'MP4', 2025);
+    - `permissions.page_id`, `pages.permission_id`: never written; removed from the permission and module-settings SELECTs and from `scripts/migrate_format_b_settings.js`;
+    - `kashish_sync_logs.users_auto_created`: always 0; removed from both sync writers and the Voting page (stat tile and log column).
+  - **Table** `pipeline_states` (added to migration 035, backed up first): `current_stage` was never written, and `voting_open` only by `POST /api/reviews/toggle-voting`, which no screen called. The route, `toggleVoting` and the unused `pipelineState` field of `GET /api/reviews/pipeline` are removed.
+  - Migrations 005, 006, 008, 010 and 015a no longer create them; 012 only aligns `premiere` while it exists.
+  - Kept on purpose: columns at their default only because dev data is thin but written by features, columns filled by particular actions (admin actor ids, voting window times, show venue), `modules.plugin_dir` (plugin loader hook) and `venues` (differs on production).
+  - Verified: `npm run migrate` twice (first run backed up and dropped, second skipped everything; 005 and 012 ran clean), `information_schema` shows all 8 columns and the table gone. The check-in INSERT run in a rolled-back transaction, the scan endpoint answers 409 for a closed show, and the stage reset SET clause is valid. GET submissions (every rating filter, boards, film detail without `premiere`), reviews pipeline (no `pipelineState`), attendance logs, Kashish sync logs, team groups, `/auth/me`, module settings and admin permissions all return 200. Puppeteer: Submissions, film drawer (no Premiere row), Voting (no Users Created), Attendance, Settings and Group Config load with no API or page errors. Frontend build passes; lint has warnings only.
+  - On deploy, the old process can log one `Unknown column 'users_auto_created'` from an auto-sync tick between `npm run migrate` and `pm2 reload`; the next tick succeeds.
+
+- **2026-11-24: API and database review fixes** (`uncommitted`). Findings from the API and Database Reference (Google Doc); each fixed finding has a Status line there.
+  - **A1:**
+    - permission checks on the unprotected review, settings, guest, chat, sponsor and payout routes;
+    - new `requireFestivalMember` (`permission.middleware.js`) on every festival router.
+  - **A2:**
+    - `core/utils/eventId.js` › `getEventId(req)` replaces 53 inline `|| 1` fallbacks, the festival-40 fallbacks and the local helpers;
+    - `requireEventId` returns 400 "Choose a festival first." on every festival router; `requirePermission` / `requireModule` do the same.
+  - **D2:** migration `033_ensure_reviews_and_module_settings.js`.
+  - **A3:** removed `GET /api/admin/permission-groups`.
+  - **A4:** removed News, Analytics, Custom A/B/C (backend and frontend), and the demo handlers in `modules.controller.js`. The plugin registry is now empty.
+  - **A6:**
+    - deleted `jury.routes.js` / `jury.controller.js` / `festival.service.js`, `check_groups.js` and `fix_perms.js`;
+    - moved `migrate_to_freecomers.js` to `backend/scripts/one-off/`;
+    - moved `src/scripts/migrate_kashish_integration.js` to `migrations/015a_kashish_integration.js`, at the same place in the run order.
+  - **D3:**
+    - migrations 001–004 moved to `migrations/archive/` behind a guard;
+    - `013_dedup_and_constrain_review_stages.js` limited to its one-time situation. It deleted the review stages of festivals 40, 1 and 126 except fixed dev ids on every deploy.
+  - **D5:** migration `034_kashish_sync_logs_index.js`.
+  - **A5:** production nginx logs show only `/api/v1/auth/google/callback` in use (the Google OAuth redirect URI), so it stays. Removed: the other `/api/v1/auth` paths, `/api/schedule`, the `/api/payments` router, `/api/reviews/judges`, the bare `/api/reviews`, and the frontend's `/reviews/judges` fallbacks.
+  - **D4:**
+    - `guests.checked_in_at` is set at guest check-in (first arrival), and the delegate bulk import logs skipped rows in `festival_external_sync_logs.records_failed` / `error_payload`;
+    - migration `036_drop_unused_columns.js` backs up 10 never-used columns (18 after the 2026-11-25 sweep) to `backend/logs/db-backups/`, then drops them;
+    - 006/008/010/012 no longer define or modify them.
+  - **D6:** migration `037_drop_redundant_indexes.js` drops 14 indexes that a unique index on the same table already covers, re-checking each one first. Kept `screening_checkins.idx_checkin_event`: it serves the attendance log's `event_id = ? AND id <= ?` anchor.
+  - **D7:** migration `038_orphans_and_foreign_keys.js`:
+    - 5 foreign keys: checkins → shows `RESTRICT` (the same rule the app applies); Kashish film links → shows, task assignees → tasks, chat messages → channels, sponsor deliverables → sponsors `CASCADE`;
+    - removed (after a backup) 1 orphan `pages` row and 4 `task_assignees` rows for deleted users;
+    - on production, orphan scans are kept and only that foreign key is skipped.
+  - **D8:** `core/services/logRetention.service.js` (started in `app.js`) deletes `kashish_sync_logs` rows older than `KASHISH_SYNC_LOG_RETENTION_DAYS` (90) once a day, keeping each festival's latest `KASHISH_SYNC_LOG_KEEP_PER_EVENT` (50) runs. Tested on a temporary copy of the table with 7 days: 10,116 of 15,261 removed, exactly as expected.
+  - **A7:**
+    - **Permission keys:** route and handler keys use the colon form. Typo fixed: `task.update_status` → `task:status_update`, so Volunteers can update task status. `submission.update_status` → `review:advance`, `settings.view` / `settings.manage_addons` → `settings:manage`, `calendar.*` → `schedule:*`.
+    - **Errors:** 22 `{ success: false, message }` error responses → `{ error }`, and the frontend readers accept both.
+    - **Festival id:** one name, `X-Event-Id` / `eventId` (`getEventId`); the frontend sends only `X-Event-Id`, and a request that names a festival keeps it.
+  - **D1:**
+    - migration `035_drop_unused_tables.js` backs up the 8 tables to `backend/logs/db-backups/`, then drops them;
+    - 006 no longer recreates them;
+    - seeders 001/002 archived behind a guard (they wrote to the shared users/roles/events tables); npm `seed` / `setup` removed.
+  - **Test (dev):**
+    - role matrix (Admin / Volunteer / Jury / other festival) on every changed route;
+    - every festival endpoint answers 400 without a festival and 200 with one;
+    - the migration runner passes;
+    - Puppeteer page check for all three roles: no 400/401/403/500.
+  - **During testing:** a probe of `POST /reviews/complete-stage` with an empty body completed festival 40's stage 1 (stage 224). No films moved; its status was set back to `active`. That handler defaults to stage 1 when no stage is given, which is worth fixing.
 
 - **2026-11-23: Team › Group Config** (`uncommitted`). [ADR 0009](adr/0009-team-group-config.md).
   - **Why:** custom groups could only be created (no edit or delete), and the default groups' permissions weren't shown anywhere.

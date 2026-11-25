@@ -15,6 +15,7 @@
  */
 
 const { query, getConnection } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 const { festivalImageUrl } = require('../utils/media.utils');
 const { PREBUILT_TEMPLATES } = require('../services/registration-form-templates');
 const svc = require('../services/passTemplates.service');
@@ -31,24 +32,19 @@ const STANDARD_FORM_KEYS = new Set(['name', 'email', 'phone', 'pass_type', 'pass
 const LIST_COLUMNS = `id, event_id, name, design_mode, width_mm, height_mm, config_json, category_codes, is_default,
   (background_image IS NOT NULL) AS has_image, updated_at`;
 
-function getEventId(req) {
-  const raw = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId;
-  const id = parseInt(raw, 10);
-  return Number.isFinite(id) && id > 0 ? id : null;
-}
 
 function requireEvent(req, res) {
   const eventId = getEventId(req);
-  if (!eventId) res.status(400).json({ success: false, message: 'Choose a festival first.' });
+  if (!eventId) res.status(400).json({ error: 'Choose a festival first.' });
   return eventId;
 }
 
 function handleError(res, error, where) {
   if (error instanceof svc.ValidationError) {
-    return res.status(400).json({ success: false, message: error.message });
+    return res.status(400).json({ error: error.message });
   }
   console.error(`[PassTemplates] ${where} error:`, error.message);
-  return res.status(500).json({ success: false, message: 'Something went wrong with the pass templates. Please try again.' });
+  return res.status(500).json({ error: 'Something went wrong with the pass templates. Please try again.' });
 }
 
 function formatDateRange(start, end) {
@@ -194,7 +190,7 @@ async function listTemplates(req, res) {
       query(`SELECT ${LIST_COLUMNS} FROM pass_templates WHERE event_id = ? AND is_archived = 0 ORDER BY is_default DESC, name`, [eventId]),
       getFestivalContext(eventId),
       getQrSettings(eventId),
-      userHasPermission(req, 'settings.manage')
+      userHasPermission(req, 'settings:manage')
     ]);
     const elementRows = await loadElementRows(rows.map((r) => r.id));
     res.json({
@@ -218,7 +214,7 @@ async function getTemplate(req, res) {
     const starter = svc.getStarter(req.params.id);
     if (starter) return res.json({ success: true, template: { ...starter, background_image: null, assets: {} } });
     const template = await loadFullTemplate(eventId, req.params.id);
-    if (!template) return res.status(404).json({ success: false, message: 'Template not found.' });
+    if (!template) return res.status(404).json({ error: 'Template not found.' });
     res.json({ success: true, template });
   } catch (error) {
     handleError(res, error, 'get');
@@ -251,7 +247,7 @@ async function updateTemplate(req, res) {
     const eventId = requireEvent(req, res);
     if (!eventId) return;
     const existing = await loadRow(eventId, req.params.id);
-    if (!existing) return res.status(404).json({ success: false, message: 'Template not found.' });
+    if (!existing) return res.status(404).json({ error: 'Template not found.' });
 
     // keep_image: the client didn't resend the stored image and didn't remove it
     const keepImage = req.body?.keep_image === true && Boolean(existing.background_image);
@@ -284,7 +280,7 @@ async function duplicateTemplate(req, res) {
       source = { ...starter, name: starter.name.replace(/\s*\(starter\)$/i, ''), background_image: null };
     } else {
       source = await loadFullTemplate(eventId, req.params.id);
-      if (!source) return res.status(404).json({ success: false, message: 'Template not found.' });
+      if (!source) return res.status(404).json({ error: 'Template not found.' });
       source.name = `${source.name} (copy)`.slice(0, 120);
     }
     const id = await inTransaction(async (conn) => {
@@ -342,7 +338,7 @@ async function layoutPreview(req, res) {
     const W = Number(req.body?.width_mm);
     const H = Number(req.body?.height_mm);
     if (![W, H].every((n) => Number.isFinite(n) && n >= 20 && n <= 300)) {
-      return res.status(400).json({ success: false, message: 'Pass width and height must be between 20 and 300 mm.' });
+      return res.status(400).json({ error: 'Pass width and height must be between 20 and 300 mm.' });
     }
     res.json({ success: true, elements: svc.buildLayoutElements(W, H, { title: typeof req.body?.title === 'string' ? req.body.title.slice(0, 60) : undefined }) });
   } catch (error) {
@@ -356,7 +352,7 @@ async function setDefaultTemplate(req, res) {
     const eventId = requireEvent(req, res);
     if (!eventId) return;
     const row = await loadRow(eventId, req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: 'Template not found.' });
+    if (!row) return res.status(404).json({ error: 'Template not found.' });
     conn = await getConnection();
     await conn.beginTransaction();
     await conn.query('UPDATE pass_templates SET is_default = 0 WHERE event_id = ? AND is_default = 1', [eventId]);
@@ -376,7 +372,7 @@ async function archiveTemplate(req, res) {
     const eventId = requireEvent(req, res);
     if (!eventId) return;
     const row = await loadRow(eventId, req.params.id);
-    if (!row) return res.status(404).json({ success: false, message: 'Template not found.' });
+    if (!row) return res.status(404).json({ error: 'Template not found.' });
     await query('UPDATE pass_templates SET is_archived = 1, is_default = 0 WHERE id = ? AND event_id = ?', [row.id, eventId]);
     res.json({ success: true });
   } catch (error) {

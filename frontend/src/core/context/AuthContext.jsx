@@ -131,7 +131,7 @@ export function AuthProvider({ children }) {
   const refreshProfile = useCallback(async (festivalId) => {
     try {
       const res = await api.get('/auth/me', {
-        headers: festivalId ? { 'X-Festival-Id': festivalId, 'X-Edition-Id': festivalId } : {},
+        headers: festivalId ? { 'X-Event-Id': festivalId } : {},
       });
       setUser(res.data);
       return res.data;

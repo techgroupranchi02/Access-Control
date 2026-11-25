@@ -4,7 +4,7 @@
  */
 
 const permissionService = require('../services/permission.service');
-const festivalService = require('../services/festival.service');
+const festivalService = require('../services/edition.service');
 const { query } = require('../../config/database');
 
 // ── Roles ────────────────────────────────────────────────────────────
@@ -54,15 +54,6 @@ async function listPermissions(req, res) {
     res.json(permissions);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch permissions.' });
-  }
-}
-
-async function listPermissionGroups(req, res) {
-  try {
-    const groups = await permissionService.getAllPermissionGroups();
-    res.json(groups);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch permission groups.' });
   }
 }
 
@@ -134,7 +125,6 @@ module.exports = {
   createRole,
   updateRolePermissions,
   listPermissions,
-  listPermissionGroups,
   listUsers,
   assignUserRole,
   removeUserRole,

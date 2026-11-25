@@ -15,12 +15,11 @@ const api = axios.create({
   },
 });
 
-// Request interceptor — attach edition/festival ID and auth token
+// Request interceptor — attach the festival (X-Event-Id, the one festival header) and auth token.
+// A request that names its own festival keeps it.
 api.interceptors.request.use((config) => {
   const editionId = localStorage.getItem('currentEditionId') || localStorage.getItem('currentFestivalId');
-  if (editionId) {
-    config.headers['X-Edition-Id'] = editionId;
-    config.headers['X-Festival-Id'] = editionId;
+  if (editionId && !config.headers['X-Event-Id']) {
     config.headers['X-Event-Id'] = editionId;
   }
   const token = localStorage.getItem('authToken');

@@ -22,7 +22,7 @@ const MIGRATION_SCRIPTS = [
   path.resolve(__dirname, '013_dedup_and_constrain_review_stages.js'),
   path.resolve(__dirname, '014_qr_credential_serial.js'),
   path.resolve(__dirname, '015_vote_badge_link_and_kashish_receipts.js'),
-  path.resolve(__dirname, '../src/scripts/migrate_kashish_integration.js'),
+  path.resolve(__dirname, '015a_kashish_integration.js'),
   path.resolve(__dirname, '016_kashish_external_leaderboard.js'),
   path.resolve(__dirname, '017_saas_qr_lost_flag.js'),
   path.resolve(__dirname, '018_pass_templates.js'),
@@ -40,6 +40,12 @@ const MIGRATION_SCRIPTS = [
   path.resolve(__dirname, '030_recompute_scan_status.js'),
   path.resolve(__dirname, '031_team_invitations.js'),
   path.resolve(__dirname, '032_custom_group_audit.js'),
+  path.resolve(__dirname, '033_ensure_reviews_and_module_settings.js'),
+  path.resolve(__dirname, '034_kashish_sync_logs_index.js'),
+  path.resolve(__dirname, '035_drop_unused_tables.js'),
+  path.resolve(__dirname, '036_drop_unused_columns.js'),
+  path.resolve(__dirname, '037_drop_redundant_indexes.js'),
+  path.resolve(__dirname, '038_orphans_and_foreign_keys.js'),
   path.resolve(__dirname, '../src/scripts/sync_specs_to_database.js'),
 ];
 

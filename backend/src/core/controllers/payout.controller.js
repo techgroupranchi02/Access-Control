@@ -5,6 +5,7 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 let generateTaxInvoicePdf = null;
 let formatDate = null;
 let getSettlementPeriod = null;
@@ -25,16 +26,9 @@ const pdfReceiptCache = new Map();
  * Resolve festival_id (film_festival_id) from event_id or headers
  */
 async function resolveFestivalId(req) {
-  const eventId = parseInt(
-    req.headers['x-event-id'] ||
-    req.headers['x-festival-id'] ||
-    req.headers['x-edition-id'] ||
-    req.query.eventId ||
-    req.query.festival_id ||
-    40,
-    10
-  );
-
+  // The festival comes from the request; never a fixed one (a request without it is refused by requireEventId)
+  const eventId = getEventId(req);
+  if (!eventId) return { festivalId: null, eventId: null };
   try {
     const festRows = await query(
       'SELECT film_festival_id FROM film_festivals WHERE event_id = ? LIMIT 1',
@@ -46,7 +40,8 @@ async function resolveFestivalId(req) {
   } catch (err) {
     console.error('[PayoutController] Failed to resolve festivalId:', err.message);
   }
-  return { festivalId: eventId, eventId };
+  // No film_festivals row: the festival has no Freecomers payments (festival_id is not the event id)
+  return { festivalId: null, eventId };
 }
 
 /**
@@ -191,7 +186,7 @@ async function list(req, res) {
     });
   } catch (error) {
     console.error('[PayoutController] list error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to retrieve payout data.' });
+    return res.status(500).json({ error: 'Failed to retrieve payout data.' });
   }
 }
 
@@ -264,7 +259,7 @@ async function exportCsv(req, res) {
     return res.send(csvContent);
   } catch (error) {
     console.error('[PayoutController] exportCsv error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to export CSV.' });
+    return res.status(500).json({ error: 'Failed to export CSV.' });
   }
 }
 
@@ -277,7 +272,7 @@ async function getReceipt(req, res) {
     const { festivalId } = await resolveFestivalId(req);
     const paymentId = parseInt(req.params.paymentId, 10);
     if (!paymentId) {
-      return res.status(400).json({ success: false, message: 'Payment ID is required.' });
+      return res.status(400).json({ error: 'Payment ID is required.' });
     }
 
     const rows = await query(`
@@ -292,7 +287,7 @@ async function getReceipt(req, res) {
 
     const payment = rows?.[0];
     if (!payment) {
-      return res.status(404).json({ success: false, message: 'Payment record not found.' });
+      return res.status(404).json({ error: 'Payment record not found.' });
     }
 
     const cacheKey = `${festivalId}_${payment.id}_${payment.settlement_status || ''}`;
@@ -366,7 +361,7 @@ async function getReceipt(req, res) {
     );
 
     if (!generateTaxInvoicePdf) {
-      return res.status(500).json({ success: false, message: 'PDF generator is not available.' });
+      return res.status(500).json({ error: 'PDF generator is not available.' });
     }
 
     const pdfBuffer = await generateTaxInvoicePdf({
@@ -401,7 +396,7 @@ async function getReceipt(req, res) {
     return res.end(finalBuffer);
   } catch (error) {
     console.error('[PayoutController] getReceipt error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to generate tax invoice PDF.' });
+    return res.status(500).json({ error: 'Failed to generate tax invoice PDF.' });
   }
 }
 

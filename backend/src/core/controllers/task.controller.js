@@ -7,6 +7,7 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 const { requiredActorUserId } = require('../utils/actor');
 const { scopeTasksQuery } = require('../services/scoping.service');
 
@@ -15,7 +16,7 @@ const { scopeTasksQuery } = require('../services/scoping.service');
  */
 async function list(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     const userId = req.user.id;
 
     // Check user role
@@ -112,7 +113,7 @@ async function list(req, res) {
 async function updateStatus(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { status } = req.body;
 
     const validStatuses = ['To Do', 'In Progress', 'Done'];
@@ -136,7 +137,7 @@ async function updateStatus(req, res) {
  */
 async function create(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { title, department = 'General', priority = 'medium', due_date, assigneeIds = [] } = req.body;
 
     if (!title) return res.status(400).json({ error: 'Task title is required.' });

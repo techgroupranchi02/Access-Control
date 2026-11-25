@@ -17,7 +17,7 @@ Guidance for working in this repository.
 # backend (port 4000)
 cd backend && npm run dev          # node src/app.js
 npm run migrate                    # migrations/run_all_migrations.js
-npm run seed                       # seeders/001_seed_data.js (demo pw: Demo@12345)
+# no seed: the old demo seeders are archived (seeders/archive/, unsafe on the shared DB)
 
 # frontend (port 5173, proxies /api -> 127.0.0.1:4000)
 cd frontend && npm run dev
@@ -30,9 +30,9 @@ npm run lint
   - Middleware order: helmet, CORS allowlist, permissions policy, general rate limiter, JSON body (10mb), cookie-parser.
   - `start()` tests the DB connection, then runs `loadPlugins(app)`, then adds the error and 404 handlers.
 - **Route files** live in `backend/src/core/routes/`. The main mounts are:
-  - `/api/auth` (also `/api/v1/auth`), `/api/events`, `/api/submissions`, `/api/team`, `/api/admin/saas`, `/api/admin`.
+  - `/api/auth` (`/api/v1/auth` keeps only `GET /google/callback`, the Google OAuth redirect URI), `/api/events`, `/api/submissions`, `/api/team`, `/api/admin/saas`, `/api/admin`.
   - `/api/modules/:moduleKey/settings`, served by the "Format B" settings engine.
-  - `modules.routes.js` exports several sub-routers: `/api/reviews`, `/api/calendar` (also mounted as `/api/schedule`), `/api/tasks`, `/api/departments`, `/api/guests`, `/api/chat`, `/api/sponsors`, `/api/payouts`, `/api/payments`, `/api/settings`, `/api/news`, `/api/analytics`.
+  - `modules.routes.js` exports several sub-routers: `/api/reviews`, `/api/calendar`, `/api/tasks`, `/api/departments`, `/api/guests`, `/api/chat`, `/api/sponsors`, `/api/payouts`, `/api/settings`. Every festival router runs `authenticate`, `requireEventId` (400 without a festival) and `requireFestivalMember` (403 for festivals the user isn't on); read the festival with `getEventId(req)` from `core/utils/eventId.js`, never a fixed fallback.
   - `audience.routes.js`: `/api/audience`, `/api/attendance`, `/api/voting`, `/api/registration`, plus the **unauthenticated** `/api/public/vote/:token` and `/api/public/*`.
   - `/api/kashish-sync`.
 - **Plugins**:
@@ -64,7 +64,7 @@ npm run lint
     - **Group Config** ([ADR 0009](docs/adr/0009-team-group-config.md)): Team › Group Config (`/team/groups`, `GroupConfig.jsx`, `teamGroups.service.js`). Default groups (Admin, Jury, Volunteer) are read-only (global, rebuilt from the spec); custom groups belong to one festival and can be created, edited (409 on a stale save, `updated_at`) and deleted (members keep their default groups; invites lose the group). Reads need `team:view`; changes need festival Admin. Always join custom-group memberships with `ecg.event_id = uecg.event_id`. Only festival Admins can give the Admin group or a custom group with `team:manage` / `settings:manage` (`assertCanGrant`).
     - **Team invitations** ([ADR 0008](docs/adr/0008-team-invitations.md)): Team › Add Team Member can invite an email with no usable account (`team_invitations`, `teamInvites.service.js`). The invite email says to create the Freecomers account with that email; `claimInvitations()` in password and Google login turns pending invites into team access before the role gate. Existing accounts get a "You've been added" email. Pending invites hold a seat; the seat limit is `event_user_limits.max_users` (SaaS console), default 25 (`teamSeatLimit`). Team edits change only festival groups, never the shared `users` / `individuals` rows. Signup/sign-in links come from `FREECOMERS_SITE_URL` and `FRONTEND_URL`.
 - **Route guards** (`core/middleware/permission.middleware.js`):
-  - `requirePermission('module.action')`: `.` and `:` mean the same thing, and so do `view` and `read`. It sets `req.permissionScope.scopeKey` to `all`, `jury_panel` or `assigned`.
+  - `requirePermission('module:action')`: write keys in the colon form the `permissions` table stores (`.` still works, and so do `view` / `read`), and only use keys that exist in `sync_specs_to_database.js`. It sets `req.permissionScope.scopeKey` to `all`, `jury_panel` or `assigned`.
   - `requireModule(key)`: checks the event has the module enabled.
   - **Full delegate list:** `/audience` and Bulk QR stock need `registration:view_roster`. Admin has it and volunteers don't, so volunteers only get Registration (spot registration and Assign QR) and Attendance.
     - Frontend check: `hooks/useCanViewRoster.js`.
@@ -78,7 +78,7 @@ npm run lint
 ## Multi-tenancy
 - The tenant is `events.event_id`. "Festival", "edition" and "event" mean the same thing in code. The legacy `festivals` and `editions` tables were renamed to `events`.
 - The current tenant comes from the `X-Event-Id`, `X-Edition-Id` or `X-Festival-Id` header, or the matching query param.
-  - **Pitfall:** many controllers' `getEventId(req)` silently fall back to `1`. Always scope queries by event explicitly.
+  - `getEventId(req)` (`core/utils/eventId.js`) returns null when no festival is sent; there is no fallback to a fixed festival (API review A2). Always scope queries by event explicitly.
 
 ## Database
 - **Connection**:
@@ -108,7 +108,7 @@ npm run lint
 
 ## Conventions
 - **Routers**: create the router, call `router.use(authenticate)`, add `requireModule(...)`, then add `requirePermission(...)` on each route.
-- **Errors**: return `res.status(4xx|500).json({ error: '...' })`. Successful responses do not share one shape, so match the neighbouring endpoints.
+- **Errors**: return `res.status(4xx|500).json({ error: '...' })`, never `{ success: false, message }` (the frontend reads `error`). Successful responses do not share one shape, so match the neighbouring endpoints.
 - **Log lines**: prefix them with a tag such as `[PluginLoader]` or `[Permission]`.
 
 ## Domain glossary
@@ -170,7 +170,7 @@ npm run lint
 - **Jenkins**: pushes to `main` deploy to prod, and any other branch deploys to dev.
   - Steps: `npm ci`, build the frontend, rsync, `npm run migrate || true`, `pm2 reload access-control-backend`, reload nginx.
 - **pm2**: `backend/ecosystem.config.cjs` runs one instance on port 4000.
-- **Backend env keys**: `DB_*`, `APP_PORT`, `NODE_ENV`, `FRONTEND_URL`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL`, `KASHISH_API_KEY`, `KASHISH_API_URL`, `KASHISH_MOVIES_API_URL` (optional), `KASHISH_SYNC_INTERVAL_SEC` (default 120; 0 disables auto-sync), `KASHISH_FULL_SYNC_INTERVAL_MIN` (default 60; 0 = full sync only on "Sync now"), `FESTIVAL_TIMEZONE` (optional IANA zone for festivals without their own), and `FREECOMERS_API_URL`.
+- **Backend env keys**: `DB_*`, `APP_PORT`, `NODE_ENV`, `FRONTEND_URL`, `JWT_SECRET_KEY`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL`, `KASHISH_API_KEY`, `KASHISH_API_URL`, `KASHISH_MOVIES_API_URL` (optional), `KASHISH_SYNC_INTERVAL_SEC` (default 120; 0 disables auto-sync), `KASHISH_FULL_SYNC_INTERVAL_MIN` (default 60; 0 = full sync only on "Sync now"), `KASHISH_SYNC_LOG_RETENTION_DAYS` (default 90; 0 = never trim) and `KASHISH_SYNC_LOG_KEEP_PER_EVENT` (default 50): the daily clean-up of `kashish_sync_logs` in `logRetention.service.js`, which always keeps each festival's latest runs, `FESTIVAL_TIMEZONE` (optional IANA zone for festivals without their own), and `FREECOMERS_API_URL`.
   - `FREECOMERS_API_URL` is this environment's Freecomers Laravel API, used for media/avatar URLs, the login fallback and admin JWT checks.
     - If unset, it follows `FRONTEND_URL`: autovertest gives `api.autovertest.com`, anything else gives `api.freecomers.com`.
     - Never hard-code either host; use `env.freecomersApiUrl` and `utils/media.utils.js`.

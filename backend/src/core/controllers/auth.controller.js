@@ -4,6 +4,7 @@
  */
 
 const jwt = require('jsonwebtoken');
+const { getEventId } = require('../utils/eventId');
 const authService = require('../services/auth.service');
 const env = require('../../config/environment');
 
@@ -105,7 +106,7 @@ async function me(req, res) {
     if (req.bearerToken) {
       setAuthCookies(req, res, req.bearerToken);
     }
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || req.query.editionId || req.query.festivalId || null;
+    const eventId = getEventId(req);
     // A Freecomers admin has no users.id; its profile is read by admins.id (auth.middleware.js › toRequestUser)
     const profile = await authService.getProfile(req.user.isFreecomersAdmin ? req.user.adminId : req.user.id, req.user.role, eventId, req.user);
     res.json(profile);

@@ -99,10 +99,10 @@ export function FestivalProvider({ children }) {
       // Parallel fetch: edition modules and scoped user profile
       const [configRes, meData] = await Promise.all([
         api.get(`/events/${festival.id}/config`, {
-          headers: { 'X-Festival-Id': festival.id, 'X-Edition-Id': festival.id },
+          headers: { 'X-Event-Id': festival.id },
         }),
         refreshProfile ? refreshProfile(festival.id) : api.get('/auth/me', {
-          headers: { 'X-Festival-Id': festival.id, 'X-Edition-Id': festival.id, 'X-Event-Id': festival.id },
+          headers: { 'X-Event-Id': festival.id },
         }).then(r => r.data),
       ]);
 

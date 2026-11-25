@@ -23,4 +23,13 @@ router.get('/google/callback', authController.googleCallback);
 router.post('/logout', authenticate, authController.logout);
 router.get('/me', authenticate, authController.me);
 
+/**
+ * /api/v1/auth keeps only the Google OAuth callback: it is the redirect URI registered in the Google Cloud
+ * console (GOOGLE_REDIRECT_URL). Every other /api/v1/auth alias was removed (API review A5, nginx logs
+ * 24 Nov 2026: only this path is called).
+ */
+const v1Router = express.Router();
+v1Router.get('/google/callback', authController.googleCallback);
+
 module.exports = router;
+module.exports.v1Router = v1Router;

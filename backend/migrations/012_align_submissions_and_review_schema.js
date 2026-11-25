@@ -29,11 +29,12 @@ async function up() {
   const subCols = await getColumns('submissions');
   if (subCols.length > 0) {
     console.log('[Migration 012] Aligning submissions table column definitions...');
+    // premiere is only aligned while it still exists (migration 036 drops it)
+    const premiere = subCols.includes('premiere') ? "\n        MODIFY COLUMN `premiere` VARCHAR(100) NULL DEFAULT 'None'," : '';
     await query(`
       ALTER TABLE \`submissions\`
         MODIFY COLUMN \`category\` VARCHAR(255) NOT NULL DEFAULT 'Short Film',
-        MODIFY COLUMN \`runtime\` VARCHAR(50) NOT NULL DEFAULT '15',
-        MODIFY COLUMN \`premiere\` VARCHAR(100) NULL DEFAULT 'None',
+        MODIFY COLUMN \`runtime\` VARCHAR(50) NOT NULL DEFAULT '15',${premiere}
         MODIFY COLUMN \`status\` VARCHAR(100) NOT NULL DEFAULT 'Submitted';
     `);
     console.log('[Migration 012] ✓ submissions table column definitions aligned.');
@@ -94,9 +95,12 @@ async function up() {
       }
     }
     if (!jbCols.includes('ranked_nominees')) {
-      await query("ALTER TABLE `jury_ballots` ADD COLUMN `ranked_nominees` JSON NULL DEFAULT NULL AFTER `voted_film_id`");
+      await query("ALTER TABLE `jury_ballots` ADD COLUMN `ranked_nominees` JSON NULL DEFAULT NULL");
     }
-    await query("ALTER TABLE `jury_ballots` MODIFY COLUMN `voted_film_id` BIGINT UNSIGNED NULL DEFAULT NULL");
+    // voted_film_id was never used and is dropped by migration 036 (API review D4)
+    if (jbCols.includes('voted_film_id')) {
+      await query("ALTER TABLE `jury_ballots` MODIFY COLUMN `voted_film_id` BIGINT UNSIGNED NULL DEFAULT NULL");
+    }
     console.log('[Migration 012] ✓ jury_ballots ranked_nominees and jury_user_id verified.');
   }
 
@@ -104,7 +108,7 @@ async function up() {
   const slCols = await getColumns('submission_logs');
   if (slCols.length > 0) {
     if (!slCols.includes('notes')) {
-      await query("ALTER TABLE `submission_logs` ADD COLUMN `notes` TEXT NULL AFTER `new_value`");
+      await query("ALTER TABLE `submission_logs` ADD COLUMN `notes` TEXT NULL");
     }
     console.log('[Migration 012] ✓ submission_logs notes column verified.');
   }

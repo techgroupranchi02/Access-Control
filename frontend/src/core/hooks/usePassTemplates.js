@@ -31,7 +31,7 @@ export default function usePassTemplates({ enabled = true } = {}) {
         limits: res.data.limits || {}
       });
     } catch (err) {
-      setState((s) => ({ ...s, loading: false, error: err.response?.data?.message || 'Could not load the pass templates.' }));
+      setState((s) => ({ ...s, loading: false, error: err.response?.data?.error || err.response?.data?.message || 'Could not load the pass templates.' }));
     }
   }, []);
 

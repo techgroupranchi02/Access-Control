@@ -1,7 +1,12 @@
 /**
- * Migration Script for Kashish Integration & Results Approval Workflow
+ * Migration 015a: Kashish integration and results approval (moved here from src/scripts/
+ * migrate_kashish_integration.js in the API review, A6; same code, same place in the run order).
+ *
+ * Adds audience_voting_scores.results_approved and the audience_votes Kashish columns, and creates
+ * kashish_movie_mappings, kashish_user_mappings and kashish_sync_logs. Idempotent (column checks,
+ * CREATE TABLE IF NOT EXISTS).
  */
-const { query, pool } = require('../config/database');
+const { query, pool } = require('../src/config/database');
 
 async function runMigration() {
   console.log('[Migration] Starting Kashish integration migration...');
@@ -77,7 +82,6 @@ async function runMigration() {
         new_votes_created INT DEFAULT 0,
         duplicate_skipped INT DEFAULT 0,
         users_auto_matched INT DEFAULT 0,
-        users_auto_created INT DEFAULT 0,
         movies_unmapped INT DEFAULT 0,
         synced_by_user_id BIGINT UNSIGNED NULL,
         started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

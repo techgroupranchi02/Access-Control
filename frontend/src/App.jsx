@@ -32,8 +32,6 @@ import AdminPage from './core/pages/AdminPage';
 import CalendarPage from './core/pages/CalendarPage';
 import TasksPage from './core/pages/TasksPage';
 import DiscoveryPage from './core/pages/DiscoveryPage';
-import NewsPage from './core/pages/NewsPage';
-import AnalyticsPage from './core/pages/AnalyticsPage';
 import GuestsPage from './core/pages/GuestsPage';
 import ChatPage from './core/pages/ChatPage';
 import SponsorsPage from './core/pages/SponsorsPage';
@@ -548,30 +546,6 @@ function App() {
                 <ModuleGate module="discovery" fallback={<AccessDenied module="discovery" />}>
                   <PermissionGate anyPermissions={['discovery.view_public', 'discovery.browse', 'discovery:read']} fallback={<AccessDenied />}>
                     <DiscoveryPage />
-                  </PermissionGate>
-                </ModuleGate>
-              }
-            />
-
-            {/* News & Announcements (Addon) */}
-            <Route
-              path="/news"
-              element={
-                <ModuleGate module="news" fallback={<AccessDenied module="news" />}>
-                  <PermissionGate permission="news.view" fallback={<AccessDenied />}>
-                    <NewsPage />
-                  </PermissionGate>
-                </ModuleGate>
-              }
-            />
-
-            {/* Analytics & Reporting (Addon) */}
-            <Route
-              path="/analytics"
-              element={
-                <ModuleGate module="analytics" fallback={<AccessDenied module="analytics" />}>
-                  <PermissionGate anyPermissions={['analytics.view_basic', 'analytics.view_advanced', 'analytics.view', 'analytics:read']} fallback={<AccessDenied />}>
-                    <AnalyticsPage />
                   </PermissionGate>
                 </ModuleGate>
               }

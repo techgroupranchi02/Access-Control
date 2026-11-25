@@ -65,7 +65,7 @@ export default function AdminReviewDashboardWizard({ onSwitchToJudge, onSwitchTo
       setLoading(true);
       const [pipeRes, judgesRes, flagsRes] = await Promise.all([
         api.get('/reviews/pipeline', { params: { round: roundToFetch } }),
-        api.get('/reviews/jury').catch(() => api.get('/reviews/judges')),
+        api.get('/reviews/jury'),
         api.get('/submissions', { params: { limit: 1 } }),
       ]);
       setPipelineData(pipeRes.data);

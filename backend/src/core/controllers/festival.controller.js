@@ -3,7 +3,7 @@
  * Handles festival listing and configuration endpoints.
  */
 
-const festivalService = require('../services/festival.service');
+const festivalService = require('../services/edition.service');
 
 /**
  * GET /api/festivals

@@ -4,6 +4,7 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 const { logActor, actorUserId, FREECOMERS_ADMIN_LABEL } = require('../utils/actor'); // label is a code constant, safe to inline in SQL
 const { scopeSubmissionsQuery, canAccessSubmission } = require('../services/scoping.service');
 const { formatThumbnailUrl } = require('../utils/media.utils');
@@ -191,7 +192,7 @@ async function syncSubmissionsForEvent(eventId) {
  */
 async function list(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     await syncSubmissionsForEvent(eventId);
     const { status, category, flag_id, search, stage_id, stage_name, scope, score_range, assignment_status, country, runtime_range } = req.query;
 
@@ -208,7 +209,6 @@ async function list(req, res) {
         s.current_stage_name,
         COALESCE(frs.jury_assignment_mode, 'auto') as jury_assignment_mode,
         frs.stage_order,
-        s.composite_score,
         s.auto_promoted,
         s.flag_id,
         sf.label as flag_label,
@@ -307,13 +307,13 @@ async function list(req, res) {
     // Advanced score/rating filter
     if (score_range && score_range !== 'all') {
       if (score_range === 'high') {
-        sql += ' AND (s.composite_score >= 4.0 OR s.overall_average_rating >= 4.0)';
+        sql += ' AND s.overall_average_rating >= 4.0';
       } else if (score_range === 'mid') {
-        sql += ' AND ((s.composite_score >= 3.0 AND s.composite_score < 4.0) OR (s.overall_average_rating >= 3.0 AND s.overall_average_rating < 4.0))';
+        sql += ' AND s.overall_average_rating >= 3.0 AND s.overall_average_rating < 4.0';
       } else if (score_range === 'low') {
-        sql += ' AND ((s.composite_score > 0 AND s.composite_score < 3.0) OR (s.overall_average_rating > 0 AND s.overall_average_rating < 3.0))';
+        sql += ' AND s.overall_average_rating > 0 AND s.overall_average_rating < 3.0';
       } else if (score_range === 'unrated') {
-        sql += ' AND ((s.composite_score IS NULL OR s.composite_score = 0) AND (s.overall_average_rating IS NULL OR s.overall_average_rating = 0))';
+        sql += ' AND (s.overall_average_rating IS NULL OR s.overall_average_rating = 0)';
       }
     }
 
@@ -542,7 +542,7 @@ async function list(req, res) {
                 : 'Unassigned'));
 
       const numericRating = parseFloat(currentRoundAvg) || 0;
-      const canAdvance = !isRejected && sub.status !== 'Winner' && (numericRating >= 4.0 || (sub.composite_score && sub.composite_score >= 4.0));
+      const canAdvance = !isRejected && sub.status !== 'Winner' && numericRating >= 4.0;
 
       return {
         ...sub,
@@ -655,7 +655,7 @@ async function list(req, res) {
 async function getById(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     await syncSubmissionsForEvent(eventId);
 
     if (req.permissionScope && !req.permissionScope.isWildcard && req.permissionScope.scopeKey !== 'all') {
@@ -677,7 +677,6 @@ async function getById(req, res) {
         s.status,
         s.review_state_id,
         s.current_stage_name,
-        s.composite_score,
         s.flag_id,
         sf.label as flag_label,
         sf.color as flag_color,
@@ -827,7 +826,7 @@ async function getById(req, res) {
 
     // Fetch dynamic review stage criteria
     let stageCriteria = [];
-    const targetEventId = rows[0].event_id || eventId || 40;
+    const targetEventId = rows[0].event_id || eventId;
     const reviewStateId = rows[0].review_state_id;
 
     const isJuryVotingStage = currentRound === 5 || 
@@ -947,7 +946,7 @@ async function getById(req, res) {
 async function reject(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { reason } = req.body;
 
     if (!reason || typeof reason !== 'string' || reason.trim().length < 10) {
@@ -1043,7 +1042,7 @@ async function flag(req, res) {
 async function updateStatus(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { status } = req.body;
 
     if (!status) return res.status(400).json({ error: 'Status is required.' });
@@ -1085,7 +1084,7 @@ async function updateStatus(req, res) {
 async function updateCategory(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { category } = req.body;
 
     if (!category || !category.trim()) {
@@ -1113,7 +1112,7 @@ async function updateCategory(req, res) {
 async function updateStage(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { review_state_id, stage_name } = req.body;
 
     if (
@@ -1145,7 +1144,7 @@ async function updateStage(req, res) {
     const state = stateRows[0];
     await query(`
       UPDATE submissions 
-      SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, composite_score = NULL, updated_at = NOW()
+      SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, updated_at = NOW()
       WHERE id = ? AND event_id = ?
     `, [state.id, state.unique_name, state.unique_name, id, eventId]);
 
@@ -1255,7 +1254,7 @@ async function autoAssignJuryForFilmStage(eventId, filmId, stageId, roundNumber)
 async function advanceFilm(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
 
     const filmRows = await query('SELECT id, review_state_id, current_stage_name FROM submissions WHERE id = ? AND event_id = ?', [id, eventId]);
     if (filmRows.length === 0) {
@@ -1282,7 +1281,7 @@ async function advanceFilm(req, res) {
     const nextStage = nextStageRows[0];
     await query(`
       UPDATE submissions 
-      SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, composite_score = NULL, updated_at = NOW()
+      SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, updated_at = NOW()
       WHERE id = ? AND event_id = ?
     `, [nextStage.id, nextStage.unique_name, nextStage.unique_name, id, eventId]);
 
@@ -1315,7 +1314,7 @@ async function advanceFilm(req, res) {
  */
 async function bulkAssign(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const film_ids = req.body.film_ids || req.body.submission_ids;
     const jury_user_ids = req.body.jury_user_ids || req.body.jury_ids || [];
     const round_number = req.body.round_number;
@@ -1364,7 +1363,7 @@ async function bulkAssign(req, res) {
           const stage1 = stage1Rows[0];
           await query(`
             UPDATE submissions 
-            SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, composite_score = NULL, updated_at = NOW()
+            SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, updated_at = NOW()
             WHERE id = ? AND event_id = ?
           `, [stage1.id, stage1.unique_name, stage1.unique_name, filmId, eventId]);
 
@@ -1484,7 +1483,7 @@ async function bulkAssign(req, res) {
  */
 async function bulkAdvance(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const film_ids = req.body.film_ids || req.body.submission_ids;
 
     if (!Array.isArray(film_ids) || film_ids.length === 0) {
@@ -1515,7 +1514,7 @@ async function bulkAdvance(req, res) {
           const nextStage = nextStageRows[0];
           await query(`
             UPDATE submissions 
-            SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, composite_score = NULL, updated_at = NOW() 
+            SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, updated_at = NOW() 
             WHERE id = ?
           `, [nextStage.id, nextStage.unique_name, nextStage.unique_name, filmId]);
 
@@ -1544,7 +1543,7 @@ async function bulkAdvance(req, res) {
  */
 async function bulkReject(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const film_ids = req.body.film_ids || req.body.submission_ids;
     const { reason } = req.body;
 
@@ -1581,7 +1580,7 @@ async function bulkReject(req, res) {
  */
 async function exportCsv(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const films = await query(`
       SELECT 
         s.id, s.title, s.director, s.category, s.runtime, s.country, 
@@ -1626,7 +1625,7 @@ async function exportCsv(req, res) {
  */
 async function getNominationsBoard(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const stageId = req.query.stage_id ? parseInt(req.query.stage_id, 10) : null;
 
     let targetStage = null;
@@ -1679,7 +1678,7 @@ async function getNominationsBoard(req, res) {
         SELECT 
           s.id, s.title, s.director, s.category, s.runtime, s.country, 
           s.status, s.current_stage_name, s.review_state_id,
-          COALESCE(NULLIF(s.overall_average_rating, ''), NULLIF(s.composite_score, ''), 'Unrated') as rating
+          COALESCE(NULLIF(s.overall_average_rating, ''), 'Unrated') as rating
         FROM submissions s
         WHERE s.event_id = ? 
           AND s.status != 'Rejected'
@@ -1702,7 +1701,7 @@ async function getNominationsBoard(req, res) {
         SELECT 
           s.id, s.title, s.director, s.category, s.runtime, s.country, 
           s.status, s.current_stage_name, s.review_state_id,
-          COALESCE(NULLIF(s.overall_average_rating, ''), NULLIF(s.composite_score, ''), 'Unrated') as rating
+          COALESCE(NULLIF(s.overall_average_rating, ''), 'Unrated') as rating
         FROM submissions s
         WHERE s.event_id = ? 
           AND s.status != 'Rejected'
@@ -1749,7 +1748,7 @@ async function getNominationsBoard(req, res) {
  */
 async function toggleNomination(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { award_name, submission_id, award_category_id } = req.body;
 
     if (!award_name || !submission_id) {
@@ -1785,7 +1784,7 @@ async function toggleNomination(req, res) {
  */
 async function addAwardCategory(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { name } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Category name is required.' });
@@ -1813,7 +1812,7 @@ async function addAwardCategory(req, res) {
  */
 async function removeAwardCategory(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { id, name } = req.body;
 
     if (id) {
@@ -1839,7 +1838,7 @@ async function removeAwardCategory(req, res) {
  */
 async function advanceNominationsToJury(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
     const { current_stage_id, target_stage_id } = req.body || {};
 
@@ -1924,7 +1923,7 @@ async function advanceNominationsToJury(req, res) {
     for (const filmId of targetFilmIds) {
       await query(`
         UPDATE submissions 
-        SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, composite_score = NULL, updated_at = NOW()
+        SET review_state_id = ?, current_stage_name = ?, status = ?, overall_average_rating = NULL, updated_at = NOW()
         WHERE id = ? AND event_id = ?
       `, [targetStage.id, targetStage.unique_name, targetStage.unique_name, filmId, eventId]);
 
@@ -1958,7 +1957,7 @@ async function advanceNominationsToJury(req, res) {
  */
 async function getJuryVotingBoard(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
 
     // 1. Fetch categories
     let categories = await query(
@@ -1985,7 +1984,7 @@ async function getJuryVotingBoard(req, res) {
     // 3. Fetch nominations with film details (including runtime, country, and ratings)
     const nominations = await query(`
       SELECT acn.id, acn.award_name, acn.award_category_id, acn.submission_id, s.title, s.director, s.category, s.runtime, s.country, s.status, s.current_stage_name,
-             COALESCE(NULLIF(s.overall_average_rating, ''), NULLIF(s.composite_score, ''), 'Unrated') as rating
+             COALESCE(NULLIF(s.overall_average_rating, ''), 'Unrated') as rating
       FROM award_category_nominations acn
       JOIN submissions s ON s.id = acn.submission_id
       WHERE acn.event_id = ? AND s.status != 'Rejected'
@@ -2086,7 +2085,7 @@ async function getJuryVotingBoard(req, res) {
  */
 async function toggleCategoryJury(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { award_name, jury_user_id, award_category_id, stage_id } = req.body;
 
     if (!award_name || !jury_user_id) {
@@ -2174,7 +2173,7 @@ async function toggleCategoryJury(req, res) {
  */
 async function assignAllCategoryJury(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const { award_name, award_category_id, assign, stage_id } = req.body;
 
     if (!award_name) {
@@ -2258,7 +2257,7 @@ async function assignAllCategoryJury(req, res) {
  */
 async function advanceToResults(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
     const currentStageId = req.body?.current_stage_id;
     const targetStageId = req.body?.target_stage_id;
@@ -2364,7 +2363,7 @@ async function advanceToResults(req, res) {
  */
 async function getFinalistsBoard(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const stageId = req.query.stage_id || req.body?.stage_id;
 
     // 1. Fetch categories
@@ -2517,7 +2516,7 @@ async function getFinalistsBoard(req, res) {
  */
 async function selectWinner(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
     const { award_name, submission_id, award_category_id } = req.body;
 
@@ -2579,7 +2578,7 @@ async function selectWinner(req, res) {
  */
 async function removeWinner(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
     const { award_name, submission_id } = req.body;
 
@@ -2616,7 +2615,7 @@ async function removeWinner(req, res) {
  */
 async function advanceToWinners(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const [actorId, actorAdmin] = await logActor(req); // never user 1 (ADR 0007)
 
     const targetStageId = req.body?.target_stage_id;
@@ -2684,7 +2683,7 @@ async function advanceToWinners(req, res) {
  */
 async function getWinnersBoard(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
     const stageId = req.query.stage_id || req.body?.stage_id;
 
     // 1. Fetch categories
@@ -2848,7 +2847,7 @@ async function getWinnersBoard(req, res) {
  */
 async function getActivityLogs(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 40;
+    const eventId = getEventId(req);
 
     const isJuryUser = Boolean(
       req.user && (
@@ -3025,7 +3024,7 @@ async function exportActivityCsv(req, res) {
       return res.status(403).json({ error: 'Activity log export is restricted to festival administrators.' });
     }
 
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 40;
+    const eventId = getEventId(req);
     const { action, group, search, startDate, endDate } = req.query;
 
     const conditions = ['s.event_id = ?'];

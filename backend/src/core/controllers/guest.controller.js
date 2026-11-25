@@ -7,13 +7,14 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('../utils/eventId');
 
 /**
  * GET /api/guests
  */
 async function list(req, res) {
   try {
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || req.query.eventId || 1;
+    const eventId = getEventId(req);
     const userId = req.user.id;
 
     // Check role
@@ -82,15 +83,17 @@ async function list(req, res) {
 async function checkIn(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
 
     await query(`
       UPDATE guests 
-      SET rsvp_status = 'Arrived', badge_issued = 1 
+      SET rsvp_status = 'Arrived', badge_issued = 1, checked_in_at = COALESCE(checked_in_at, NOW())
       WHERE id = ? AND event_id = ?
     `, [id, eventId]);
 
-    res.json({ message: 'Guest checked in and badge issued.', id, rsvp_status: 'Arrived', badge_issued: true });
+    const [row] = await query('SELECT checked_in_at FROM guests WHERE id = ? AND event_id = ?', [id, eventId]);
+    // checked_in_at keeps the first arrival time (API review D4)
+    res.json({ message: 'Guest checked in and badge issued.', id, rsvp_status: 'Arrived', badge_issued: true, checked_in_at: row?.checked_in_at || null });
   } catch (error) {
     console.error('[GuestController] checkIn error:', error);
     res.status(500).json({ error: 'Failed to check in guest.' });
@@ -103,7 +106,7 @@ async function checkIn(req, res) {
 async function printBadge(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
-    const eventId = req.headers['x-event-id'] || req.headers['x-edition-id'] || req.headers['x-festival-id'] || 1;
+    const eventId = getEventId(req);
 
     await query(`
       UPDATE guests 

@@ -1,3 +1,9 @@
+// ARCHIVED (API review D3, 24 Nov 2026): this early migration is not in run_all_migrations.js and must never
+// run again. It drops or rebuilds tables that the shared Freecomers database now uses (for example `roles`,
+// `scopes`, `festivals`, `features`). Kept for history only; it refuses to run.
+console.error('[Archived migration] ' + require('path').basename(__filename) + ' is archived and must not be run. See migrations/archive/README.md.');
+process.exit(1);
+
 /**
  * Migration 003: Drop Scopes Table
  * 

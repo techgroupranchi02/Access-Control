@@ -1,3 +1,10 @@
+// ARCHIVED (API review D1/D3, 24 Nov 2026): this seeder was written for the pre-merge schema. It writes into
+// shared Freecomers tables (users, roles, events with fixed ids) and into tables that no longer exist
+// (festivals, features, festival_features, permission_groups, payout_milestones ...), so running it against
+// the shared database is unsafe. Kept for history only; it refuses to run. See seeders/archive/README.md.
+console.error('[Archived seeder] ' + require('path').basename(__filename) + ' is archived and must not be run.');
+process.exit(1);
+
 /**
  * Seeder 002: Canonical Freecomers Platform Dataset
  *

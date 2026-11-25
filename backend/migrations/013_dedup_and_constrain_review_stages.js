@@ -5,15 +5,30 @@
  * 2. Deletes duplicate stage rows from festival_review_states (cascading to festival_state_criteria).
  * 3. Ensures canonical 6-stage sequential order (1 to 6) for all events.
  * 4. Adds UNIQUE KEY `uk_event_unique_name` (event_id, unique_name) to prevent future duplication.
+ *
+ * Steps 1–3 were a one-time clean-up of three dev festivals with fixed stage ids. The runner runs every
+ * migration on every deploy, so each festival's block now runs only while the duplicate stage it was written
+ * for still exists in that festival (API review D3). Otherwise it deleted every other review stage of
+ * festivals 40, 1 and 126 on each deploy, which on another database (different ids) means all of them, and
+ * it failed once staff reordered the stages.
  */
 
 const { query } = require('../src/config/database');
+
+/** True while stage `id` still exists and belongs to `eventId` (the one-time clean-up hasn't happened). */
+async function duplicateStillThere(id, eventId) {
+  const rows = await query('SELECT 1 FROM festival_review_states WHERE id = ? AND event_id = ? LIMIT 1', [id, eventId]);
+  return rows.length > 0;
+}
 
 async function up() {
   console.log('[Migration 013] Starting deduplication and constraint enforcement for review stages...');
   await query('SET FOREIGN_KEY_CHECKS = 0;');
 
   // 1. Remap submissions for Event 40 (KASHISH x BENGALURU 2026)
+  if (!(await duplicateStillThere(12156, 40))) {
+    console.log('[Migration 013] • Event 40 clean-up already done (stage 12156 is gone), skipped');
+  } else {
   console.log('[Migration 013] Remapping submissions and cleaning stages for Event 40...');
   await query('UPDATE submissions SET review_state_id = 223 WHERE review_state_id = 12156 AND event_id = 40');
   await query(`
@@ -32,8 +47,12 @@ async function up() {
   await query('UPDATE festival_review_states SET stage_order = 4 WHERE id = 226');
   await query('UPDATE festival_review_states SET stage_order = 5 WHERE id = 227');
   await query('UPDATE festival_review_states SET stage_order = 6 WHERE id = 228');
+  }
 
   // 2. Remap submissions and clean stages for Event 1
+  if (!(await duplicateStillThere(12150, 1))) {
+    console.log('[Migration 013] • Event 1 clean-up already done (stage 12150 is gone), skipped');
+  } else {
   console.log('[Migration 013] Remapping submissions and cleaning stages for Event 1...');
   await query('UPDATE submissions SET review_state_id = 12122 WHERE review_state_id = 12150 AND event_id = 1');
   // Delete duplicate stages in event 1
@@ -44,8 +63,12 @@ async function up() {
   await query('UPDATE festival_review_states SET stage_order = 4 WHERE id = 12125');
   await query('UPDATE festival_review_states SET stage_order = 5 WHERE id = 12126');
   await query('UPDATE festival_review_states SET stage_order = 6 WHERE id = 12127');
+  }
 
   // 3. Remap submissions and clean stages for Event 126
+  if (!(await duplicateStillThere(12270, 126))) {
+    console.log('[Migration 013] • Event 126 clean-up already done (stage 12270 is gone), skipped');
+  } else {
   console.log('[Migration 013] Remapping submissions and cleaning stages for Event 126...');
   await query('UPDATE submissions SET review_state_id = 715 WHERE review_state_id = 12270 AND event_id = 126');
   // Delete duplicate stages in event 126
@@ -56,6 +79,7 @@ async function up() {
   await query('UPDATE festival_review_states SET stage_order = 4 WHERE id = 718');
   await query('UPDATE festival_review_states SET stage_order = 5 WHERE id = 719');
   await query('UPDATE festival_review_states SET stage_order = 6 WHERE id = 720');
+  }
 
   // 4. Dynamic safety net for any remaining duplicate stage names across ALL events
   const remainingDupes = await query(`

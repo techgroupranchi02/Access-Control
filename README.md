@@ -26,7 +26,7 @@ FestiPlus is a multi-tenant film-festival operating system run by **Freecomers**
 Access-Control/
 ├── backend/
 │   ├── migrations/          # NNN_description.js, run by run_all_migrations.js
-│   ├── seeders/             # demo / canonical seed data
+│   ├── seeders/archive/     # old demo seeders (archived, unsafe on the shared DB)
 │   ├── src/
 │   │   ├── app.js           # Express bootstrap
 │   │   ├── config/          # environment, database pool, plugin loader
@@ -65,7 +65,6 @@ cd backend
 cp .env.example .env      # then fill in the values (see below)
 npm install
 npm run migrate           # create / update the schema and sync permissions
-npm run seed              # optional: demo data (demo password: Demo@12345)
 npm run dev               # http://localhost:4000
 ```
 
@@ -112,8 +111,6 @@ Never commit `.env` files or secrets.
 | `backend/` | `npm run dev` | Start the API |
 | `backend/` | `npm start` | Start the API with `NODE_ENV=production` |
 | `backend/` | `npm run migrate` | Run all migrations, then sync modules, pages and permissions |
-| `backend/` | `npm run seed` | Load demo seed data |
-| `backend/` | `npm run setup` | `migrate` followed by `seed` |
 | `frontend/` | `npm run dev` | Start the Vite dev server |
 | `frontend/` | `npm run build` | Production build into `frontend/dist` |
 | `frontend/` | `npm run lint` | Lint with oxlint |

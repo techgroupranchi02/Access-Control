@@ -81,7 +81,7 @@ function PassTemplatesList() {
       if (done) done(res);
       await reload();
     } catch (err) {
-      setActionError(err.response?.data?.message || 'That did not work. Please try again.');
+      setActionError(err.response?.data?.error || err.response?.data?.message || 'That did not work. Please try again.');
     } finally {
       setBusyId(null);
       setConfirmArchive(null);

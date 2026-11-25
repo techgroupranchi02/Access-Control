@@ -30,10 +30,7 @@ const {
   chatRouter,
   sponsorsRouter,
   payoutsRouter,
-  paymentsRouter,
   settingsRouter,
-  newsRouter,
-  analyticsRouter,
 } = require('./core/routes/modules.routes');
 const {
   audienceRouter,
@@ -46,7 +43,7 @@ const {
 const { kashishSyncRouter } = require('./core/routes/kashish-sync.routes');
 const { passTemplatesRouter } = require('./core/routes/pass-templates.routes');
 const { authenticate } = require('./core/middleware/auth.middleware');
-const { requirePermission } = require('./core/middleware/permission.middleware');
+const { requirePermission, requireEventId, requireFestivalMember } = require('./core/middleware/permission.middleware');
 const { getModuleSettings, updateModuleSettings } = require('./core/controllers/moduleSettings.controller');
 
 const app = express();
@@ -72,7 +69,7 @@ app.get('/api/health', (req, res) => {
 
 // ── Core & Module Routes ─────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
-app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/auth', authRoutes.v1Router); // Google OAuth callback only (registered redirect URI)
 app.use('/api/events', festivalRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/team', teamRoutes);
@@ -81,7 +78,7 @@ app.use('/api/admin', adminRoutes);
 
 // Generic Module Settings Engine (Format B)
 const moduleSettingsRouter = express.Router();
-moduleSettingsRouter.use(authenticate);
+moduleSettingsRouter.use(authenticate, requireEventId, requireFestivalMember);
 moduleSettingsRouter.get('/:moduleKey/settings', (req, res, next) => {
   const permKey = `${req.params.moduleKey}:manage`;
   requirePermission(permKey)(req, res, (err) => {
@@ -101,17 +98,13 @@ app.use('/api/modules', moduleSettingsRouter);
 // Declarative Module Routes
 app.use('/api/reviews', reviewRouter);
 app.use('/api/calendar', calendarRouter);
-app.use('/api/schedule', calendarRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/departments', departmentsRouter);
 app.use('/api/guests', guestsRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/sponsors', sponsorsRouter);
 app.use('/api/payouts', payoutsRouter);
-app.use('/api/payments', paymentsRouter);
 app.use('/api/settings', settingsRouter);
-app.use('/api/news', newsRouter);
-app.use('/api/analytics', analyticsRouter);
 
 // Audience Add-on Module Routes
 app.use('/api/audience', audienceRouter);
@@ -160,6 +153,7 @@ async function start() {
     console.log(`[App] ══════════════════════════════════════════\n`);
     // Pull Kashish votes automatically while any voting window is open (docs/adr/0003)
     require('./core/services/kashishSyncScheduler').startKashishAutoSync();
+    require('./core/services/logRetention.service').startLogRetention();
   });
 }
 

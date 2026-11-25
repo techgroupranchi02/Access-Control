@@ -75,9 +75,9 @@ async function gzipJson(value) {
 async function blobErrorMessage(err) {
   const data = err?.response?.data;
   if (data instanceof Blob) {
-    try { return JSON.parse(await data.text())?.message || ''; } catch { return ''; }
+    try { const body = JSON.parse(await data.text()); return body?.error || body?.message || ''; } catch { return ''; }
   }
-  return data?.message || '';
+  return data?.error || data?.message || '';
 }
 const MARGINS_INFO_ID = 'fc-pp-margins-info';
 // v2: layouts saved before "standard margins by default" are ignored once, so everyone starts with margins
@@ -368,7 +368,7 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
       setLastSent(`Sent ${printable.length} ${printable.length === 1 ? unit[0] : unit[1]}${jobRange ? ` (${jobRange})` : ''} to print.`);
       printInPage(html, css, jobTitle || `${festival.name || 'Festival'} ${PASS_MODES.find((m) => m.key === mode)?.label || ''}`.trim(), { prepare: fitWhenReady });
     } catch (err) {
-      setPrintError(err.response?.data?.message || err.message || 'Could not prepare the print.');
+      setPrintError(err.response?.data?.error || err.response?.data?.message || err.message || 'Could not prepare the print.');
     } finally {
       setPrinting(false);
     }
@@ -480,7 +480,7 @@ export default function PrintPassesDialog({ items = [], defaultMode: requestedMo
       setQr(saved);
       setQrSaved('Saved as the festival default.');
     } catch (err) {
-      setQrSaved(err.response?.data?.message || 'Could not save the QR Settings.');
+      setQrSaved(err.response?.data?.error || err.response?.data?.message || 'Could not save the QR Settings.');
     }
   };
 

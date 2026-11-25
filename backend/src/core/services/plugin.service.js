@@ -62,7 +62,7 @@ async function isPluginEnabled(eventId, moduleKey) {
  */
 async function getPluginPermissions(moduleKey) {
   return query(
-    `SELECT p.id, p.permission_key, p.label, p.label as name, p.description, p.module_id, p.page_id, p.actions_match, p.actions_unmatch
+    `SELECT p.id, p.permission_key, p.label, p.label as name, p.description, p.module_id, p.actions_match, p.actions_unmatch
      FROM permissions p
      JOIN modules m ON m.id = p.module_id
      WHERE m.module_key = ?

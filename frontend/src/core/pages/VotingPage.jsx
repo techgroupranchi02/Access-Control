@@ -920,10 +920,6 @@ export default function VotingPage() {
                   <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--fc-info-text)' }}>{syncResult.users_auto_matched}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Users Auto-Created</div>
-                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--fc-info-text)' }}>{syncResult.users_auto_created}</div>
-                </div>
-                <div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--fc-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Unmapped Movies</div>
                   <div style={{ fontSize: '1.3rem', fontWeight: 800, color: syncResult.movies_unmapped > 0 ? 'var(--fc-danger-text)' : 'var(--fc-success-text)' }}>{syncResult.movies_unmapped}</div>
                 </div>
@@ -1074,7 +1070,6 @@ export default function VotingPage() {
                       <th style={{ padding: '10px 12px' }}>New Votes</th>
                       <th style={{ padding: '10px 12px' }}>Duplicates</th>
                       <th style={{ padding: '10px 12px' }}>Users Auto-Matched</th>
-                      <th style={{ padding: '10px 12px' }}>Users Created</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1100,7 +1095,6 @@ export default function VotingPage() {
                         <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--fc-success-text)' }}>+{log.new_votes_created}</td>
                         <td style={{ padding: '10px 12px', color: 'var(--fc-text-secondary)' }}>{log.duplicate_skipped}</td>
                         <td style={{ padding: '10px 12px' }}>{log.users_auto_matched}</td>
-                        <td style={{ padding: '10px 12px' }}>{log.users_auto_created}</td>
                       </tr>
                     ))}
                   </tbody>

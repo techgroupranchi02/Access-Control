@@ -46,7 +46,7 @@ export default function AdminPage() {
       const configs = {};
       for (const fest of festRes.data) {
         const configRes = await api.get(`/events/${fest.id}/config`, {
-          headers: { 'X-Festival-Id': fest.id },
+          headers: { 'X-Event-Id': fest.id },
         });
         configs[fest.id] = configRes.data.modules || configRes.data.features || [];
       }
@@ -66,7 +66,7 @@ export default function AdminPage() {
     try {
       await api.put(`/events/${festivalId}/features/${featureId}/toggle`, {
         isEnabled: !currentState,
-      }, { headers: { 'X-Festival-Id': festivalId } });
+      }, { headers: { 'X-Event-Id': festivalId } });
       await loadAll();
       await refreshConfig();
     } catch {

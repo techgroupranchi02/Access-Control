@@ -6,6 +6,7 @@
  */
 
 const { query } = require('../../config/database');
+const { getEventId } = require('./eventId');
 
 /** The signed-in person's users.id, or null (Freecomers admin, or no user). */
 function actorUserId(req) {
@@ -26,7 +27,7 @@ function actorAdminId(req) {
 async function requiredActorUserId(req, eventId = null) {
   const own = actorUserId(req);
   if (own) return own;
-  const event = eventId || req?.headers?.['x-event-id'] || req?.headers?.['x-edition-id'] || req?.headers?.['x-festival-id'] || req?.query?.eventId;
+  const event = eventId || getEventId(req);
   if (!event) return null;
   const rows = await query('SELECT user_id FROM events WHERE event_id = ? LIMIT 1', [event]);
   return rows[0]?.user_id || null;
